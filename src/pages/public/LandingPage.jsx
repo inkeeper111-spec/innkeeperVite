@@ -442,19 +442,19 @@ export const LandingPage = () => {
           setIsBookModalOpen(false);
           setBookingSuccess(null);
         }}
-        title={bookingSuccess ? 'Reservation Confirmed!' : `Reserve: ${selectedType?.name}`}
-        subtitle={bookingSuccess ? 'Your stay has been officially recorded' : 'Instant booking confirmation'}
+        title={bookingSuccess ? 'Reservation Request Submitted' : `Reserve: ${selectedType?.name}`}
+        subtitle={bookingSuccess ? 'Your stay is awaiting approval from the hotel team' : 'Submit a reservation request'}
       >
         {bookingSuccess ? (
           <div className="space-y-4 text-xs">
             <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center space-y-2">
               <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
-              <h3 className="font-black text-emerald-950 text-base">Booking Reference Confirmed</h3>
+              <h3 className="font-black text-emerald-950 text-base">Reservation Request Received</h3>
               <p className="font-mono text-xl font-black text-emerald-700">
                 {bookingSuccess.bookingReference}
               </p>
               <p className="text-emerald-800 text-xs">
-                A confirmation has been sent to {guestForm.email || 'your email'}.
+                Your request is pending hotel approval. You can check its status using your reference and email.
               </p>
             </div>
 
@@ -478,7 +478,7 @@ export const LandingPage = () => {
             <div className="flex justify-end gap-2 pt-2">
               <Link to={`/lookup?reference=${bookingSuccess.bookingReference}&email=${guestForm.email}`}>
                 <Button variant="primary">
-                  View Full Folio Invoice
+                  View Reservation Status and Folio
                 </Button>
               </Link>
             </div>
@@ -548,4 +548,3 @@ export const LandingPage = () => {
     </div>
   );
 };
-

@@ -7,6 +7,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   Sparkles,
   AlertTriangle,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 
 export const HousekeepingPage = () => {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -30,6 +32,10 @@ export const HousekeepingPage = () => {
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
   const [isDamageOpen, setIsDamageOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [isRejectOpen, setIsRejectOpen] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionError, setRejectionError] = useState('');
+  const [reassignmentSelections, setReassignmentSelections] = useState({});
 
   const [taskForm, setTaskForm] = useState({
     roomId: '',
@@ -79,6 +85,47 @@ export const HousekeepingPage = () => {
       }
     } catch (err) {
       alert('Failed to update task status.');
+    }
+  };
+
+  const handleAcceptTask = async (taskId) => {
+    try {
+      const res = await api.post(`/housekeeping/tasks/${taskId}/accept`);
+      setMessage(res.data.message || 'Task assignment accepted.');
+      await fetchHousekeepingData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to accept task.');
+    }
+  };
+
+  const handleRejectTask = async (event) => {
+    event.preventDefault();
+    const reason = rejectionReason.trim();
+    if (!reason) {
+      setRejectionError('Enter a reason before rejecting this task.');
+      return;
+    }
+    try {
+      const res = await api.post(`/housekeeping/tasks/${selectedTask._id}/reject`, { reason });
+      setMessage(res.data.message || 'Task rejection recorded.');
+      setIsRejectOpen(false);
+      setRejectionReason('');
+      setRejectionError('');
+      await fetchHousekeepingData();
+    } catch (err) {
+      setRejectionError(err.response?.data?.message || 'Failed to reject task.');
+    }
+  };
+
+  const handleReassignTask = async (taskId) => {
+    try {
+      const assignedTo = reassignmentSelections[taskId];
+      if (!assignedTo) return;
+      const res = await api.post(`/housekeeping/tasks/${taskId}/assign`, { assignedTo });
+      setMessage(res.data.message || 'Task reassigned.');
+      await fetchHousekeepingData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to reassign task.');
     }
   };
 
@@ -201,6 +248,19 @@ export const HousekeepingPage = () => {
                       <span className="font-bold">Damage Reported:</span> {t.damageDescription}
                     </div>
                   )}
+                  {t.rejectionReason && (
+                    <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-[11px]">
+                      <span className="font-bold">Rejection reason:</span> {t.rejectionReason}
+                    </div>
+                  )}
+                  {t.assignmentHistory?.length > 0 && (
+                    <div className="pt-1 text-[10px] text-slate-500">
+                      <span className="font-semibold">Assignment history:</span>{' '}
+                      {t.assignmentHistory.map((entry) => (
+                        `${entry.action}${entry.reason ? `: ${entry.reason}` : ''}`
+                      )).join(' → ')}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -218,12 +278,35 @@ export const HousekeepingPage = () => {
                 </button>
 
                 <div className="flex gap-1.5">
+                  {user?.role === 'housekeeping_staff'
+                    && t.assignmentStatus !== 'accepted'
+                    && t.status !== 'rejected'
+                    && !['clean', 'inspected'].includes(t.status) && (
+                      <>
+                        <Button size="sm" variant="success" onClick={() => handleAcceptTask(t._id)}>
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => {
+                            setSelectedTask(t);
+                            setRejectionReason('');
+                            setRejectionError('');
+                            setIsRejectOpen(true);
+                          }}
+                        >
+                          Reject
+                        </Button>
+                      </>
+                    )}
                   {t.status === 'dirty' && (
                     <Button
                       size="sm"
                       variant="primary"
                       icon={Play}
                       onClick={() => handleUpdateStatus(t._id, 'cleaning_in_progress')}
+                      disabled={user?.role === 'housekeeping_staff' && t.assignmentStatus !== 'accepted'}
                     >
                       Start
                     </Button>
@@ -247,6 +330,34 @@ export const HousekeepingPage = () => {
                     >
                       Inspect & Pass
                     </Button>
+                  )}
+                  {t.status === 'rejected' && ['hotel_admin', 'receptionist'].includes(user?.role) && (
+                    <div className="flex items-center gap-1">
+                      <select
+                        aria-label={`Reassign room ${t.roomId?.roomNumber || ''}`}
+                        className="max-w-36 rounded-lg border border-slate-300 px-2 py-1 text-[11px]"
+                        value={reassignmentSelections[t._id] || ''}
+                        onChange={(event) => setReassignmentSelections({
+                          ...reassignmentSelections,
+                          [t._id]: event.target.value
+                        })}
+                      >
+                        <option value="">Choose attendant</option>
+                        {staff.map((employee) => (
+                          <option key={employee.userId?._id} value={employee.userId?._id}>
+                            {employee.userId?.name}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={!reassignmentSelections[t._id]}
+                        onClick={() => handleReassignTask(t._id)}
+                      >
+                        Reassign
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -334,6 +445,31 @@ export const HousekeepingPage = () => {
         </form>
       </Modal>
 
+      <Modal
+        isOpen={isRejectOpen}
+        onClose={() => setIsRejectOpen(false)}
+        title="Reject Cleaning Task"
+        subtitle={`Room #${selectedTask?.roomId?.roomNumber || ''}`}
+      >
+        <form onSubmit={handleRejectTask} className="space-y-4">
+          <Input
+            label="Reason for rejection"
+            required
+            value={rejectionReason}
+            onChange={(event) => {
+              setRejectionReason(event.target.value);
+              if (rejectionError) setRejectionError('');
+            }}
+            placeholder="Explain why you cannot accept this assignment"
+          />
+          {rejectionError && <p className="text-xs text-rose-600">{rejectionError}</p>}
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={() => setIsRejectOpen(false)}>Cancel</Button>
+            <Button type="submit" variant="danger" disabled={!rejectionReason.trim()}>Reject Job</Button>
+          </div>
+        </form>
+      </Modal>
+
       {/* Report Damage Modal */}
       <Modal
         isOpen={isDamageOpen}
@@ -387,4 +523,3 @@ export const HousekeepingPage = () => {
     </div>
   );
 };
-

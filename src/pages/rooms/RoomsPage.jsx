@@ -102,6 +102,7 @@ export const RoomsPage = () => {
       });
       if (res.data.success) {
         setIsAddTypeOpen(false);
+        setActiveTab('categories');
         setMessage(`Category ${typeFormData.name} added.`);
         setTypeFormData({
           name: '',
@@ -491,4 +492,3 @@ export const RoomsPage = () => {
     </div>
   );
 };
-

@@ -1,53 +1,151 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import api from '../api/axios';
+import {
+  clearStaffSession,
+  getStaffAccessToken,
+  getStaffRefreshToken,
+  getStaffSessionId,
+  isStaffRole,
+  setStaffSession,
+  STAFF_SESSION_KEYS
+} from '../auth/staffSession';
 
 const AuthContext = createContext(null);
+let legacyMigrationRefreshRequest = null;
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
-  });
-  const [hotel, setHotel] = useState(() => {
-    const saved = localStorage.getItem('hotel');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState(null);
+  const [hotel, setHotel] = useState(null);
   const [loading, setLoading] = useState(true);
+  const staffSessionIdRef = useRef(getStaffSessionId());
 
   useEffect(() => {
-    const initAuth = async () => {
-      const token = localStorage.getItem('accessToken');
-      if (token) {
-        try {
-          const res = await api.get('/auth/me');
-          if (res.data.success) {
-            setUser(res.data.data.user);
-            setHotel(res.data.data.hotel);
-            localStorage.setItem('user', JSON.stringify(res.data.data.user));
-            if (res.data.data.hotel) {
-              localStorage.setItem('hotel', JSON.stringify(res.data.data.hotel));
-            }
-          }
-        } catch (err) {
-          console.error('Failed to restore session:', err);
-        }
+    let active = true;
+    let validationId = 0;
+    const restoreSession = async (token, allowLegacy = false) => {
+      const currentValidation = ++validationId;
+      let verifiedLegacyStaffToken = false;
+      if (!token) {
+        setUser(null);
+        setHotel(null);
+        setLoading(false);
+        return;
       }
+
+      try {
+        const res = await api.get('/auth/me', allowLegacy
+          ? {
+            headers: { Authorization: ['Bearer', token].join(' ') },
+            skipStaffRefresh: true
+          }
+          : undefined);
+        if (!active || validationId !== currentValidation) return;
+        const userData = res.data.data.user;
+        if (!isStaffRole(userData.role)) {
+          if (!allowLegacy) {
+            clearStaffSession();
+            staffSessionIdRef.current = null;
+          }
+          setUser(null);
+          setHotel(null);
+          return;
+        }
+        verifiedLegacyStaffToken = allowLegacy;
+        if (allowLegacy && getStaffAccessToken()) return;
+        if (allowLegacy && !getStaffAccessToken()) {
+          const legacyRefreshToken = localStorage.getItem('refreshToken');
+          let sessionTokens = { accessToken: token, refreshToken: '' };
+          if (legacyRefreshToken) {
+            if (!legacyMigrationRefreshRequest) {
+              legacyMigrationRefreshRequest = api.post('/auth/refresh', {
+                refreshToken: legacyRefreshToken,
+                expectedUserId: userData.id
+              })
+                .then((refreshResponse) => refreshResponse.data.data)
+                .finally(() => {
+                  legacyMigrationRefreshRequest = null;
+                });
+            }
+            sessionTokens = await legacyMigrationRefreshRequest;
+          }
+          if (!active || validationId !== currentValidation) return;
+          setStaffSession(sessionTokens);
+          staffSessionIdRef.current = getStaffSessionId();
+          if (localStorage.getItem('accessToken') === token) {
+            localStorage.removeItem('accessToken');
+          }
+          if (legacyRefreshToken && localStorage.getItem('refreshToken') === legacyRefreshToken) {
+            localStorage.removeItem('refreshToken');
+          }
+        }
+        if (!active || validationId !== currentValidation) return;
+        setUser(userData);
+        setHotel(res.data.data.hotel);
+      } catch (error) {
+        if (!active || validationId !== currentValidation) return;
+        if (!allowLegacy && [401, 403].includes(error.response?.status)) {
+          clearStaffSession();
+          staffSessionIdRef.current = null;
+        }
+        if (allowLegacy && verifiedLegacyStaffToken && error.response?.status === 401
+          && localStorage.getItem('accessToken') === token) {
+          localStorage.removeItem('accessToken');
+        }
+        if (![401, 403].includes(error.response?.status)) {
+          console.error('Failed to restore staff session:', error);
+        }
+        setUser(null);
+        setHotel(null);
+      } finally {
+        if (active && validationId === currentValidation) setLoading(false);
+      }
+    };
+
+    const staffToken = getStaffAccessToken();
+    if (staffToken) {
+      restoreSession(staffToken);
+    } else {
+      const legacyToken = localStorage.getItem('accessToken');
+      restoreSession(legacyToken, Boolean(legacyToken));
+    }
+
+    const syncStaffSession = () => {
+      const nextSessionId = getStaffSessionId();
+      if (nextSessionId === staffSessionIdRef.current) return;
+      staffSessionIdRef.current = nextSessionId;
+      setUser(null);
+      setHotel(null);
+      const token = getStaffAccessToken();
+      setLoading(Boolean(token));
+      restoreSession(token);
+    };
+    const handleStorageChange = (event) => {
+      if (event.key === STAFF_SESSION_KEYS.accessToken) syncStaffSession();
+    };
+    const handleInvalidated = () => {
+      staffSessionIdRef.current = null;
+      setUser(null);
+      setHotel(null);
       setLoading(false);
     };
 
-    initAuth();
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('pageshow', syncStaffSession);
+    window.addEventListener('innkeeper:staff-session-invalidated', handleInvalidated);
+    return () => {
+      active = false;
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('pageshow', syncStaffSession);
+      window.removeEventListener('innkeeper:staff-session-invalidated', handleInvalidated);
+    };
   }, []);
 
   const login = async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
+    const res = await api.post('/auth/login', { email, password, portal: 'staff' });
     if (res.data.success) {
       const { user: userData, hotel: hotelData, accessToken, refreshToken } = res.data.data;
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
-      localStorage.setItem('user', JSON.stringify(userData));
-      if (hotelData) {
-        localStorage.setItem('hotel', JSON.stringify(hotelData));
-      }
+      if (!isStaffRole(userData.role)) throw new Error('This account cannot access the staff portal.');
+      staffSessionIdRef.current = setStaffSession({ accessToken, refreshToken });
       setUser(userData);
       setHotel(hotelData);
       return res.data;
@@ -62,18 +160,11 @@ export const AuthProvider = ({ children }) => {
       if (res.data.data.approval?.required) {
         setUser(null);
         setHotel(null);
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        localStorage.removeItem('hotel');
+        clearStaffSession();
+        staffSessionIdRef.current = null;
         return res.data;
       }
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
-      localStorage.setItem('user', JSON.stringify(userData));
-      if (hotelData) {
-        localStorage.setItem('hotel', JSON.stringify(hotelData));
-      }
+      staffSessionIdRef.current = setStaffSession({ accessToken, refreshToken });
       setUser(userData);
       setHotel(hotelData);
       return res.data;
@@ -83,15 +174,13 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      const refreshToken = localStorage.getItem('refreshToken');
+      const refreshToken = getStaffRefreshToken();
       await api.post('/auth/logout', { refreshToken });
     } catch (e) {
-      // Ignore network error on logout
+      console.error('Failed to revoke staff session on the server:', e);
     } finally {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      localStorage.removeItem('hotel');
+      clearStaffSession();
+      staffSessionIdRef.current = null;
       setUser(null);
       setHotel(null);
     }
@@ -101,11 +190,24 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await api.get('/auth/me');
       if (res.data.success) {
+        if (!isStaffRole(res.data.data.user.role)) {
+          clearStaffSession();
+          staffSessionIdRef.current = null;
+          setUser(null);
+          setHotel(null);
+          return;
+        }
         setUser(res.data.data.user);
         setHotel(res.data.data.hotel);
       }
     } catch (e) {
       console.error('Error refreshing user:', e);
+      if (e.response?.status === 401) {
+        clearStaffSession();
+        staffSessionIdRef.current = null;
+        setUser(null);
+        setHotel(null);
+      }
     }
   };
 
@@ -135,4 +237,3 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
-

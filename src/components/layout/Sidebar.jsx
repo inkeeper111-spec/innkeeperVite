@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -25,27 +25,13 @@ import {
   Bell
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import api from '../../api/axios';
 import { InnkeeperLogo } from '../ui/InnkeeperLogo';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen }) => {
   const { user, hotel, logout } = useAuth();
   const navigate = useNavigate();
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  // Poll unread notification count every 60 s
-  useEffect(() => {
-    if (!user || user.role === 'super_admin') return;
-    const load = async () => {
-      try {
-        const res = await api.get('/notifications');
-        if (res.data.success) setUnreadCount(res.data.data.unreadCount);
-      } catch (_) { /* silent */ }
-    };
-    load();
-    const interval = setInterval(load, 60000);
-    return () => clearInterval(interval);
-  }, [user]);
+  const { unreadCount } = useNotifications();
 
   const handleLogout = async () => {
     await logout();
@@ -138,6 +124,18 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
       label: 'Staff & Payroll',
       icon: UserCheck,
       roles: ['hotel_admin', 'super_admin']
+    },
+    {
+      to: '/leave-management',
+      label: 'Leave Management',
+      icon: CalendarDays,
+      roles: ['hotel_admin', 'super_admin']
+    },
+    {
+      to: '/my-leave',
+      label: 'My Leave Requests',
+      icon: CalendarDays,
+      roles: ['hotel_admin', 'receptionist', 'housekeeping_staff', 'restaurant_staff', 'maintenance_staff']
     },
     {
       to: '/attendance',
@@ -281,4 +279,3 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
     </aside>
   );
 };
-

@@ -134,7 +134,7 @@ export const FrontDesk = () => {
   const todayStr = dayjs().format('YYYY-MM-DD');
 
   const arrivals = reservations.filter(
-    (r) => r.status === 'confirmed' && dayjs(r.checkInDate).format('YYYY-MM-DD') <= todayStr
+    (r) => ['approved', 'confirmed'].includes(r.status) && dayjs(r.checkInDate).format('YYYY-MM-DD') <= todayStr
   );
 
   const inHouse = reservations.filter((r) => r.status === 'checked_in');
@@ -407,4 +407,3 @@ export const FrontDesk = () => {
     </div>
   );
 };
-

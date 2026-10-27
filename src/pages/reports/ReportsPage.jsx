@@ -3,6 +3,7 @@ import api from '../../api/axios';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { getStaffAccessToken } from '../../auth/staffSession';
 import {
   BarChart3,
   Download,
@@ -36,7 +37,7 @@ export const ReportsPage = () => {
   }, []);
 
   const handleDownloadCSV = (type) => {
-    const token = localStorage.getItem('accessToken');
+    const token = getStaffAccessToken();
     const url = `${import.meta.env.VITE_API_URL || '/api/v1'}/reports/export?type=${type}`;
 
     // Trigger download with auth token
@@ -122,4 +123,3 @@ export const ReportsPage = () => {
     </div>
   );
 };
-

@@ -27,6 +27,7 @@ import { ExpensesPage } from './pages/expenses/ExpensesPage';
 import { MaintenancePage } from './pages/maintenance/MaintenancePage';
 import { StaffPage } from './pages/staff/StaffPage';
 import { MyAttendancePage } from './pages/staff/MyAttendancePage';
+import LeaveRequestsPage from './pages/staff/LeaveRequestsPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
 import { AIAssistantPage } from './pages/dashboard/AIAssistantPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
@@ -36,18 +37,19 @@ import { SuperAdminDashboard } from './pages/superadmin/SuperAdminDashboard';
 
 // Notifications
 import { NotificationsPage } from './pages/notifications/NotificationsPage';
+import { STAFF_ROLES } from './auth/staffSession';
 
 // Menu Management
 import { MenuManagementPage } from './pages/restaurant/MenuManagementPage';
 
 // Route Protectors
-const ProtectedRoute = ({ children, allowedRoles }) => {
+const ProtectedRoute = ({ children, allowedRoles = STAFF_ROLES }) => {
   const { user, loading } = useAuth();
 
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
 
-  if (allowedRoles && !allowedRoles.includes(user.role) && user.role !== 'super_admin') {
+  if (!allowedRoles.includes(user.role) && user.role !== 'super_admin') {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -58,7 +60,7 @@ export const App = () => {
   const { user } = useAuth();
 
   return (
-    <Routes>
+    <Routes key={user?.id || user?._id || 'anonymous'}>
       {/* Public Pages */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/lookup" element={<BookingLookupPage />} />
@@ -96,6 +98,22 @@ export const App = () => {
         <Route path="/maintenance" element={<MaintenancePage />} />
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/attendance" element={<MyAttendancePage />} />
+        <Route
+          path="/leave-management"
+          element={
+            <ProtectedRoute allowedRoles={['hotel_admin']}>
+              <LeaveRequestsPage management />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/my-leave"
+          element={
+            <ProtectedRoute allowedRoles={['hotel_admin', 'receptionist', 'restaurant_staff', 'housekeeping_staff', 'maintenance_staff']}>
+              <LeaveRequestsPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/ai-assistant" element={<AIAssistantPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
@@ -119,4 +137,3 @@ export const App = () => {
 };
 
 export default App;
-

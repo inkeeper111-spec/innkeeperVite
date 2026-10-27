@@ -1,211 +1,199 @@
-import React, { useState, useEffect } from 'react';
-import api from '../../api/axios';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Bell,
-  CheckCheck,
-  CalendarDays,
-  Sparkles,
-  Wrench,
   Boxes,
+  CalendarDays,
+  CheckCheck,
   CreditCard,
   Info,
-  AlertTriangle
+  Sparkles,
+  Wrench
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import api from '../../api/axios';
+import { useNotifications } from '../../contexts/NotificationContext';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { Input } from '../../components/ui/Input';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { Select } from '../../components/ui/Select';
 
 dayjs.extend(relativeTime);
 
 const TYPE_META = {
-  booking:     { icon: CalendarDays, color: 'bg-brand-50 text-brand-600 border-brand-200' },
-  housekeeping:{ icon: Sparkles,     color: 'bg-purple-50 text-purple-600 border-purple-200' },
-  maintenance: { icon: Wrench,       color: 'bg-amber-50 text-amber-600 border-amber-200' },
-  inventory:   { icon: Boxes,        color: 'bg-rose-50 text-rose-600 border-rose-200' },
-  billing:     { icon: CreditCard,   color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-  info:        { icon: Info,         color: 'bg-slate-50 text-slate-600 border-slate-200' },
+  reservations: { icon: CalendarDays, color: 'bg-brand-50 text-brand-600 border-brand-200' },
+  booking: { icon: CalendarDays, color: 'bg-brand-50 text-brand-600 border-brand-200' },
+  housekeeping: { icon: Sparkles, color: 'bg-purple-50 text-purple-600 border-purple-200' },
+  maintenance: { icon: Wrench, color: 'bg-amber-50 text-amber-600 border-amber-200' },
+  inventory: { icon: Boxes, color: 'bg-rose-50 text-rose-600 border-rose-200' },
+  billing: { icon: CreditCard, color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+  payments: { icon: CreditCard, color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+  info: { icon: Info, color: 'bg-slate-50 text-slate-600 border-slate-200' }
 };
 
-const getMeta = (type) => TYPE_META[type] || TYPE_META.info;
+const MODULES = [
+  'reservations', 'rooms', 'guests', 'expenses', 'restaurant', 'inventory',
+  'housekeeping', 'maintenance', 'staff', 'leave', 'payroll', 'payments', 'platform', 'system'
+];
 
 export const NotificationsPage = () => {
+  const navigate = useNavigate();
+  const { unreadCount, markAsRead, markAllAsRead, fetchNotifications } = useNotifications();
   const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount]     = useState(0);
-  const [loading, setLoading]             = useState(true);
-  const [markingRead, setMarkingRead]     = useState(false);
-  const [typeFilter, setTypeFilter]       = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [markingRead, setMarkingRead] = useState(false);
+  const [error, setError] = useState('');
+  const [filters, setFilters] = useState({
+    module: 'all',
+    priority: 'all',
+    isRead: 'all',
+    startDate: '',
+    endDate: ''
+  });
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
 
-  const fetchNotifications = async () => {
+  const loadNotifications = useCallback(async (page = pagination.page) => {
     try {
       setLoading(true);
-      const res = await api.get('/notifications');
-      if (res.data.success) {
-        setNotifications(res.data.data.notifications);
-        setUnreadCount(res.data.data.unreadCount);
+      setError('');
+      const params = new URLSearchParams({ page: String(page), limit: '20' });
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value && value !== 'all') params.set(key, value);
+      });
+      const response = await api.get(`/notifications?${params.toString()}`);
+      if (response.data.success) {
+        setNotifications(response.data.data.notifications);
+        setPagination(response.data.data.pagination);
       }
-    } catch (e) {
-      console.error('Failed to load notifications:', e);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Failed to load notifications.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, pagination.page]);
 
   useEffect(() => {
-    fetchNotifications();
-  }, []);
+    loadNotifications(1);
+  }, [filters]);
+
+  const handleMarkRead = async (notification) => {
+    try {
+      await markAsRead(notification._id);
+      setNotifications((current) => current.map((item) => (
+        item._id === notification._id ? { ...item, isRead: true } : item
+      )));
+      await fetchNotifications();
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Could not update notification status.');
+    }
+  };
 
   const handleMarkAllRead = async () => {
     setMarkingRead(true);
     try {
-      await api.patch('/notifications/read-all');
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-      setUnreadCount(0);
-    } catch (e) {
-      console.error('Failed to mark notifications as read:', e);
+      await markAllAsRead();
+      setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Could not mark notifications as read.');
     } finally {
       setMarkingRead(false);
     }
   };
 
-  const types = ['all', ...Array.from(new Set(notifications.map((n) => n.type)))];
-
-  const filtered = typeFilter === 'all'
-    ? notifications
-    : notifications.filter((n) => n.type === typeFilter);
+  const openNotification = async (notification) => {
+    if (!notification.isRead) await handleMarkRead(notification);
+    if (notification.link) navigate(notification.link);
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <Bell className="w-6 h-6 text-brand-600" />
-            <span>Notifications</span>
-            {unreadCount > 0 && (
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-extrabold">
-                {unreadCount}
-              </span>
-            )}
+          <h1 className="flex items-center gap-2 text-2xl font-black tracking-tight text-slate-900">
+            <Bell className="h-6 w-6 text-brand-600" />
+            Notifications
+            {unreadCount > 0 && <span className="rounded-full bg-rose-500 px-2 py-0.5 text-xs text-white">{unreadCount}</span>}
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            System-wide alerts for bookings, housekeeping, maintenance, inventory, and billing
-          </p>
+          <p className="mt-1 text-xs text-slate-500">Activity and alerts relevant to your role and hotel.</p>
         </div>
-
         {unreadCount > 0 && (
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={CheckCheck}
-            loading={markingRead}
-            onClick={handleMarkAllRead}
-          >
-            Mark All as Read
+          <Button variant="secondary" size="sm" icon={CheckCheck} loading={markingRead} onClick={handleMarkAllRead}>
+            Mark all as read
           </Button>
         )}
-      </div>
+      </header>
 
-      {/* Type filter pills */}
-      <div className="flex flex-wrap items-center gap-2 bg-white p-3 rounded-xl border border-slate-200/80">
-        {types.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTypeFilter(t)}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-colors ${
-              typeFilter === t
-                ? 'bg-brand-600 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            {t === 'all' ? 'All Types' : t}
-          </button>
-        ))}
-      </div>
-
-      {/* Notifications list */}
       <Card>
-        {loading ? (
-          <LoadingSpinner text="Loading notifications..." />
-        ) : filtered.length === 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Select label="Module" value={filters.module} onChange={(event) => setFilters((current) => ({ ...current, module: event.target.value }))}>
+            <option value="all">All modules</option>
+            {MODULES.map((module) => <option key={module} value={module}>{module}</option>)}
+          </Select>
+          <Select label="Priority" value={filters.priority} onChange={(event) => setFilters((current) => ({ ...current, priority: event.target.value }))}>
+            <option value="all">All priorities</option>
+            {['critical', 'high', 'medium', 'low'].map((priority) => <option key={priority} value={priority}>{priority}</option>)}
+          </Select>
+          <Select label="Read status" value={filters.isRead} onChange={(event) => setFilters((current) => ({ ...current, isRead: event.target.value }))}>
+            <option value="all">All statuses</option>
+            <option value="false">Unread</option>
+            <option value="true">Read</option>
+          </Select>
+          <Input label="From" type="date" value={filters.startDate} onChange={(event) => setFilters((current) => ({ ...current, startDate: event.target.value }))} />
+          <Input label="To" type="date" value={filters.endDate} onChange={(event) => setFilters((current) => ({ ...current, endDate: event.target.value }))} />
+        </div>
+      </Card>
+
+      {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">{error}</div>}
+
+      <Card>
+        {loading ? <LoadingSpinner text="Loading notifications..." /> : notifications.length === 0 ? (
           <div className="py-16 text-center">
-            <Bell className="w-10 h-10 text-slate-200 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-slate-400">No notifications yet</p>
-            <p className="text-xs text-slate-400 mt-1">Operational alerts will appear here as they occur.</p>
+            <Bell className="mx-auto mb-3 h-10 w-10 text-slate-200" />
+            <p className="text-sm font-semibold text-slate-400">No notifications found</p>
+            <p className="mt-1 text-xs text-slate-400">Try adjusting your filters.</p>
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {filtered.map((n) => {
-              const { icon: Icon, color } = getMeta(n.type);
+            {notifications.map((notification) => {
+              const { icon: Icon, color } = TYPE_META[notification.module || notification.type] || TYPE_META.info;
               return (
-                <li
-                  key={n._id}
-                  className={`flex items-start gap-4 px-4 py-4 transition-colors hover:bg-slate-50 ${
-                    !n.isRead ? 'bg-brand-50/30' : ''
-                  }`}
-                >
-                  {/* Icon */}
-                  <div className={`mt-0.5 flex-shrink-0 w-9 h-9 rounded-xl border flex items-center justify-center ${color}`}>
-                    <Icon className="w-4 h-4" />
+                <li key={notification._id} className={`flex items-start gap-4 px-4 py-4 ${notification.isRead ? '' : 'bg-brand-50/30'}`}>
+                  <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border ${color}`}>
+                    <Icon className="h-4 w-4" />
                   </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className={`text-sm font-semibold leading-snug ${!n.isRead ? 'text-slate-900' : 'text-slate-600'}`}>
-                        {n.title}
-                      </p>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {!n.isRead && (
-                          <span className="w-2 h-2 rounded-full bg-brand-500 flex-shrink-0" />
-                        )}
-                        <span className="text-[11px] text-slate-400 whitespace-nowrap">
-                          {dayjs(n.createdAt).fromNow()}
-                        </span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{n.message}</p>
-                    {n.link && (
-                      <a
-                        href={n.link}
-                        className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 mt-1 inline-block"
-                      >
-                        View details →
-                      </a>
-                    )}
-                  </div>
+                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openNotification(notification)}>
+                    <span className="flex items-center justify-between gap-2">
+                      <span className={`text-sm font-semibold ${notification.isRead ? 'text-slate-600' : 'text-slate-900'}`}>{notification.title}</span>
+                      <span className="whitespace-nowrap text-[11px] text-slate-400">{dayjs(notification.createdAt).fromNow()}</span>
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-slate-500">{notification.message}</span>
+                    <span className="mt-1 block text-[10px] font-semibold uppercase text-slate-400">
+                      {notification.module || notification.type} · {notification.priority || 'medium'}
+                    </span>
+                  </button>
+                  {!notification.isRead && (
+                    <button type="button" onClick={() => handleMarkRead(notification)} className="text-xs font-semibold text-brand-600 hover:text-brand-800">
+                      Mark read
+                    </button>
+                  )}
+                  {notification.link && <span className="sr-only">Opens related page</span>}
                 </li>
               );
             })}
           </ul>
         )}
+        {pagination.pages > 1 && (
+          <div className="flex items-center justify-between border-t border-slate-100 pt-4 text-xs text-slate-500">
+            <span>{pagination.total} notifications · Page {pagination.page} of {pagination.pages}</span>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" disabled={pagination.page <= 1 || loading} onClick={() => loadNotifications(pagination.page - 1)}>Previous</Button>
+              <Button size="sm" variant="outline" disabled={pagination.page >= pagination.pages || loading} onClick={() => loadNotifications(pagination.page + 1)}>Next</Button>
+            </div>
+          </div>
+        )}
       </Card>
-
-      {/* Stats summary */}
-      {!loading && notifications.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {Object.entries(TYPE_META).map(([type, { icon: Icon, color }]) => {
-            const count = notifications.filter((n) => n.type === type).length;
-            if (count === 0) return null;
-            return (
-              <button
-                key={type}
-                onClick={() => setTypeFilter(type)}
-                className="p-3 bg-white rounded-xl border border-slate-200/80 flex items-center gap-3 hover:border-slate-300 transition-colors text-left"
-              >
-                <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${color}`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase text-slate-400 capitalize">{type}</p>
-                  <p className="text-lg font-black text-slate-900">{count}</p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 };

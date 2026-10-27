@@ -7,6 +7,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   Wrench,
   AlertTriangle,
@@ -19,10 +20,16 @@ import {
 import dayjs from 'dayjs';
 
 export const MaintenancePage = () => {
+  const { user } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [isRejectOpen, setIsRejectOpen] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionError, setRejectionError] = useState('');
+  const [reassignmentSelections, setReassignmentSelections] = useState({});
 
   // Modals
   const [isNewTicketOpen, setIsNewTicketOpen] = useState(false);
@@ -99,6 +106,47 @@ export const MaintenancePage = () => {
     }
   };
 
+  const handleAcceptTicket = async (ticketId) => {
+    try {
+      const res = await api.post(`/maintenance/${ticketId}/accept`);
+      setMessage(res.data.message || 'Ticket assignment accepted.');
+      await fetchMaintenance();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to accept ticket.');
+    }
+  };
+
+  const handleRejectTicket = async (event) => {
+    event.preventDefault();
+    const reason = rejectionReason.trim();
+    if (!reason) {
+      setRejectionError('Enter a reason before rejecting this ticket.');
+      return;
+    }
+    try {
+      const res = await api.post(`/maintenance/${selectedTicket._id}/reject`, { reason });
+      setMessage(res.data.message || 'Ticket rejection recorded.');
+      setIsRejectOpen(false);
+      setRejectionReason('');
+      setRejectionError('');
+      await fetchMaintenance();
+    } catch (err) {
+      setRejectionError(err.response?.data?.message || 'Failed to reject ticket.');
+    }
+  };
+
+  const handleReassignTicket = async (ticketId) => {
+    try {
+      const assignedTechnician = reassignmentSelections[ticketId];
+      if (!assignedTechnician) return;
+      const res = await api.put(`/maintenance/${ticketId}`, { assignedTechnician });
+      setMessage(res.data.message || 'Ticket reassigned.');
+      await fetchMaintenance();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to reassign ticket.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -153,6 +201,18 @@ export const MaintenancePage = () => {
                     </td>
                     <td className="py-3.5 text-slate-700 font-medium max-w-xs">
                       {t.issueDescription}
+                      {t.rejectionReason && (
+                        <span className="mt-1 block rounded bg-rose-50 p-2 text-[10px] font-normal text-rose-800">
+                          <strong>Rejection reason:</strong> {t.rejectionReason}
+                        </span>
+                      )}
+                      {t.assignmentHistory?.length > 0 && (
+                        <span className="mt-1 block text-[10px] font-normal text-slate-500">
+                          {t.assignmentHistory.map((entry) => (
+                            `${entry.action}${entry.reason ? `: ${entry.reason}` : ''}`
+                          )).join(' → ')}
+                        </span>
+                      )}
                       {t.takesRoomOutOfService && (
                         <span className="block text-[10px] text-rose-600 font-bold uppercase mt-0.5">
                           Room Taken Out Of Service
@@ -167,7 +227,31 @@ export const MaintenancePage = () => {
                       <Badge variant={t.status}>{t.status}</Badge>
                     </td>
                     <td className="py-3.5 text-right space-x-1.5">
-                      {t.status === 'open' && (
+                      {user?.role === 'maintenance_staff'
+                        && t.assignmentStatus !== 'accepted'
+                        && t.status !== 'rejected'
+                        && !['resolved', 'closed'].includes(t.status) && (
+                          <>
+                            <Button size="sm" variant="success" onClick={() => handleAcceptTicket(t._id)}>
+                              Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              onClick={() => {
+                                setSelectedTicket(t);
+                                setRejectionReason('');
+                                setRejectionError('');
+                                setIsRejectOpen(true);
+                              }}
+                            >
+                              Reject
+                            </Button>
+                          </>
+                        )}
+                      {(t.status === 'open' || t.status === 'assigned')
+                        && t.status !== 'rejected'
+                        && (user?.role !== 'maintenance_staff' || t.assignmentStatus === 'accepted') && (
                         <Button
                           size="sm"
                           variant="primary"
@@ -176,7 +260,7 @@ export const MaintenancePage = () => {
                           Start Work
                         </Button>
                       )}
-                      {t.status === 'in_progress' && (
+                      {t.status === 'in_progress' && user?.role !== 'maintenance_staff' && (
                         <Button
                           size="sm"
                           variant="success"
@@ -185,7 +269,7 @@ export const MaintenancePage = () => {
                           Resolve
                         </Button>
                       )}
-                      {t.status === 'resolved' && (
+                      {t.status === 'resolved' && user?.role !== 'maintenance_staff' && (
                         <Button
                           size="sm"
                           variant="secondary"
@@ -193,6 +277,34 @@ export const MaintenancePage = () => {
                         >
                           Close Ticket
                         </Button>
+                      )}
+                      {t.status === 'rejected' && ['hotel_admin', 'receptionist'].includes(user?.role) && (
+                        <div className="mt-1 flex justify-end gap-1">
+                          <select
+                            aria-label={`Reassign ticket ${t.ticketNumber}`}
+                            className="max-w-36 rounded-lg border border-slate-300 px-2 py-1 text-[11px]"
+                            value={reassignmentSelections[t._id] || ''}
+                            onChange={(event) => setReassignmentSelections({
+                              ...reassignmentSelections,
+                              [t._id]: event.target.value
+                            })}
+                          >
+                            <option value="">Choose technician</option>
+                            {staff.map((employee) => (
+                              <option key={employee.userId?._id} value={employee.userId?._id}>
+                                {employee.userId?.name}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            disabled={!reassignmentSelections[t._id]}
+                            onClick={() => handleReassignTicket(t._id)}
+                          >
+                            Reassign
+                          </Button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -317,7 +429,31 @@ export const MaintenancePage = () => {
           </div>
         </form>
       </Modal>
+
+      <Modal
+        isOpen={isRejectOpen}
+        onClose={() => setIsRejectOpen(false)}
+        title="Reject Maintenance Job"
+        subtitle={`Ticket ${selectedTicket?.ticketNumber || ''}`}
+      >
+        <form onSubmit={handleRejectTicket} className="space-y-4">
+          <Input
+            label="Reason for rejection"
+            required
+            value={rejectionReason}
+            onChange={(event) => {
+              setRejectionReason(event.target.value);
+              if (rejectionError) setRejectionError('');
+            }}
+            placeholder="Explain why you cannot accept this assignment"
+          />
+          {rejectionError && <p className="text-xs text-rose-600">{rejectionError}</p>}
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={() => setIsRejectOpen(false)}>Cancel</Button>
+            <Button type="submit" variant="danger" disabled={!rejectionReason.trim()}>Reject Job</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
-

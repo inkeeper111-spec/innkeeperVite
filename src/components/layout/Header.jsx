@@ -20,7 +20,7 @@ dayjs.extend(relativeTime);
 
 export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
   const { user, hotel, logout } = useAuth();
-  const { notifications, unreadCount, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const navigate = useNavigate();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -46,6 +46,24 @@ export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const handleNotificationClick = async (notification) => {
+    try {
+      if (!notification.isRead) await markAsRead(notification._id);
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
+    if (notification.link) navigate(notification.link);
+    setShowNotifications(false);
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllAsRead();
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+    }
   };
 
   return (
@@ -114,7 +132,7 @@ export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
                 </div>
                 {unreadCount > 0 && (
                   <button
-                    onClick={markAllAsRead}
+                    onClick={handleMarkAllRead}
                     className="text-xs text-brand-600 hover:text-brand-700 font-medium"
                   >
                     Mark all read
@@ -131,10 +149,7 @@ export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
                   notifications.map((n) => (
                     <div
                       key={n._id}
-                      onClick={() => {
-                        if (n.link) navigate(n.link);
-                        setShowNotifications(false);
-                      }}
+                      onClick={() => handleNotificationClick(n)}
                       className={`p-3.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-start gap-3 ${
                         !n.isRead ? 'bg-brand-50/30' : ''
                       }`}
@@ -152,10 +167,24 @@ export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
                         <span className="text-[10px] text-slate-400 mt-1 block">
                           {dayjs(n.createdAt).fromNow()}
                         </span>
+                        <span className={`mt-1 inline-block text-[9px] font-bold uppercase ${n.priority === 'critical' ? 'text-rose-700' : n.priority === 'high' ? 'text-amber-700' : 'text-slate-400'}`}>
+                          {n.module || n.type} · {n.priority || 'medium'}
+                        </span>
                       </div>
                     </div>
                   ))
                 )}
+              </div>
+              <div className="border-t border-slate-100 p-3 text-center">
+                <button
+                  onClick={() => {
+                    navigate('/notifications');
+                    setShowNotifications(false);
+                  }}
+                  className="text-xs font-semibold text-brand-600 hover:text-brand-700"
+                >
+                  View all notifications
+                </button>
               </div>
             </div>
           )}
@@ -215,4 +244,3 @@ export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
     </header>
   );
 };
-

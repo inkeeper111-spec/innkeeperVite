@@ -25,7 +25,8 @@ export const SettingsPage = () => {
     checkInTime: '15:00',
     checkOutTime: '11:00',
     cancellationPolicy: '',
-    invoicePrefix: 'INV'
+    invoicePrefix: 'INV',
+    attendanceLocation: { latitude: '', longitude: '' }
   });
 
   const [profileForm, setProfileForm] = useState({
@@ -55,7 +56,11 @@ export const SettingsPage = () => {
         checkInTime: hotel.checkInTime || '15:00',
         checkOutTime: hotel.checkOutTime || '11:00',
         cancellationPolicy: hotel.cancellationPolicy || '',
-        invoicePrefix: hotel.invoicePrefix || 'INV'
+        invoicePrefix: hotel.invoicePrefix || 'INV',
+        attendanceLocation: {
+          latitude: hotel.attendanceLocation?.latitude ?? '',
+          longitude: hotel.attendanceLocation?.longitude ?? ''
+        }
       });
     }
     if (user) {
@@ -228,6 +233,46 @@ export const SettingsPage = () => {
               placeholder="Full refund 24 hours prior to arrival"
             />
 
+            <div className="border-t border-slate-100 pt-4 space-y-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Attendance Location</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Employees can check in and out within 50 meters of this location. GPS accuracy must be 25 meters or better.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Hotel Latitude"
+                  type="number"
+                  min="-90"
+                  max="90"
+                  step="any"
+                  value={hotelForm.attendanceLocation.latitude}
+                  onChange={(e) => setHotelForm({
+                    ...hotelForm,
+                    attendanceLocation: { ...hotelForm.attendanceLocation, latitude: e.target.value }
+                  })}
+                  placeholder="e.g. 25.7617"
+                />
+                <Input
+                  label="Hotel Longitude"
+                  type="number"
+                  min="-180"
+                  max="180"
+                  step="any"
+                  value={hotelForm.attendanceLocation.longitude}
+                  onChange={(e) => setHotelForm({
+                    ...hotelForm,
+                    attendanceLocation: { ...hotelForm.attendanceLocation, longitude: e.target.value }
+                  })}
+                  placeholder="e.g. -80.1918"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Leave both coordinates empty to disable GPS attendance until the hotel location is configured.
+              </p>
+            </div>
+
             <div className="flex justify-end pt-3">
               <Button type="submit" variant="primary" loading={loading}>
                 Save Hotel Settings
@@ -284,4 +329,3 @@ export const SettingsPage = () => {
     </div>
   );
 };
-

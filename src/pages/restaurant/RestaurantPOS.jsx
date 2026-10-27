@@ -7,6 +7,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   UtensilsCrossed,
   Plus,
@@ -21,8 +22,12 @@ import {
 } from 'lucide-react';
 
 export const RestaurantPOS = () => {
+  const { user } = useAuth();
+  const canManageTables = user?.role === 'hotel_admin' || user?.role === 'super_admin';
   const [activeView, setActiveView] = useState('pos'); // 'pos' or 'kitchen'
+  const [showTableManagement, setShowTableManagement] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [tables, setTables] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [selectedCat, setSelectedCat] = useState('all');
   const [orders, setOrders] = useState([]);
@@ -32,19 +37,24 @@ export const RestaurantPOS = () => {
   // Cart State
   const [cart, setCart] = useState([]);
   const [orderType, setOrderType] = useState('dine_in'); // dine_in, room_service, takeaway
-  const [tableNumber, setTableNumber] = useState('Table 1');
+  const [selectedTableId, setSelectedTableId] = useState('');
   const [selectedReservationId, setSelectedReservationId] = useState('');
   const [message, setMessage] = useState('');
   const [isFolioModalOpen, setIsFolioModalOpen] = useState(false);
   const [selectedOrderForFolio, setSelectedOrderForFolio] = useState(null);
+  const [isTableModalOpen, setIsTableModalOpen] = useState(false);
+  const [editingTable, setEditingTable] = useState(null);
+  const [tableForm, setTableForm] = useState({ name: '', capacity: 4, status: 'available' });
+  const [tableError, setTableError] = useState('');
 
-  const fetchMenuAndOrders = async () => {
+  const fetchMenuAndOrders = async (showLoading = true) => {
     try {
-      setLoading(true);
-      const [menuRes, ordersRes, resvRes] = await Promise.all([
+      if (showLoading) setLoading(true);
+      const [menuRes, ordersRes, resvRes, tablesRes] = await Promise.all([
         api.get('/restaurant/menu'),
         api.get('/restaurant/orders'),
-        api.get('/reservations?status=checked_in')
+        api.get('/reservations?status=checked_in'),
+        api.get(`/restaurant/tables${canManageTables ? '?includeInactive=true' : ''}`)
       ]);
 
       if (menuRes.data.success) {
@@ -57,16 +67,21 @@ export const RestaurantPOS = () => {
       if (resvRes.data.success) {
         setInHouseReservations(resvRes.data.data.reservations);
       }
+      if (tablesRes.data.success) {
+        setTables(tablesRes.data.data);
+      }
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchMenuAndOrders();
-  }, []);
+    const refreshInterval = window.setInterval(() => fetchMenuAndOrders(false), 15000);
+    return () => window.clearInterval(refreshInterval);
+  }, [canManageTables]);
 
   const addToCart = (item) => {
     setCart((prev) => {
@@ -106,7 +121,7 @@ export const RestaurantPOS = () => {
 
       const payload = {
         orderType,
-        tableNumber: orderType === 'dine_in' ? tableNumber : '',
+        tableId: orderType === 'dine_in' ? selectedTableId : undefined,
         roomId: selectedResv?.rooms?.[0]?.roomId?._id,
         reservationId: selectedResv?._id,
         items: cart.map((i) => ({
@@ -132,11 +147,57 @@ export const RestaurantPOS = () => {
         }
 
         clearCart();
+        if (orderType === 'dine_in') setSelectedTableId('');
         fetchMenuAndOrders();
         setTimeout(() => setMessage(''), 4000);
       }
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to place order');
+    }
+  };
+
+  const handleSaveTable = async (e) => {
+    e.preventDefault();
+    setTableError('');
+    try {
+      if (editingTable) {
+        await api.patch(`/restaurant/tables/${editingTable._id}`, {
+          name: tableForm.name,
+          capacity: Number(tableForm.capacity),
+          status: tableForm.status
+        });
+      } else {
+        await api.post('/restaurant/tables', {
+          name: tableForm.name,
+          capacity: Number(tableForm.capacity)
+        });
+      }
+      setIsTableModalOpen(false);
+      setEditingTable(null);
+      setTableForm({ name: '', capacity: 4, status: 'available' });
+      fetchMenuAndOrders();
+    } catch (err) {
+      setTableError(err.response?.data?.message || 'Failed to save table.');
+    }
+  };
+
+  const handleToggleTable = async (table) => {
+    try {
+      await api.patch(`/restaurant/tables/${table._id}`, { isActive: !table.isActive });
+      fetchMenuAndOrders();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to update table.');
+    }
+  };
+
+  const handleSettleOrder = async (orderId) => {
+    try {
+      const res = await api.patch(`/restaurant/orders/${orderId}/settle`, { paymentMethod: 'cash' });
+      setMessage(res.data.message);
+      fetchMenuAndOrders();
+      setTimeout(() => setMessage(''), 4000);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to settle order.');
     }
   };
 
@@ -170,6 +231,7 @@ export const RestaurantPOS = () => {
   const filteredItems = menuItems.filter(
     (i) => selectedCat === 'all' || i.categoryId?._id === selectedCat || i.categoryId === selectedCat
   );
+  const activeTables = tables.filter((table) => table.isActive);
 
   return (
     <div className="space-y-6">
@@ -203,6 +265,17 @@ export const RestaurantPOS = () => {
         </div>
       </div>
 
+      {canManageTables && (
+        <div className="flex justify-end">
+          <Button
+            variant={showTableManagement ? 'secondary' : 'outline'}
+            onClick={() => setShowTableManagement((visible) => !visible)}
+          >
+            {showTableManagement ? 'Back to POS' : 'Manage Tables'}
+          </Button>
+        </div>
+      )}
+
       {message && (
         <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
@@ -210,7 +283,70 @@ export const RestaurantPOS = () => {
         </div>
       )}
 
-      {activeView === 'pos' && (
+      {showTableManagement && canManageTables ? (
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Restaurant Tables</h2>
+              <p className="text-xs text-slate-500">Table numbers are assigned automatically.</p>
+            </div>
+            <Button
+              variant="primary"
+              icon={Plus}
+              onClick={() => {
+                setEditingTable(null);
+                setTableForm({ name: '', capacity: 4, status: 'available' });
+                setTableError('');
+                setIsTableModalOpen(true);
+              }}
+            >
+              Add Table
+            </Button>
+          </div>
+          {loading ? (
+            <LoadingSpinner text="Loading restaurant tables..." />
+          ) : tables.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">No tables configured for this restaurant.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {tables.map((table) => (
+                <div key={table._id} className="rounded-xl border border-slate-200 p-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-slate-900">Table {table.tableNumber}{table.name ? ` · ${table.name}` : ''}</p>
+                    <p className="text-xs text-slate-500">Capacity {table.capacity} · {table.currentStatus}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingTable(table);
+                        setTableForm({
+                          name: table.name || '',
+                          capacity: table.capacity,
+                          status: table.status
+                        });
+                        setTableError('');
+                        setIsTableModalOpen(true);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={table.isActive ? 'danger' : 'success'}
+                      disabled={table.currentStatus === 'occupied'}
+                      onClick={() => handleToggleTable(table)}
+                    >
+                      {table.isActive ? 'Deactivate' : 'Activate'}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      ) : activeView === 'pos' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Menu Catalog (2 cols) */}
           <div className="lg:col-span-2 space-y-4">
@@ -307,13 +443,30 @@ export const RestaurantPOS = () => {
 
               {/* Service Destination */}
               {orderType === 'dine_in' && (
-                <div className="mb-3">
-                  <Input
-                    label="Table Number"
-                    value={tableNumber}
-                    onChange={(e) => setTableNumber(e.target.value)}
-                    placeholder="Table 4"
-                  />
+                <div className="mb-3 space-y-2">
+                  <p className="text-xs font-semibold text-slate-700">Select a table</p>
+                  {activeTables.length === 0 ? (
+                    <p className="text-xs text-rose-600">No active restaurant tables are configured.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {activeTables.map((table) => (
+                        <button
+                          key={table._id}
+                          type="button"
+                          disabled={table.currentStatus !== 'available'}
+                          onClick={() => setSelectedTableId(table._id)}
+                          className={`rounded-lg border p-2 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                            selectedTableId === table._id
+                              ? 'border-brand-600 bg-brand-50 ring-2 ring-brand-500/20'
+                              : 'border-slate-200 bg-white hover:border-brand-400'
+                          }`}
+                        >
+                          <span className="block font-bold">Table {table.tableNumber}{table.name ? ` · ${table.name}` : ''}</span>
+                          <span className="text-slate-500">{table.currentStatus} · {table.capacity} seats</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -404,7 +557,7 @@ export const RestaurantPOS = () => {
                   <Button
                     variant="primary"
                     className="w-full"
-                    disabled={cart.length === 0}
+                    disabled={cart.length === 0 || (orderType === 'dine_in' && !selectedTableId)}
                     onClick={() => handlePlaceOrder(true)}
                   >
                     Send to Kitchen (${total})
@@ -445,9 +598,19 @@ export const RestaurantPOS = () => {
                                 #{o.orderNumber}
                               </span>
                               <span className="text-[11px] text-slate-500 block capitalize">
-                                {o.orderType.replace(/_/g, ' ')}{' '}
-                                {o.roomNumber ? `(Room ${o.roomNumber})` : o.tableNumber}
+                                {o.orderType.replace(/_/g, ' ')}
                               </span>
+                              {o.orderType === 'dine_in' && (
+                                <span className="mt-1 block rounded bg-amber-100 px-2 py-1 text-sm font-black text-amber-900">
+                                  {o.tableId?.tableNumber
+                                    ? `Table ${o.tableId.tableNumber}`
+                                    : o.tableNumber}
+                                  {o.tableNameSnapshot ? ` · ${o.tableNameSnapshot}` : ''}
+                                </span>
+                              )}
+                              {o.orderType === 'room_service' && o.roomNumber && (
+                                <span className="text-[11px] text-slate-500 block">Room {o.roomNumber}</span>
+                              )}
                             </div>
                             <Badge variant={o.status}>{o.status}</Badge>
                           </div>
@@ -494,6 +657,24 @@ export const RestaurantPOS = () => {
                                   Serve
                                 </Button>
                               )}
+                              {['pending', 'preparing', 'ready'].includes(o.status) && (
+                                <Button
+                                  size="sm"
+                                  variant="danger"
+                                  onClick={() => handleUpdateOrderStatus(o._id, 'cancelled')}
+                                >
+                                  Cancel
+                                </Button>
+                              )}
+                              {o.status === 'served' && o.paymentStatus === 'unpaid' && (
+                                <Button
+                                  size="sm"
+                                  variant="gold"
+                                  onClick={() => handleSettleOrder(o._id)}
+                                >
+                                  Settle
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </Card>
@@ -506,7 +687,66 @@ export const RestaurantPOS = () => {
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={isTableModalOpen}
+        onClose={() => {
+          setIsTableModalOpen(false);
+          setTableError('');
+        }}
+        title={editingTable ? `Edit Table ${editingTable.tableNumber}` : 'Add Restaurant Table'}
+        subtitle={editingTable ? 'Update table details and availability.' : 'The next sequential table number will be assigned automatically.'}
+      >
+        {tableError && (
+          <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+            {tableError}
+          </div>
+        )}
+        <form onSubmit={handleSaveTable} className="space-y-4">
+          {!editingTable && (
+            <p className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+              Table {tables.reduce((highest, table) => Math.max(highest, table.tableNumber), 0) + 1}
+            </p>
+          )}
+          <Input
+            label="Optional Table Name"
+            value={tableForm.name}
+            onChange={(e) => setTableForm({ ...tableForm, name: e.target.value })}
+            placeholder="Patio, Window, Booth 1"
+          />
+          <Input
+            label="Capacity"
+            type="number"
+            min="1"
+            required
+            value={tableForm.capacity}
+            onChange={(e) => setTableForm({ ...tableForm, capacity: e.target.value })}
+          />
+          {editingTable && (
+            <Select
+              label="Status"
+              value={tableForm.status}
+              onChange={(e) => setTableForm({ ...tableForm, status: e.target.value })}
+            >
+              <option value="available">Available</option>
+              <option value="reserved">Reserved</option>
+            </Select>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsTableModalOpen(false);
+                setTableError('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary">Save Table</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
-

@@ -19,7 +19,6 @@ const TABS = [
   { key: 'attendance', label: 'Attendance',          icon: ClipboardList },
   { key: 'summary',    label: 'Monthly Summary',     icon: BarChart3 },
   { key: 'salary',     label: 'Salary & Payroll',    icon: DollarSign },
-  { key: 'leave',      label: 'Leave',               icon: Calendar },
   { key: 'advances',   label: 'Advances',            icon: CreditCard },
   { key: 'shifts',     label: 'Shift Rosters',       icon: Calendar }
 ];
@@ -39,7 +38,6 @@ export const StaffPage = () => {
   const [attendance,  setAttendance]  = useState([]);
   const [summary,     setSummary]     = useState(null);
   const [salaryHistory, setSalaryHistory] = useState([]);
-  const [leaves, setLeaves] = useState([]);
   const [advances, setAdvances] = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [message,     setMessage]     = useState('');
@@ -115,11 +113,6 @@ export const StaffPage = () => {
     if (res.data.success) setSalaryHistory(res.data.data.records);
   }, []);
 
-  const fetchLeaves = useCallback(async () => {
-    const res = await api.get('/staff/leave');
-    if (res.data.success) setLeaves(res.data.data);
-  }, []);
-
   const fetchAdvances = useCallback(async () => {
     const res = await api.get('/staff/advances');
     if (res.data.success) setAdvances(res.data.data);
@@ -129,7 +122,7 @@ export const StaffPage = () => {
     const init = async () => {
       setLoading(true);
       try {
-        await Promise.all([fetchStaff(), fetchShifts(), fetchAttendance(), fetchSummary(), fetchSalaryHistory(), fetchLeaves(), fetchAdvances()]);
+        await Promise.all([fetchStaff(), fetchShifts(), fetchAttendance(), fetchSummary(), fetchSalaryHistory(), fetchAdvances()]);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     };
@@ -141,7 +134,6 @@ export const StaffPage = () => {
     if (activeTab === 'attendance') fetchAttendance(attendanceDate);
     if (activeTab === 'summary')   fetchSummary(summaryMonth);
     if (activeTab === 'salary')    fetchSalaryHistory();
-    if (activeTab === 'leave')     fetchLeaves();
     if (activeTab === 'advances')  fetchAdvances();
   }, [activeTab]);
 
@@ -637,46 +629,6 @@ export const StaffPage = () => {
             )}
           </Card>
         </>
-      )}
-
-      {activeTab === 'leave' && (
-        <Card title="Leave requests" subtitle="Approve or reject staff leave">
-          {leaves.length === 0 ? (
-            <div className="py-10 text-center text-slate-400 text-xs">No leave requests.</div>
-          ) : (
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="text-slate-400 uppercase border-b border-slate-100">
-                  <th className="pb-2">Employee</th>
-                  <th className="pb-2">Type</th>
-                  <th className="pb-2">Dates</th>
-                  <th className="pb-2">Days</th>
-                  <th className="pb-2">Status</th>
-                  <th className="pb-2 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {leaves.map((l) => (
-                  <tr key={l._id}>
-                    <td className="py-3 font-semibold">{l.userId?.name}</td>
-                    <td className="py-3 capitalize">{l.leaveType}</td>
-                    <td className="py-3">{dayjs(l.startDate).format('MMM D')} – {dayjs(l.endDate).format('MMM D')}</td>
-                    <td className="py-3">{l.days}</td>
-                    <td className="py-3"><Badge variant={l.status}>{l.status}</Badge></td>
-                    <td className="py-3 text-right space-x-1">
-                      {l.status === 'pending' && (
-                        <>
-                          <Button size="sm" variant="success" onClick={async () => { await api.patch(`/staff/leave/${l._id}`, { status: 'approved' }); fetchLeaves(); }}>Approve</Button>
-                          <Button size="sm" variant="danger" onClick={async () => { await api.patch(`/staff/leave/${l._id}`, { status: 'rejected' }); fetchLeaves(); }}>Reject</Button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Card>
       )}
 
       {activeTab === 'advances' && (

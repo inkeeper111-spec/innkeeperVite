@@ -90,7 +90,7 @@ export const BookingLookupPage = () => {
             <div className="flex items-start justify-between border-b border-slate-100 pb-4">
               <div>
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-                  Official Stay Confirmation
+                  Reservation Status
                 </span>
                 <h2 className="text-xl font-black text-slate-900 font-mono mt-1">
                   {data.reservation.bookingReference}
@@ -103,6 +103,28 @@ export const BookingLookupPage = () => {
               <Badge variant={data.reservation.status} size="md">
                 {data.reservation.status}
               </Badge>
+            </div>
+
+            <div className={`p-3 rounded-xl text-sm font-medium ${
+              data.reservation.status === 'rejected'
+                ? 'bg-rose-50 border border-rose-200 text-rose-800'
+                : data.reservation.status === 'approved'
+                  ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                  : 'bg-amber-50 border border-amber-200 text-amber-800'
+            }`}>
+              {data.reservation.status === 'pending_approval' && 'Your reservation is awaiting review by the hotel team.'}
+              {data.reservation.status === 'approved' && 'Your reservation has been approved.'}
+              {data.reservation.status === 'rejected' && (
+                <>
+                  <p>Your reservation has been rejected.</p>
+                  {data.reservation.rejectionReason && (
+                    <p className="mt-1">Reason: {data.reservation.rejectionReason}</p>
+                  )}
+                </>
+              )}
+              {!['pending_approval', 'approved', 'rejected'].includes(data.reservation.status) && (
+                <span>Current status: {data.reservation.status.replace(/_/g, ' ')}.</span>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-4 rounded-xl">
@@ -181,4 +203,3 @@ export const BookingLookupPage = () => {
     </div>
   );
 };
-

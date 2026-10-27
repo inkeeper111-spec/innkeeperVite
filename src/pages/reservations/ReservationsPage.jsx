@@ -7,20 +7,29 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   CalendarDays,
   PlusCircle,
   Search,
   CheckCircle2,
   XCircle,
-  Clock,
   Eye,
-  FileText
+  FileText,
+  Check
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
 export const ReservationsPage = () => {
+  const { user } = useAuth();
+  const canReviewRequests = ['hotel_admin', 'receptionist'].includes(user?.role);
   const [reservations, setReservations] = useState([]);
+  const [reservationRequests, setReservationRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [requestError, setRequestError] = useState('');
+  const [processingRequestId, setProcessingRequestId] = useState('');
+  const [rejectingBooking, setRejectingBooking] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -63,9 +72,63 @@ export const ReservationsPage = () => {
     }
   };
 
+  const fetchReservationRequests = async () => {
+    if (!canReviewRequests) return;
+    try {
+      setLoadingRequests(true);
+      setRequestError('');
+      const res = await api.get('/reservations/requests');
+      if (res.data.success) {
+        setReservationRequests(res.data.data.reservations);
+      }
+    } catch (err) {
+      setRequestError(err.response?.data?.message || 'Unable to retrieve reservation requests.');
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
   useEffect(() => {
     fetchReservations();
-  }, []);
+    fetchReservationRequests();
+  }, [canReviewRequests]);
+
+  const handleApproveRequest = async (id) => {
+    setProcessingRequestId(id);
+    setRequestError('');
+    try {
+      const res = await api.post(`/reservations/${id}/approve`);
+      setMessage(res.data.message || 'Reservation approved successfully.');
+      await Promise.all([fetchReservationRequests(), fetchReservations()]);
+      setTimeout(() => setMessage(''), 4000);
+    } catch (err) {
+      setRequestError(err.response?.data?.message || 'Failed to approve reservation.');
+    } finally {
+      setProcessingRequestId('');
+    }
+  };
+
+  const handleRejectRequest = async (e) => {
+    e.preventDefault();
+    if (!rejectingBooking || !rejectionReason.trim()) return;
+
+    setProcessingRequestId(rejectingBooking._id);
+    setRequestError('');
+    try {
+      const res = await api.post(`/reservations/${rejectingBooking._id}/reject`, {
+        reason: rejectionReason.trim()
+      });
+      setRejectingBooking(null);
+      setRejectionReason('');
+      setMessage(res.data.message || 'Reservation rejected successfully.');
+      await Promise.all([fetchReservationRequests(), fetchReservations()]);
+      setTimeout(() => setMessage(''), 4000);
+    } catch (err) {
+      setRequestError(err.response?.data?.message || 'Failed to reject reservation.');
+    } finally {
+      setProcessingRequestId('');
+    }
+  };
 
   // Check availability when dates change in modal
   useEffect(() => {
@@ -175,6 +238,114 @@ export const ReservationsPage = () => {
         </div>
       )}
 
+      {canReviewRequests && (
+        <Card>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Reservation Requests</h2>
+                <p className="text-xs text-slate-500 mt-1">Review pending requests for this hotel.</p>
+              </div>
+              <Badge variant="pending_approval">{reservationRequests.length} Pending</Badge>
+            </div>
+
+            {requestError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl">
+                {requestError}
+              </div>
+            )}
+
+            {loadingRequests ? (
+              <LoadingSpinner text="Loading reservation requests..." />
+            ) : reservationRequests.length === 0 ? (
+              <div className="py-6 text-center text-slate-400 text-xs">No pending reservation requests.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
+                      <th className="pb-3">Reference</th>
+                      <th className="pb-3">Guest</th>
+                      <th className="pb-3">Room Type</th>
+                      <th className="pb-3">Stay Dates</th>
+                      <th className="pb-3">Payment</th>
+                      <th className="pb-3">Availability</th>
+                      <th className="pb-3">Status</th>
+                      <th className="pb-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {reservationRequests.map((request) => (
+                      <tr key={request._id}>
+                        <td className="py-3 font-bold font-mono text-slate-900">{request.bookingReference}</td>
+                        <td className="py-3">
+                          <p className="font-semibold text-slate-800">{request.guestName}</p>
+                          <p className="text-[11px] text-slate-400">{request.guestEmail}</p>
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {request.rooms?.map((room) => room.roomTypeId?.name || 'Room').join(', ')}
+                        </td>
+                        <td className="py-3 text-slate-600 whitespace-nowrap">
+                          {dayjs(request.checkInDate).format('MMM D, YYYY')} - {dayjs(request.checkOutDate).format('MMM D, YYYY')}
+                        </td>
+                        <td className="py-3"><Badge variant={request.paymentStatus}>{request.paymentStatus}</Badge></td>
+                        <td className="py-3">
+                          <Badge variant={request.isRoomAvailable ? 'available' : 'out_of_service'}>
+                            {request.isRoomAvailable ? 'Available' : 'Unavailable'}
+                          </Badge>
+                        </td>
+                        <td className="py-3"><Badge variant={request.status}>{request.status}</Badge></td>
+                        <td className="py-3 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedBooking(request);
+                              setIsDetailOpen(true);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-slate-100 rounded-lg"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {request.status === 'pending_approval' && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="success"
+                                icon={Check}
+                                loading={processingRequestId === request._id}
+                                disabled={Boolean(processingRequestId)}
+                                onClick={() => handleApproveRequest(request._id)}
+                                className="ml-1"
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="danger"
+                                icon={XCircle}
+                                disabled={Boolean(processingRequestId)}
+                                onClick={() => {
+                                  setRejectingBooking(request);
+                                  setRejectionReason('');
+                                }}
+                                className="ml-1"
+                              >
+                                Reject
+                              </Button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* Filter / Search Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200/80">
         <div className="relative flex-1 max-w-sm">
@@ -195,6 +366,9 @@ export const ReservationsPage = () => {
           onChange={(e) => setStatusFilter(e.target.value)}
           options={[
             { value: 'all', label: 'All Reservation Statuses' },
+            { value: 'pending_approval', label: 'Pending Approval' },
+            { value: 'approved', label: 'Approved' },
+            { value: 'rejected', label: 'Rejected' },
             { value: 'confirmed', label: 'Confirmed' },
             { value: 'checked_in', label: 'Checked In' },
             { value: 'checked_out', label: 'Checked Out' },
@@ -382,6 +556,55 @@ export const ReservationsPage = () => {
         </form>
       </Modal>
 
+      <Modal
+        isOpen={Boolean(rejectingBooking)}
+        onClose={() => {
+          setRejectingBooking(null);
+          setRejectionReason('');
+        }}
+        title="Reject Reservation Request"
+        subtitle={rejectingBooking?.bookingReference}
+      >
+        {requestError && (
+          <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl">
+            {requestError}
+          </div>
+        )}
+        <form onSubmit={handleRejectRequest} className="space-y-4">
+          <label className="block text-xs font-semibold text-slate-700">
+            Rejection reason <span className="text-rose-600">*</span>
+            <textarea
+              required
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              rows={4}
+              className="mt-1.5 w-full rounded-lg border border-slate-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              placeholder="Explain why this reservation request is being rejected."
+            />
+          </label>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => {
+                setRejectingBooking(null);
+                setRejectionReason('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              type="submit"
+              loading={processingRequestId === rejectingBooking?._id}
+              disabled={!rejectionReason.trim()}
+            >
+              Reject Request
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
       {/* Reservation Details Modal */}
       <Modal
         isOpen={isDetailOpen}
@@ -405,7 +628,24 @@ export const ReservationsPage = () => {
                   {dayjs(selectedBooking.checkInDate).format('YYYY-MM-DD')} to {dayjs(selectedBooking.checkOutDate).format('YYYY-MM-DD')}
                 </span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Room Type:</span>
+                <span className="font-semibold text-slate-700">
+                  {selectedBooking.rooms?.map((room) => room.roomTypeId?.name || 'Room').join(', ')}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Payment Status:</span>
+                <Badge variant={selectedBooking.paymentStatus}>{selectedBooking.paymentStatus}</Badge>
+              </div>
             </div>
+
+            {selectedBooking.status === 'rejected' && selectedBooking.rejectionReason && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl">
+                <span className="font-bold text-rose-800">Rejection Reason:</span>
+                <p className="mt-1 text-rose-700">{selectedBooking.rejectionReason}</p>
+              </div>
+            )}
 
             <div className="p-4 bg-brand-50/50 rounded-xl space-y-2 border border-brand-100">
               <div className="flex justify-between text-sm font-bold">
@@ -436,4 +676,3 @@ export const ReservationsPage = () => {
     </div>
   );
 };
-
