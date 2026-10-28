@@ -82,8 +82,9 @@ export const Select = ({
       position: 'fixed',
       top: openUp ? undefined : rect.bottom + 6,
       bottom: openUp ? window.innerHeight - rect.top + 6 : undefined,
-      left: rect.left,
-      width: Math.max(rect.width, 176),
+      left: Math.max(12, Math.min(rect.left, window.innerWidth - Math.min(Math.max(rect.width, 176), window.innerWidth - 24) - 12)),
+      width: Math.min(Math.max(rect.width, 176), window.innerWidth - 24),
+      maxWidth: window.innerWidth - 24,
       zIndex: 80
     });
   };

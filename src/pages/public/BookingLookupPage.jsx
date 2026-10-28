@@ -127,7 +127,7 @@ export const BookingLookupPage = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-4 rounded-xl">
+            <div className="grid grid-cols-1 gap-4 text-xs bg-slate-50 p-4 rounded-xl sm:grid-cols-2">
               <div>
                 <span className="text-slate-400 uppercase font-bold text-[10px]">Guest Name</span>
                 <p className="font-bold text-slate-900 mt-0.5">{data.reservation.guestName}</p>
@@ -148,8 +148,8 @@ export const BookingLookupPage = () => {
                 <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
                   Itemized Charges ({data.invoice.invoiceNumber})
                 </h4>
-                <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
-                  <table className="w-full text-left">
+                <div className="table-scroll border border-slate-200 rounded-xl text-xs">
+                  <table className="w-full min-w-[420px] text-left">
                     <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px]">
                       <tr>
                         <th className="py-2 px-3">Item</th>
@@ -170,7 +170,7 @@ export const BookingLookupPage = () => {
                 </div>
 
                 <div className="flex justify-end pt-2 text-xs">
-                  <div className="w-56 space-y-1">
+                  <div className="w-full max-w-56 space-y-1">
                     <div className="flex justify-between text-slate-600">
                       <span>Subtotal:</span>
                       <span className="font-mono">${data.invoice.subtotal}</span>

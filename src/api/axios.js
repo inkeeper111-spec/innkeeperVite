@@ -10,6 +10,42 @@ import {
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 let refreshRequest = null;
 
+const MUTATING_METHODS = new Set(['post', 'put', 'patch', 'delete']);
+
+const dispatchToast = (type, message, key) => {
+  if (!message) return;
+  window.dispatchEvent(new CustomEvent('innkeeper:toast', {
+    detail: { type, message, key }
+  }));
+};
+
+const operationKey = (config, status) => {
+  const method = String(config?.method || 'get').toUpperCase();
+  const url = config?.url || '';
+  return `${status}:${method}:${url}:${config?.toastKey || ''}`;
+};
+
+const getSuccessMessage = (response) => {
+  const apiMessage = response?.data?.message;
+  if (typeof apiMessage === 'string' && apiMessage.trim()) return apiMessage;
+  const method = String(response?.config?.method || '').toLowerCase();
+  if (method === 'post') return 'Data created successfully.';
+  if (method === 'delete') return 'Data deleted successfully.';
+  return 'Data saved successfully.';
+};
+
+const getErrorMessage = (error) => {
+  const apiMessage = error.response?.data?.message;
+  if (typeof apiMessage === 'string' && apiMessage.trim()) return apiMessage;
+  if (error.code === 'ERR_NETWORK' || !error.response) {
+    return 'Unable to connect to the server. Please check your connection and try again.';
+  }
+  if (error.response.status >= 500) {
+    return 'The server encountered an error. Please try again.';
+  }
+  return 'Something went wrong. Please try again.';
+};
+
 const invalidateStaffSession = (sessionId, expectedRefreshToken) => {
   if (!sessionId || getStaffSessionId() !== sessionId) return;
   if (expectedRefreshToken && getStaffRefreshToken() !== expectedRefreshToken) return;
@@ -43,7 +79,17 @@ api.interceptors.request.use(
 
 // Response Interceptor: handle 401 & token refresh
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const method = String(response.config?.method || '').toLowerCase();
+    if (!response.config?.skipToast) {
+      if (response.data?.success === false) {
+        dispatchToast('error', getErrorMessage({ response }), operationKey(response.config, response.status));
+      } else if (MUTATING_METHODS.has(method)) {
+        dispatchToast('success', getSuccessMessage(response), operationKey(response.config, response.status));
+      }
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
     const requestUrl = originalRequest?.url || '';
@@ -90,6 +136,16 @@ api.interceptors.response.use(
           invalidateStaffSession(requestSessionId, refreshToken);
         }
       }
+    }
+
+    if (!originalRequest?.skipToast
+      && error.code !== 'ERR_CANCELED'
+      && error.code !== 'ECONNABORTED') {
+      dispatchToast(
+        'error',
+        getErrorMessage(error),
+        operationKey(originalRequest, error.response?.status || error.code || 'NETWORK')
+      );
     }
     return Promise.reject(error);
   }

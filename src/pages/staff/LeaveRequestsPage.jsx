@@ -212,7 +212,7 @@ const LeaveRequestsPage = ({ management = false }) => {
               onChange={(event) => setForm((current) => ({ ...current, leaveType: event.target.value }))}
               options={leaveTypes.filter((item) => item.active).map((item) => ({ value: item.key, label: item.label }))}
             />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Input label="Start date" type="date" required value={form.startDate}
                 onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} />
               <Input label="End date" type="date" required value={form.endDate}
@@ -276,7 +276,29 @@ const LeaveRequestsPage = ({ management = false }) => {
             {loading ? 'Loading requests...' : 'No leave requests to display.'}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="space-y-3 md:hidden">
+              {requests.map((request) => (
+                <article key={`card-${request._id}`} className="rounded-xl border border-slate-200 bg-white p-4 text-xs shadow-sm">
+                  {isAdmin && <p className="font-bold text-slate-900">{request.userId?.name || 'Employee'} · {request.employeeId || '—'}</p>}
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <span className="font-semibold capitalize text-slate-700">{leaveTypes.find((item) => item.key === request.leaveType)?.label || request.leaveType}</span>
+                    <Badge variant={request.status}>{request.status}</Badge>
+                  </div>
+                  <p className="mt-2 text-slate-500">{dayjs(request.startDate).format('MMM D, YYYY')} – {dayjs(request.endDate).format('MMM D, YYYY')} · {request.totalDays || request.days} day(s)</p>
+                  {isAdmin && <p className="mt-1 line-clamp-2 text-slate-500">Reason: {request.reason || '—'}</p>}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setDialog({ action: 'details', request })}>Details</Button>
+                    {isAdmin && request.status === 'pending' && <>
+                      <Button size="sm" variant="success" onClick={() => decide(request, 'approved')}>Approve</Button>
+                      <Button size="sm" variant="danger" onClick={() => { setRejectionReason(''); setDialog({ action: 'reject', request }); }}>Reject</Button>
+                    </>}
+                    {!isAdmin && request.status === 'pending' && <Button size="sm" variant="danger" onClick={() => setDialog({ action: 'cancel-pending', request })}>Cancel</Button>}
+                  </div>
+                </article>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[850px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase">
@@ -319,7 +341,8 @@ const LeaveRequestsPage = ({ management = false }) => {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </Card>
 

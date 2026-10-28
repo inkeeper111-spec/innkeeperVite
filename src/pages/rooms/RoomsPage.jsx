@@ -169,10 +169,11 @@ export const RoomsPage = () => {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200">
+      <nav className="overflow-x-auto border-b border-slate-200" aria-label="Room sections">
+        <div className="flex min-w-max">
         <button
           onClick={() => setActiveTab('rooms')}
-          className={`py-3 px-6 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+          className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-all sm:px-6 ${
             activeTab === 'rooms'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -183,7 +184,7 @@ export const RoomsPage = () => {
         </button>
         <button
           onClick={() => setActiveTab('categories')}
-          className={`py-3 px-6 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+          className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-all sm:px-6 ${
             activeTab === 'categories'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -192,7 +193,8 @@ export const RoomsPage = () => {
           <BedDouble className="w-4 h-4" />
           <span>Room Categories ({roomTypes.length})</span>
         </button>
-      </div>
+        </div>
+      </nav>
 
       {activeTab === 'rooms' && (
         <>
@@ -209,7 +211,7 @@ export const RoomsPage = () => {
               />
             </div>
 
-            <div className="flex items-center gap-2 min-w-[320px]">
+            <div className="flex w-full flex-col gap-2 sm:flex-row">
               <Select
                 size="sm"
                 value={statusFilter}
@@ -370,7 +372,7 @@ export const RoomsPage = () => {
           </div>
         )}
         <form onSubmit={handleCreateRoom} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Room Number"
               required
@@ -432,7 +434,7 @@ export const RoomsPage = () => {
           </div>
         )}
         <form onSubmit={handleCreateType} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Category Name"
               required
@@ -449,7 +451,7 @@ export const RoomsPage = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Base Price per Night ($)"
               type="number"

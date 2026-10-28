@@ -175,10 +175,11 @@ export const BillingPage = () => {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200">
+      <nav className="overflow-x-auto border-b border-slate-200" aria-label="Billing sections">
+        <div className="flex min-w-max">
         <button
           onClick={() => setActiveTab('invoices')}
-          className={`py-3 px-6 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+          className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-all sm:px-6 ${
             activeTab === 'invoices'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -189,7 +190,7 @@ export const BillingPage = () => {
         </button>
         <button
           onClick={() => setActiveTab('payments')}
-          className={`py-3 px-6 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+          className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-all sm:px-6 ${
             activeTab === 'payments'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -198,7 +199,8 @@ export const BillingPage = () => {
           <CreditCard className="w-4 h-4" />
           <span>Payment Transactions ({payments.length})</span>
         </button>
-      </div>
+        </div>
+      </nav>
 
       {activeTab === 'invoices' && (
         <>
@@ -406,7 +408,7 @@ export const BillingPage = () => {
             </div>
 
             {/* Bill To */}
-            <div className="grid grid-cols-2 gap-4 py-2">
+            <div className="grid grid-cols-1 gap-4 py-2 sm:grid-cols-2">
               <div>
                 <span className="font-bold uppercase text-[10px] text-slate-400 tracking-wider">
                   Billed To

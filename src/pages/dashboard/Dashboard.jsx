@@ -124,7 +124,7 @@ export const Dashboard = () => {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total & Available Rooms */}
         <Card className="hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
@@ -213,7 +213,7 @@ export const Dashboard = () => {
       </div>
 
       {/* Daily Movements & Quick Counters */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-white p-4 rounded-xl border border-slate-200/80 flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
             <UserCheck className="w-5 h-5" />

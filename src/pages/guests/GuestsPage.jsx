@@ -217,7 +217,7 @@ export const GuestsPage = () => {
             placeholder="Arthur Pendelton"
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Phone Number"
               required
@@ -234,7 +234,7 @@ export const GuestsPage = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="City"
               value={formData.city}
@@ -249,7 +249,7 @@ export const GuestsPage = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="ID Document Type"
               value={formData.idDocumentType}
@@ -296,7 +296,7 @@ export const GuestsPage = () => {
       >
         {selectedGuest && (
           <div className="space-y-6 text-xs">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl">
               <div>
                 <p className="text-slate-400 font-semibold uppercase text-[10px]">Contact</p>
                 <p className="font-bold text-slate-800 mt-0.5">{selectedGuest.phone}</p>

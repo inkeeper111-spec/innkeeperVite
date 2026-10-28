@@ -159,12 +159,12 @@ export const NotificationsPage = () => {
             {notifications.map((notification) => {
               const { icon: Icon, color } = TYPE_META[notification.module || notification.type] || TYPE_META.info;
               return (
-                <li key={notification._id} className={`flex items-start gap-4 px-4 py-4 ${notification.isRead ? '' : 'bg-brand-50/30'}`}>
+                <li key={notification._id} className={`flex items-start gap-3 px-2 py-4 sm:gap-4 sm:px-4 ${notification.isRead ? '' : 'bg-brand-50/30'}`}>
                   <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border ${color}`}>
                     <Icon className="h-4 w-4" />
                   </div>
                   <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openNotification(notification)}>
-                    <span className="flex items-center justify-between gap-2">
+                    <span className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <span className={`text-sm font-semibold ${notification.isRead ? 'text-slate-600' : 'text-slate-900'}`}>{notification.title}</span>
                       <span className="whitespace-nowrap text-[11px] text-slate-400">{dayjs(notification.createdAt).fromNow()}</span>
                     </span>
@@ -174,7 +174,7 @@ export const NotificationsPage = () => {
                     </span>
                   </button>
                   {!notification.isRead && (
-                    <button type="button" onClick={() => handleMarkRead(notification)} className="text-xs font-semibold text-brand-600 hover:text-brand-800">
+                    <button type="button" onClick={() => handleMarkRead(notification)} className="self-start whitespace-nowrap text-xs font-semibold text-brand-600 hover:text-brand-800">
                       Mark read
                     </button>
                   )}

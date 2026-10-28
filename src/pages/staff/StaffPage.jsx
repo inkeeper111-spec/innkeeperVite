@@ -7,6 +7,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DatePicker } from '../../components/ui/DatePicker';
 import {
   UserCheck, PlusCircle, Calendar, Clock, CheckCircle2,
   DollarSign, Pencil, ClipboardList, BarChart3,
@@ -381,13 +382,12 @@ export const StaffPage = () => {
       {activeTab === 'attendance' && (
         <>
           <div className="flex items-center gap-3 bg-white p-4 rounded-xl border border-slate-200/80">
-            <div>
-              <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Select Date</label>
-              <input type="date" value={attendanceDate}
-                onChange={(e) => { setAttendanceDate(e.target.value); fetchAttendance(e.target.value); }}
-                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none"
-              />
-            </div>
+            <DatePicker
+              label="Select Date"
+              value={attendanceDate}
+              onChange={(e) => { setAttendanceDate(e.target.value); fetchAttendance(e.target.value); }}
+              className="w-56"
+            />
             <div className="ml-auto text-xs text-slate-500 font-medium">
               {dayjs(attendanceDate).format('dddd, MMMM D, YYYY')}
             </div>
@@ -559,7 +559,7 @@ export const StaffPage = () => {
       {activeTab === 'salary' && (
         <>
           {/* Summary cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { label: 'Paid This Month', value: `$${salaryHistory.filter(s => s.month === dayjs().format('YYYY-MM') && s.status === 'paid').reduce((a,b) => a + b.netSalary, 0).toLocaleString()}`, color: 'text-emerald-600' },
               { label: 'Records Total',   value: salaryHistory.length, color: 'text-slate-900' },
@@ -730,13 +730,13 @@ export const StaffPage = () => {
         <form onSubmit={handleCreateStaff} className="space-y-4">
           <Input label="Full Name" required value={staffForm.name}
             onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })} placeholder="Jane Doe" />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Work Email" type="email" required value={staffForm.email}
               onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} />
             <Input label="Initial Password" type="password" required value={staffForm.password}
               onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} placeholder="••••••••" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Select label="Department" value={staffForm.department}
               onChange={(e) => setStaffForm({ ...staffForm, department: e.target.value })}
               options={[
@@ -758,13 +758,13 @@ export const StaffPage = () => {
                 { label: 'Hotel Administrator', value: 'hotel_admin' }
               ]} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Designation" value={staffForm.designation}
               onChange={(e) => setStaffForm({ ...staffForm, designation: e.target.value })} placeholder="Shift Supervisor" />
             <Input label="Basic Salary" type="number" value={staffForm.salary}
               onChange={(e) => setStaffForm({ ...staffForm, salary: e.target.value })} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Allowances" type="number" value={staffForm.allowances}
               onChange={(e) => setStaffForm({ ...staffForm, allowances: e.target.value })} />
             <Input label="Fixed Deductions" type="number" value={staffForm.fixedDeductions}
@@ -781,13 +781,13 @@ export const StaffPage = () => {
       <Modal isOpen={isEditStaffOpen} onClose={() => setIsEditStaffOpen(false)}
         title={`Edit: ${editingStaff?.userId?.name}`}>
         <form onSubmit={handleUpdateStaff} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Full Name" value={editForm.name || ''}
               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
             <Input label="Phone" value={editForm.phone || ''}
               onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Select label="Department" value={editForm.department || 'front_desk'}
               onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
               options={[
@@ -807,13 +807,13 @@ export const StaffPage = () => {
                 { label: 'Terminated', value: 'terminated' }
               ]} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Designation" value={editForm.designation || ''}
               onChange={(e) => setEditForm({ ...editForm, designation: e.target.value })} />
             <Input label="Basic Salary" type="number" value={editForm.salary || 0}
               onChange={(e) => setEditForm({ ...editForm, salary: e.target.value, basicSalary: e.target.value })} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Allowances" type="number" value={editForm.allowances || 0}
               onChange={(e) => setEditForm({ ...editForm, allowances: e.target.value })} />
             <Input label="Fixed Deductions" type="number" value={editForm.fixedDeductions || 0}
@@ -839,7 +839,7 @@ export const StaffPage = () => {
               </option>
             ))}
           </Select>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Date" type="date" value={attForm.date}
               onChange={(e) => setAttForm({ ...attForm, date: e.target.value })} />
             <Select label="Status" value={attForm.status}
@@ -852,7 +852,7 @@ export const StaffPage = () => {
                 { label: 'On Leave', value: 'on_leave' }
               ]} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Clock In" type="time" value={attForm.checkInTime}
               onChange={(e) => setAttForm({ ...attForm, checkInTime: e.target.value })} />
             <Input label="Clock Out" type="time" value={attForm.checkOutTime}
@@ -872,7 +872,7 @@ export const StaffPage = () => {
       <Modal isOpen={isBulkOpen} onClose={() => setIsBulkOpen(false)}
         title="Bulk Mark Attendance" subtitle="Mark all active staff with one status for a date">
         <form onSubmit={handleBulkMark} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Date" type="date" value={bulkDate}
               onChange={(e) => setBulkDate(e.target.value)} />
             <Select label="Default Status" value={bulkStatus}
@@ -898,7 +898,7 @@ export const StaffPage = () => {
         title="Process Monthly Salary" subtitle="Calculate attendance-based salaries and auto-log as expenses"
         maxWidth="max-w-2xl">
         <form onSubmit={handleProcessSalary} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Payroll Month</label>
               <input type="month" value={salaryMonth}
@@ -986,7 +986,7 @@ export const StaffPage = () => {
               </option>
             ))}
           </Select>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Shift Date" type="date" required value={shiftForm.shiftDate}
               onChange={(e) => setShiftForm({ ...shiftForm, shiftDate: e.target.value })} />
             <Select label="Shift Type" value={shiftForm.shiftType}
@@ -998,7 +998,7 @@ export const StaffPage = () => {
                 { label: 'General (09:00–18:00)',  value: 'general' }
               ]} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Start Time" type="time" value={shiftForm.startTime}
               onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })} />
             <Input label="End Time" type="time" value={shiftForm.endTime}

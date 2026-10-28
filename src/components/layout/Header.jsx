@@ -1,11 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Menu,
   Bell,
   CheckCircle2,
   AlertCircle,
-  ExternalLink,
   User as UserIcon,
   LogOut,
   Settings,
@@ -67,15 +66,20 @@ export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-orvelle-border/80 sticky top-0 z-20 px-4 sm:px-6 flex items-center justify-between">
+    <header className="h-16 min-w-0 bg-white border-b border-orvelle-border/80 sticky top-0 z-20 px-3 sm:px-5 flex items-center justify-between gap-2">
       {/* Left controls */}
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <button
           onClick={() => {
-            setIsMobileOpen(true);
-            setIsCollapsed(!isCollapsed);
+            if (window.matchMedia('(min-width: 768px)').matches) {
+              setIsCollapsed(!isCollapsed);
+            } else {
+              setIsMobileOpen(true);
+            }
           }}
           className="p-2 text-orvelle-muted hover:text-orvelle-primary hover:bg-orvelle-cream rounded-lg transition-colors"
+          aria-label="Toggle sidebar"
+          aria-expanded={window.matchMedia('(min-width: 768px)').matches ? !isCollapsed : undefined}
           title="Toggle Sidebar"
         >
           <Menu className="w-5 h-5" />
@@ -93,17 +97,7 @@ export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
       </div>
 
       {/* Right controls */}
-      <div className="flex items-center gap-2 sm:gap-3">
-        {/* Quick Public Portal Link */}
-        <Link
-          to="/"
-          target="_blank"
-          className="hidden md:inline-flex items-center gap-1.5 text-xs font-medium text-orvelle-muted hover:text-orvelle-primary px-3 py-1.5 rounded-lg hover:bg-orvelle-ivory transition-colors"
-        >
-          <span>Guest Booking Portal</span>
-          <ExternalLink className="w-3.5 h-3.5" />
-        </Link>
-
+      <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
         {/* Notifications Dropdown */}
         <div className="relative" ref={notifRef}>
           <button
@@ -120,7 +114,7 @@ export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100">
+            <div className="fixed inset-x-3 top-14 mt-2 max-h-[calc(100dvh-4.25rem)] max-w-96 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:w-96">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
                 <div className="flex items-center gap-2">
                   <h4 className="font-bold text-slate-800 text-sm">Notifications</h4>

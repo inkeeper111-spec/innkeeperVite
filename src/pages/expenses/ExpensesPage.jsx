@@ -185,7 +185,7 @@ export const ExpensesPage = () => {
         title="Record Operating Expense"
       >
         <form onSubmit={handleCreateExpense} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Expense Category"
               value={expenseForm.category}
@@ -222,7 +222,7 @@ export const ExpensesPage = () => {
             placeholder="e.g. Monthly commercial electricity bill"
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Disbursement Method"
               value={expenseForm.paymentMethod}

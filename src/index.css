@@ -18,6 +18,112 @@
   --color-border: #E5D9C8;
 }
 
+@layer utilities {
+  .touch-action-manipulation {
+    touch-action: manipulation;
+  }
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+  overflow-x: clip;
+}
+
+button,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+button,
+[role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.table-scroll table {
+  width: max(100%, 48rem);
+}
+
+.table-scroll table th,
+.table-scroll table td {
+  vertical-align: middle;
+}
+
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateY(-16px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-toast-enter {
+  animation: toast-enter 180ms ease-out both;
+}
+
+/* Keep the split-screen login within the dynamic viewport, including short phones. */
+.login-card {
+  scrollbar-width: thin;
+}
+
+@media (max-height: 700px) {
+  .login-card {
+    max-height: calc(100dvh - 1.5rem);
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .login-brand,
+  .login-eyebrow,
+  .login-heading > p {
+    display: none;
+  }
+
+  .login-heading {
+    margin-bottom: 0.75rem;
+  }
+
+  .login-form {
+    row-gap: 0.5rem;
+  }
+
+  .login-demo-trigger {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+  }
+
+  .login-register {
+    margin-top: 0.5rem;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 700px) {
+  .login-card {
+    max-height: calc(100dvh - 3rem);
+  }
+}
+
+@supports (-webkit-touch-callout: none) {
+  .login-card {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+}
+
 @layer base {
   body {
     @apply font-sans bg-slate-50 text-slate-800 antialiased;

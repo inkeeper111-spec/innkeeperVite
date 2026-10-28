@@ -29,6 +29,8 @@ export const SettingsPage = () => {
     attendanceLocation: { latitude: '', longitude: '' }
   });
 
+  const [hotelBaseline, setHotelBaseline] = useState(hotelForm);
+
   const [profileForm, setProfileForm] = useState({
     name: '',
     phone: '',
@@ -42,7 +44,7 @@ export const SettingsPage = () => {
 
   useEffect(() => {
     if (hotel) {
-      setHotelForm({
+      const nextHotelForm = {
         name: hotel.name || '',
         phone: hotel.phone || '',
         address: hotel.address || '',
@@ -61,7 +63,9 @@ export const SettingsPage = () => {
           latitude: hotel.attendanceLocation?.latitude ?? '',
           longitude: hotel.attendanceLocation?.longitude ?? ''
         }
-      });
+      };
+      setHotelForm(nextHotelForm);
+      setHotelBaseline(nextHotelForm);
     }
     if (user) {
       setProfileForm({
@@ -76,12 +80,38 @@ export const SettingsPage = () => {
   const handleUpdateHotel = async (e) => {
     e.preventDefault();
     setError('');
+
+    const latitude = hotelForm.attendanceLocation.latitude;
+    const longitude = hotelForm.attendanceLocation.longitude;
+    const latitudeChanged = String(latitude) !== String(hotelBaseline.attendanceLocation.latitude);
+    const longitudeChanged = String(longitude) !== String(hotelBaseline.attendanceLocation.longitude);
+    const locationChanged = latitudeChanged || longitudeChanged;
+    const payload = {};
+
+    Object.keys(hotelForm).forEach((field) => {
+      if (field === 'attendanceLocation') return;
+      if (hotelForm[field] !== hotelBaseline[field]) payload[field] = hotelForm[field];
+    });
+    if (locationChanged) {
+      payload.attendanceLocation = {
+        latitude,
+        longitude
+      };
+    }
+
+    const latitudeEmpty = latitude === '' || latitude === null || latitude === undefined;
+    const longitudeEmpty = longitude === '' || longitude === null || longitude === undefined;
+    if (locationChanged && latitudeEmpty !== longitudeEmpty) {
+      setError('Enter both hotel latitude and longitude, or leave both coordinates empty.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await api.put('/hotels', hotelForm);
+      const res = await api.put('/hotels', payload);
       if (res.data.success) {
         setMessage('Hotel property configuration saved successfully.');
-        refreshUser();
+        await refreshUser();
         setTimeout(() => setMessage(''), 3000);
       }
     } catch (err) {
@@ -166,7 +196,7 @@ export const SettingsPage = () => {
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Input
                 label="State / Province"
                 value={hotelForm.state}
@@ -211,7 +241,7 @@ export const SettingsPage = () => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
               <Input
                 label="Standard Check-In Time"
                 type="time"

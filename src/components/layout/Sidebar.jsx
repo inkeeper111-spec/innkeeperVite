@@ -176,23 +176,27 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
 
   return (
     <aside
+      role="dialog"
+      aria-modal={isMobileOpen ? 'true' : undefined}
+      aria-label="Application navigation"
       className={`fixed top-0 left-0 z-40 h-screen bg-orvelle-sidebar text-slate-300 transition-all duration-300 flex flex-col border-r border-orvelle-dark transform ${
         isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       } ${isCollapsed ? 'md:w-20' : 'w-72 md:w-64'}`}
     >
       {/* Brand Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-white/10 bg-black/30">
+        <InnkeeperLogo size="sm" dark className="overflow-hidden md:hidden" />
         {!isCollapsed && (
-          <InnkeeperLogo size="sm" dark className="overflow-hidden" />
+          <InnkeeperLogo size="sm" dark className="hidden overflow-hidden md:block" />
         )}
         {isCollapsed && (
-          <InnkeeperLogo size="sm" variant="icon" dark className="mx-auto" />
+          <InnkeeperLogo size="sm" variant="icon" dark className="hidden mx-auto md:block" />
         )}
 
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className={`p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ${
-            isCollapsed ? 'hidden' : 'block'
+          className={`hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors md:block ${
+            isCollapsed ? 'md:hidden' : ''
           }`}
           title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
         >
@@ -230,7 +234,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
                   isActive
                     ? 'bg-amber-700/30 text-amber-300 border border-amber-600/40 shadow-sm font-semibold'
                     : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
-                } ${isCollapsed ? 'justify-center px-0' : ''}`
+                } ${isCollapsed ? 'md:justify-center md:px-0' : ''}`
               }
               title={isCollapsed ? item.label : undefined}
             >
@@ -242,9 +246,9 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
                   </span>
                 )}
               </span>
-              {!isCollapsed && <span className="truncate">{item.label}</span>}
-              {!isCollapsed && isNotifications && unreadCount > 0 && (
-                <span className="ml-auto text-[10px] font-extrabold bg-rose-500 text-white px-1.5 py-0.5 rounded-full leading-none">
+              <span className={`truncate ${isCollapsed ? 'md:hidden' : ''}`}>{item.label}</span>
+              {(isNotifications && unreadCount > 0) && (
+                <span className={`ml-auto text-[10px] font-extrabold bg-rose-500 text-white px-1.5 py-0.5 rounded-full leading-none ${isCollapsed ? 'md:hidden' : ''}`}>
                   {unreadCount}
                 </span>
               )}
@@ -255,18 +259,16 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
 
       {/* Footer Profile & Logout */}
       <div className="p-3 border-t border-slate-800/80 bg-slate-950/30">
-        <div className={`flex items-center gap-3 ${isCollapsed ? 'justify-center' : 'px-2 py-1.5'}`}>
+        <div className={`flex items-center gap-3 ${isCollapsed ? 'md:justify-center' : 'px-2 py-1.5'}`}>
           <div className="w-8 h-8 rounded-full bg-brand-700/60 text-brand-200 border border-brand-500/30 flex items-center justify-center font-bold text-xs uppercase flex-shrink-0">
             {user?.name?.charAt(0) || 'U'}
           </div>
-          {!isCollapsed && (
-            <div className="flex-1 min-w-0">
+          <div className={`flex-1 min-w-0 ${isCollapsed ? 'md:hidden' : ''}`}>
               <p className="text-xs font-semibold text-white truncate">{user?.name}</p>
               <p className="text-[10px] text-slate-400 uppercase font-medium truncate">
                 {user?.role?.replace(/_/g, ' ')}
               </p>
-            </div>
-          )}
+          </div>
           <button
             onClick={handleLogout}
             className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"

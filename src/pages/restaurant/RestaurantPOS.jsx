@@ -18,7 +18,10 @@ import {
   Clock,
   Send,
   Building2,
-  DollarSign
+  DollarSign,
+  Pencil,
+  IndianRupee,
+  History
 } from 'lucide-react';
 
 export const RestaurantPOS = () => {
@@ -46,6 +49,10 @@ export const RestaurantPOS = () => {
   const [editingTable, setEditingTable] = useState(null);
   const [tableForm, setTableForm] = useState({ name: '', capacity: 4, status: 'available' });
   const [tableError, setTableError] = useState('');
+  const [billEdit, setBillEdit] = useState(null);
+  const [billSaving, setBillSaving] = useState(false);
+  const [billError, setBillError] = useState('');
+  const [openModification, setOpenModification] = useState(null);
 
   const fetchMenuAndOrders = async (showLoading = true) => {
     try {
@@ -210,6 +217,61 @@ export const RestaurantPOS = () => {
     }
   };
 
+  const startBillEdit = (order) => {
+    setBillError('');
+    setOpenModification(null);
+    setBillEdit({
+      orderId: order._id,
+      itemUnitPrices: Object.fromEntries(order.items.map((item, index) => [index, String(item.unitPrice)])),
+      discountAmount: String(order.discountAmount || 0),
+      reason: ''
+    });
+  };
+
+  const cancelBillEdit = () => {
+    setBillEdit(null);
+    setBillError('');
+  };
+
+  const saveBillEdit = async (order) => {
+    if (!billEdit?.reason.trim()) {
+      setBillError('Enter a reason for the bill modification.');
+      return;
+    }
+
+    const itemUnitPrices = {};
+    for (const [index, item] of order.items.entries()) {
+      const revised = Number(billEdit.itemUnitPrices[index]);
+      if (!Number.isFinite(revised) || revised < 0) {
+        setBillError(`Enter a valid unit price for ${item.name}.`);
+        return;
+      }
+      itemUnitPrices[index] = revised;
+    }
+    if (!Number.isFinite(Number(billEdit.discountAmount)) || Number(billEdit.discountAmount) < 0) {
+      setBillError('Enter a valid discount amount.');
+      return;
+    }
+
+    setBillSaving(true);
+    setBillError('');
+    try {
+      const response = await api.patch(`/restaurant/orders/${order._id}/bill-amounts`, {
+        itemUnitPrices,
+        discountAmount: Number(billEdit.discountAmount),
+        reason: billEdit.reason.trim()
+      });
+      setOrders((current) => current.map((entry) => entry._id === order._id ? response.data.data : entry));
+      setBillEdit(null);
+      setMessage('Table bill amounts saved and audited.');
+      setTimeout(() => setMessage(''), 4000);
+    } catch (error) {
+      setBillError(error.response?.data?.message || error.message || 'Unable to save bill changes.');
+    } finally {
+      setBillSaving(false);
+    }
+  };
+
   const handleTransferFolioDirect = async () => {
     if (!selectedOrderForFolio || !selectedReservationId) return;
     try {
@@ -232,6 +294,61 @@ export const RestaurantPOS = () => {
     (i) => selectedCat === 'all' || i.categoryId?._id === selectedCat || i.categoryId === selectedCat
   );
   const activeTables = tables.filter((table) => table.isActive);
+  const tableBills = orders.filter((order) => (
+    order.orderType === 'dine_in'
+    && order.paymentStatus === 'unpaid'
+    && !['cancelled', 'served'].includes(order.status)
+  )).sort((first, second) => (
+    Number(first.tableId?.tableNumber || first.tableNumber?.match(/\d+/)?.[0] || 0)
+    - Number(second.tableId?.tableNumber || second.tableNumber?.match(/\d+/)?.[0] || 0)
+  ));
+  const formatRupees = (amount) => new Intl.NumberFormat('en-IN', {
+    style: 'currency', currency: 'INR', minimumFractionDigits: 2
+  }).format(Number(amount || 0));
+
+  const ModificationIndicator = ({ order, field, itemIndex }) => {
+    const modifications = (order.amountModifications || []).filter((entry) => (
+      entry.field === field && (itemIndex === undefined || entry.itemIndex === itemIndex)
+    ));
+    if (!modifications.length) return null;
+    const latest = modifications.at(-1);
+    const tooltipId = `amount-modification-${order._id}-${field}-${itemIndex ?? 'discount'}`;
+    const isOpen = openModification === tooltipId;
+
+    return (
+      <span className="relative inline-flex align-middle">
+        <button
+          type="button"
+          aria-label={`Amount modified from ${formatRupees(latest.originalAmount)} to ${formatRupees(latest.revisedAmount)}`}
+          aria-describedby={isOpen ? tooltipId : undefined}
+          onMouseEnter={() => setOpenModification(tooltipId)}
+          onMouseLeave={() => setOpenModification((current) => current === tooltipId ? null : current)}
+          onFocus={() => setOpenModification(tooltipId)}
+          onBlur={() => setOpenModification((current) => current === tooltipId ? null : current)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpenModification((current) => current === tooltipId ? null : tooltipId);
+          }}
+          className="ml-1 rounded p-0.5 text-amber-600 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-300"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        {isOpen && (
+          <span
+            role="tooltip"
+            id={tooltipId}
+            className="absolute bottom-full left-1/2 z-30 mb-2 w-64 -translate-x-1/2 rounded-lg bg-slate-900 p-3 text-left text-[11px] normal-case leading-relaxed text-white shadow-xl"
+          >
+            <strong className="block text-xs">Amount modified</strong>
+            <span>{formatRupees(latest.originalAmount)} → {formatRupees(latest.revisedAmount)}</span>
+            <span className="block">by {latest.editorName || 'Authorized staff'}</span>
+            {latest.reason && <span className="mt-1 block text-slate-300">Reason: {latest.reason}</span>}
+            {latest.timestamp && <span className="mt-1 block text-slate-400">{new Date(latest.timestamp).toLocaleString()}</span>}
+          </span>
+        )}
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -253,6 +370,14 @@ export const RestaurantPOS = () => {
             }`}
           >
             Terminal POS
+          </button>
+          <button
+            onClick={() => setActiveView('bills')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              activeView === 'bills' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Table Bills
           </button>
           <button
             onClick={() => setActiveView('kitchen')}
@@ -381,7 +506,7 @@ export const RestaurantPOS = () => {
             {loading ? (
               <LoadingSpinner text="Loading culinary menu..." />
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {filteredItems.map((item) => (
                   <button
                     key={item._id}
@@ -427,7 +552,7 @@ export const RestaurantPOS = () => {
               </div>
 
               {/* Order Type Toggle */}
-              <div className="grid grid-cols-3 gap-1.5 my-3 bg-slate-100 p-1 rounded-xl">
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3 my-3 bg-slate-100 p-1 rounded-xl">
                 {['dine_in', 'room_service', 'takeaway'].map((type) => (
                   <button
                     key={type}
@@ -448,7 +573,7 @@ export const RestaurantPOS = () => {
                   {activeTables.length === 0 ? (
                     <p className="text-xs text-rose-600">No active restaurant tables are configured.</p>
                   ) : (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {activeTables.map((table) => (
                         <button
                           key={table._id}
@@ -566,6 +691,250 @@ export const RestaurantPOS = () => {
               </div>
             </Card>
           </div>
+        </div>
+      )}
+
+      {/* Table-wise Restaurant Billing */}
+      {activeView === 'bills' && !showTableManagement && (
+        <div className="space-y-4">
+          {loading ? (
+            <LoadingSpinner text="Loading table bills..." />
+          ) : tableBills.length === 0 ? (
+            <Card className="py-12 text-center">
+              <IndianRupee className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+              <p className="text-sm font-semibold text-slate-500">No open table bills</p>
+              <p className="mt-1 text-xs text-slate-400">Unpaid dine-in orders will appear here.</p>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {tableBills.map((order) => {
+                const editing = billEdit?.orderId === order._id;
+                const canEdit = order.paymentStatus === 'unpaid'
+                  && !['cancelled', 'served'].includes(order.status);
+                const tableLabel = order.tableId?.tableNumber
+                  ? `Table ${order.tableId.tableNumber}`
+                  : order.tableNumber || 'Table';
+
+                return (
+                  <Card key={order._id} className="h-fit border-slate-200">
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                      <div>
+                        <h2 className="text-lg font-black text-slate-900">{tableLabel}</h2>
+                        <p className="text-[11px] text-slate-500">
+                          {order.tableId?.name || order.tableNameSnapshot || 'Dining'} · Bill #{order.orderNumber}
+                        </p>
+                      </div>
+                      <Badge variant={order.status}>{order.status}</Badge>
+                    </div>
+
+                    {editing && billError && (
+                      <div role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-700">
+                        {billError}
+                      </div>
+                    )}
+
+                    <div className="mt-3 table-scroll sm:hidden">
+                      <div className="space-y-2">
+                        {order.items.map((item, index) => (
+                          <div key={`${order._id}-mobile-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-slate-800">{item.name}</p>
+                              <p className="text-slate-500">Qty {item.quantity}</p>
+                            </div>
+                            {editing ? (
+                              <div className="flex w-28 items-center rounded border border-slate-200 bg-white px-2">
+                                <IndianRupee className="h-3 w-3 text-slate-400" />
+                                <input
+                                  aria-label={`Unit price for ${item.name} on mobile`}
+                                  type="number" min="0" step="0.01"
+                                  value={billEdit.itemUnitPrices[index] ?? ''}
+                                  onChange={(event) => setBillEdit((current) => ({
+                                    ...current,
+                                    itemUnitPrices: current.itemUnitPrices.map((value, itemIndex) => itemIndex === index ? event.target.value : value)
+                                  }))}
+                                  className="h-8 min-w-0 flex-1 text-right text-xs outline-none" />
+                              </div>
+                            ) : (
+                              <span className="shrink-0 font-mono font-semibold text-slate-800">₹{Number(item.amount).toLocaleString()}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mt-3 hidden overflow-x-auto sm:block">
+                      <table className="w-full min-w-[520px] text-left">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            <th className="pb-2 pr-3">Item</th>
+                            <th className="pb-2 px-2 text-right">Qty</th>
+                            <th className="pb-2 px-2 text-right">Unit price</th>
+                            <th className="pb-2 pl-2 text-right">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {order.items.map((item, index) => {
+                            const unitPriceModifications = (order.amountModifications || []).filter((entry) => (
+                              entry.field === 'unitPrice' && entry.itemIndex === index
+                            ));
+                            const displayedUnitPrice = editing
+                              ? billEdit.itemUnitPrices[index]
+                              : item.unitPrice;
+                            const validUnitPrice = Number(displayedUnitPrice);
+                            const lineAmount = Number.isFinite(validUnitPrice)
+                              ? validUnitPrice * item.quantity
+                              : item.amount;
+
+                            return (
+                              <tr key={`${order._id}-${index}`} className="border-b border-slate-50 text-xs">
+                                <td className="py-3 pr-3 font-semibold text-slate-800">{item.name}</td>
+                                <td className="px-2 py-3 text-right text-slate-600">{item.quantity}</td>
+                                <td className="px-2 py-3 text-right">
+                                  {editing ? (
+                                    <div className="ml-auto flex items-center justify-end">
+                                      <IndianRupee className="h-3 w-3 text-slate-400" />
+                                      <input
+                                        aria-label={`Unit price for ${item.name}`}
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={billEdit.itemUnitPrices[index]}
+                                        onChange={(event) => setBillEdit((current) => ({
+                                          ...current,
+                                          itemUnitPrices: {
+                                            ...current.itemUnitPrices,
+                                            [index]: event.target.value
+                                          }
+                                        }))}
+                                        className="h-8 w-24 rounded-lg border border-slate-300 px-2 text-right text-xs font-semibold outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="inline-flex items-center justify-end font-mono font-medium text-slate-700">
+                                      {formatRupees(item.unitPrice)}
+                                      {unitPriceModifications.length > 0 && (
+                                        <ModificationIndicator order={order} field="unitPrice" itemIndex={index} />
+                                      )}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3 pl-2 text-right font-mono font-bold text-slate-900">
+                                  {formatRupees(lineAmount)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="ml-auto mt-4 w-full max-w-xs space-y-2 text-xs">
+                      <div className="flex items-center justify-between text-slate-500">
+                        <span>Subtotal</span>
+                        <span className="font-mono font-medium">
+                          {formatRupees(editing
+                            ? order.items.reduce((sum, item) => sum + (Number(billEdit.itemUnitPrices[order.items.indexOf(item)]) || 0) * item.quantity, 0)
+                            : order.subtotal)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-500">
+                        <span>Tax (5%)</span>
+                        <span className="font-mono font-medium">
+                          {formatRupees(editing
+                            ? (order.items.reduce((sum, item) => sum + (Number(billEdit.itemUnitPrices[order.items.indexOf(item)]) || 0) * item.quantity, 0) * 0.05)
+                            : order.taxAmount)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-500">
+                        <span>Discount</span>
+                        {editing ? (
+                          <div className="flex items-center">
+                            <IndianRupee className="h-3 w-3 text-slate-400" />
+                            <input
+                              aria-label="Bill discount"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={billEdit.discountAmount}
+                              onChange={(event) => setBillEdit((current) => ({ ...current, discountAmount: event.target.value }))}
+                              className="h-8 w-24 rounded-lg border border-slate-300 px-2 text-right text-xs font-semibold outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                            />
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center font-mono font-medium">
+                            −{formatRupees(order.discountAmount)}
+                            {(order.amountModifications || []).some((entry) => entry.field === 'discountAmount') && (
+                              <ModificationIndicator order={order} field="discountAmount" />
+                            )}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-base font-black text-slate-900">
+                        <span>Grand total</span>
+                        <span className="font-mono">
+                          {formatRupees(editing
+                            ? (() => {
+                                const previewSubtotal = order.items.reduce((sum, item) => sum + (Number(billEdit.itemUnitPrices[order.items.indexOf(item)]) || 0) * item.quantity, 0);
+                                return Math.max(0, previewSubtotal - (Number(billEdit.discountAmount) || 0) + previewSubtotal * 0.05);
+                              })()
+                            : order.totalAmount)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {editing ? (
+                      <div className="mt-4 border-t border-slate-100 pt-3">
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500" htmlFor={`bill-reason-${order._id}`}>
+                          Reason for modification
+                        </label>
+                        <input
+                          id={`bill-reason-${order._id}`}
+                          value={billEdit.reason}
+                          onChange={(event) => setBillEdit((current) => ({ ...current, reason: event.target.value }))}
+                          placeholder="e.g. Manager-approved complimentary correction"
+                          className="mt-1.5 h-9 w-full rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                        />
+                        <div className="mt-3 flex justify-end gap-2">
+                          <Button size="sm" variant="secondary" disabled={billSaving} onClick={cancelBillEdit}>Cancel</Button>
+                          <Button size="sm" variant="primary" disabled={billSaving} onClick={() => saveBillEdit(order)}>
+                            {billSaving ? 'Saving…' : 'Save changes'}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
+                        {canEdit && (
+                          <Button size="sm" variant="outline" icon={Pencil} onClick={() => startBillEdit(order)}>
+                            Edit amounts
+                          </Button>
+                        )}
+                        {!canEdit && (
+                          <span className="text-[11px] font-semibold text-slate-400">Finalized billing is read-only</span>
+                        )}
+                      </div>
+                    )}
+
+                    {(order.amountModifications || []).length > 0 && (
+                      <details className="mt-3 rounded-lg border border-amber-100 bg-amber-50/60 p-3">
+                        <summary className="flex cursor-pointer items-center gap-1.5 text-[11px] font-bold text-amber-800">
+                          <History className="h-3.5 w-3.5" /> Modification audit ({order.amountModifications.length})
+                        </summary>
+                        <div className="mt-2 space-y-2">
+                          {[...order.amountModifications].reverse().map((entry, index) => (
+                            <div key={`${entry.timestamp}-${index}`} className="text-[10px] leading-relaxed text-slate-600">
+                              <strong>{entry.field === 'unitPrice' ? `Item ${entry.itemIndex + 1} unit price` : 'Discount'}</strong>
+                              : {formatRupees(entry.originalAmount)} → {formatRupees(entry.revisedAmount)} by {entry.editorName || 'Authorized staff'}
+                              {entry.reason && <span className="block">Reason: {entry.reason}</span>}
+                              {entry.timestamp && <span className="block text-slate-400">{new Date(entry.timestamp).toLocaleString()}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

@@ -3,10 +3,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 
-// Public Pages
-import { LandingPage } from './pages/public/LandingPage';
-import { BookingLookupPage } from './pages/public/BookingLookupPage';
-
 // Auth Pages
 import { Login } from './pages/auth/Login';
 import { Register } from './pages/auth/Register';
@@ -61,9 +57,8 @@ export const App = () => {
 
   return (
     <Routes key={user?.id || user?._id || 'anonymous'}>
-      {/* Public Pages */}
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/lookup" element={<BookingLookupPage />} />
+      {/* Public authentication entry */}
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={user ? <Navigate to={
         user.role === 'super_admin' ? '/superadmin'
           : user.role === 'receptionist' ? '/frontdesk'
@@ -131,7 +126,7 @@ export const App = () => {
       </Route>
 
       {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 };

@@ -19,7 +19,7 @@ export const NotificationProvider = ({ children }) => {
       return;
     }
     try {
-      const res = await api.get('/notifications?limit=20');
+      const res = await api.get('/notifications?limit=20', { skipToast: true });
       if (res.data.success && requestGeneration.current === generation) {
         setNotifications(res.data.data.notifications);
         setUnreadCount(res.data.data.unreadCount);

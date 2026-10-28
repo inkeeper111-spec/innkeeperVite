@@ -479,7 +479,7 @@ export const ReservationsPage = () => {
             placeholder="Victoria Adams"
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Phone Number"
               required
@@ -496,7 +496,7 @@ export const ReservationsPage = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Check-In Date"
               type="date"

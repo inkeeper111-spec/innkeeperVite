@@ -1,4 +1,5 @@
 import React from 'react';
+import { DatePicker } from './DatePicker';
 
 export const Input = ({
   label,
@@ -9,7 +10,21 @@ export const Input = ({
   required,
   ...props
 }) => {
-  const inputId = id || props.name || Math.random().toString(36).substring(7);
+  const inputId = id || props.name || `field-${Math.random().toString(36).substring(7)}`;
+
+  if (props.type === 'date') {
+    return (
+      <DatePicker
+        {...props}
+        id={inputId}
+        label={label}
+        required={required}
+        error={error}
+        helperText={helperText}
+        className={className}
+      />
+    );
+  }
 
   return (
     <div className="w-full">

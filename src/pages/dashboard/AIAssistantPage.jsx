@@ -103,7 +103,7 @@ export const AIAssistantPage = () => {
 
       {/* Live AI Telemetry Badges */}
       {metrics && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="p-3 bg-white rounded-xl border border-slate-200/80 flex items-center justify-between">
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400">Current Occupancy</p>

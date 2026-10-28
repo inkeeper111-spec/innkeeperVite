@@ -6,6 +6,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
+import { DatePicker } from '../../components/ui/DatePicker';
 import { AppFooter } from '../../components/layout/AppFooter';
 import {
   Calendar,
@@ -136,7 +137,7 @@ export const LandingPage = () => {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
       {/* Top Navigation */}
-      <header className="h-20 bg-slate-900 text-white sticky top-0 z-30 px-4 sm:px-8 flex items-center justify-between border-b border-slate-800">
+      <header className="min-h-16 bg-slate-900 text-white sticky top-0 z-30 px-3 sm:px-8 flex flex-wrap items-center justify-between gap-2 py-2 sm:min-h-20 sm:flex-nowrap border-b border-slate-800">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-orvelle-champagne text-orvelle-primary flex items-center justify-center font-serif font-black text-xl shadow-md">
             O
@@ -151,16 +152,16 @@ export const LandingPage = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:gap-3">
           <Link
             to="/lookup"
-            className="text-xs font-semibold text-slate-300 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+            className="min-w-0 flex-1 text-center text-[11px] font-semibold text-slate-300 hover:text-white px-2 py-2 rounded-lg hover:bg-slate-800 transition-colors sm:flex-none"
           >
             Find My Reservation
           </Link>
           <Link
             to="/login"
-            className="text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-xl transition-all shadow-md"
+            className="shrink-0 text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white px-3 py-2 rounded-xl transition-all shadow-md sm:px-4"
           >
             Staff Portal
           </Link>
@@ -205,33 +206,21 @@ export const LandingPage = () => {
                   }))}
                 />
               )}
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
-                  Check-In Date
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={searchDates.checkInDate}
-                  min={dayjs().format('YYYY-MM-DD')}
-                  onChange={(e) => setSearchDates({ ...searchDates, checkInDate: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                />
-              </div>
+              <DatePicker
+                label="Check-In Date"
+                required
+                value={searchDates.checkInDate}
+                min={dayjs().format('YYYY-MM-DD')}
+                onChange={(e) => setSearchDates({ ...searchDates, checkInDate: e.target.value })}
+              />
 
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
-                  Check-Out Date
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={searchDates.checkOutDate}
-                  min={searchDates.checkInDate}
-                  onChange={(e) => setSearchDates({ ...searchDates, checkOutDate: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                />
-              </div>
+              <DatePicker
+                label="Check-Out Date"
+                required
+                value={searchDates.checkOutDate}
+                min={searchDates.checkInDate}
+                onChange={(e) => setSearchDates({ ...searchDates, checkOutDate: e.target.value })}
+              />
 
               <Select
                 label="Guests"
@@ -407,7 +396,7 @@ export const LandingPage = () => {
             <p className="text-xs text-slate-400 mt-1">Every detail curated for relaxation and effortless indulgence</p>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-center">
             <div className="p-4 bg-slate-800/50 rounded-2xl border border-slate-700/60">
               <Waves className="w-8 h-8 text-brand-400 mx-auto mb-2" />
               <h4 className="font-bold text-sm">Oceanview Infinity Pool</h4>
@@ -493,7 +482,7 @@ export const LandingPage = () => {
               placeholder="Evelyn Hayes"
             />
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input
                 label="Email Address"
                 type="email"

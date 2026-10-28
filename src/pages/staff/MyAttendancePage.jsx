@@ -136,7 +136,7 @@ export const MyAttendancePage = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <p className="text-[10px] uppercase font-bold text-slate-400">Today</p>
           <p className="text-lg font-black mt-1 capitalize">{data?.today?.status || 'Not marked'}</p>

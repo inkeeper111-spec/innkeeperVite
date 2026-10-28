@@ -226,7 +226,8 @@ export const MaintenancePage = () => {
                     <td className="py-3.5">
                       <Badge variant={t.status}>{t.status}</Badge>
                     </td>
-                    <td className="py-3.5 text-right space-x-1.5">
+                    <td className="py-3.5">
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
                       {user?.role === 'maintenance_staff'
                         && t.assignmentStatus !== 'accepted'
                         && t.status !== 'rejected'
@@ -279,10 +280,10 @@ export const MaintenancePage = () => {
                         </Button>
                       )}
                       {t.status === 'rejected' && ['hotel_admin', 'receptionist'].includes(user?.role) && (
-                        <div className="mt-1 flex justify-end gap-1">
+                        <div className="mt-1 flex w-full flex-col justify-end gap-2 sm:flex-row sm:items-center">
                           <select
                             aria-label={`Reassign ticket ${t.ticketNumber}`}
-                            className="max-w-36 rounded-lg border border-slate-300 px-2 py-1 text-[11px]"
+                            className="w-full rounded-lg border border-slate-300 px-2 py-2 text-[11px] sm:max-w-36"
                             value={reassignmentSelections[t._id] || ''}
                             onChange={(event) => setReassignmentSelections({
                               ...reassignmentSelections,
@@ -306,6 +307,7 @@ export const MaintenancePage = () => {
                           </Button>
                         </div>
                       )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -323,7 +325,7 @@ export const MaintenancePage = () => {
         subtitle="Log equipment failure or room service breakdown"
       >
         <form onSubmit={handleCreateTicket} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Room Location"
               value={ticketForm.roomId}
@@ -345,7 +347,7 @@ export const MaintenancePage = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Issue Category"
               value={ticketForm.category}
@@ -382,7 +384,7 @@ export const MaintenancePage = () => {
             placeholder="e.g. Toilet tank filling valve leaking continuously, water pressure low"
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Assign Technician"
               value={ticketForm.assignedTechnician}

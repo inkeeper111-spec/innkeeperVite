@@ -17,8 +17,24 @@ import {
   Check,
   ShieldCheck,
   PlusCircle,
-  Filter
+  Filter,
+  GripVertical,
+  ChevronRight
 } from 'lucide-react';
+
+const STATUS_COLUMNS = [
+  { id: 'dirty', label: 'Dirty', icon: Sparkles },
+  { id: 'cleaning_in_progress', label: 'Cleaning In Progress', icon: Clock },
+  { id: 'clean', label: 'Clean', icon: Check },
+  { id: 'inspected', label: 'Inspected', icon: ShieldCheck }
+];
+
+const STATUS_LABELS = Object.fromEntries(STATUS_COLUMNS.map(({ id, label }) => [id, label]));
+const NEXT_STATUS = {
+  dirty: 'cleaning_in_progress',
+  cleaning_in_progress: 'clean',
+  clean: 'inspected'
+};
 
 export const HousekeepingPage = () => {
   const { user } = useAuth();
@@ -27,6 +43,10 @@ export const HousekeepingPage = () => {
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [dataError, setDataError] = useState('');
+  const [updateError, setUpdateError] = useState('');
+  const [updatingTaskId, setUpdatingTaskId] = useState(null);
+  const [dragOverStatus, setDragOverStatus] = useState(null);
 
   // Modals
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
@@ -56,6 +76,7 @@ export const HousekeepingPage = () => {
   const fetchHousekeepingData = async () => {
     try {
       setLoading(true);
+      setDataError('');
       const [tasksRes, roomsRes, staffRes] = await Promise.all([
         api.get('/housekeeping/tasks'),
         api.get('/rooms'),
@@ -64,8 +85,9 @@ export const HousekeepingPage = () => {
       if (tasksRes.data.success) setTasks(tasksRes.data.data);
       if (roomsRes.data.success) setRooms(roomsRes.data.data);
       if (staffRes.data.success) setStaff(staffRes.data.data);
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error(error);
+      setDataError(error.response?.data?.message || 'Unable to retrieve the housekeeping queue.');
     } finally {
       setLoading(false);
     }
@@ -76,15 +98,39 @@ export const HousekeepingPage = () => {
   }, []);
 
   const handleUpdateStatus = async (taskId, newStatus) => {
+    const task = tasks.find((item) => item._id === taskId);
+    if (!task) return;
+
+    const allowedStatus = task.status === 'rejected'
+      ? null
+      : NEXT_STATUS[task.status];
+    if (allowedStatus !== newStatus) {
+      setUpdateError('Invalid status transition. Work can only move through the next readiness stage.');
+      return;
+    }
+
+    const previousStatus = task.status;
+    setUpdatingTaskId(taskId);
+    setUpdateError('');
+    setTasks((current) => current.map((item) => (
+      item._id === taskId ? { ...item, status: newStatus } : item
+    )));
+
     try {
       const res = await api.patch(`/housekeeping/tasks/${taskId}/status`, { status: newStatus });
-      if (res.data.success) {
-        setMessage(`Task marked as ${newStatus.replace(/_/g, ' ')}.`);
-        fetchHousekeepingData();
-        setTimeout(() => setMessage(''), 3000);
-      }
-    } catch (err) {
-      alert('Failed to update task status.');
+      if (!res.data.success) throw new Error(res.data.message || 'Status update failed');
+      setTasks((current) => current.map((item) => (
+        item._id === taskId ? res.data.data : item
+      )));
+      setMessage(`Task marked as ${STATUS_LABELS[newStatus].toLowerCase()}.`);
+      setTimeout(() => setMessage(''), 3000);
+    } catch (error) {
+      setTasks((current) => current.map((item) => (
+        item._id === taskId ? { ...item, status: previousStatus } : item
+      )));
+      setUpdateError(error.response?.data?.message || 'The status update failed. The card has been restored.');
+    } finally {
+      setUpdatingTaskId(null);
     }
   };
 
@@ -161,8 +207,24 @@ export const HousekeepingPage = () => {
   };
 
   const filteredTasks = tasks.filter(
-    (t) => statusFilter === 'all' || t.status === statusFilter
+    (task) => statusFilter === 'all' || task.status === statusFilter
   );
+
+  const handleDragStart = (event, task) => {
+    if (task.status === 'inspected' || task.status === 'rejected' || updatingTaskId) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/task-id', task._id);
+  };
+
+  const handleDrop = (event, status) => {
+    event.preventDefault();
+    setDragOverStatus(null);
+    const taskId = event.dataTransfer.getData('text/task-id');
+    if (taskId) handleUpdateStatus(taskId, status);
+  };
 
   return (
     <div className="space-y-6">
@@ -186,183 +248,253 @@ export const HousekeepingPage = () => {
         </div>
       )}
 
-      {/* Filter Tabs */}
-      <div className="flex flex-wrap items-center gap-2 bg-white p-3 rounded-xl border border-slate-200/80">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 flex items-center gap-1.5">
-          <Filter className="w-3.5 h-3.5" /> Filter Queue:
-        </span>
-        {['all', 'dirty', 'cleaning_in_progress', 'clean', 'inspected'].map((st) => (
-          <button
-            key={st}
-            onClick={() => setStatusFilter(st)}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-colors ${
-              statusFilter === st
-                ? 'bg-brand-600 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            {st.replace(/_/g, ' ')}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white p-3">
+        <label htmlFor="housekeeping-status-filter" className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400">
+          <Filter className="h-3.5 w-3.5" /> Filter Queue
+        </label>
+        <select
+          id="housekeeping-status-filter"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+          className="h-9 max-w-52 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500"
+        >
+          <option value="all">All</option>
+          {STATUS_COLUMNS.map((column) => (
+            <option key={column.id} value={column.id}>{column.label}</option>
+          ))}
+        </select>
       </div>
 
-      {/* Task Queue Cards */}
+      {dataError && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">
+          {dataError}
+          <button type="button" onClick={fetchHousekeepingData} className="ml-2 underline">Retry</button>
+        </div>
+      )}
+      {updateError && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">
+          {updateError}
+        </div>
+      )}
+
+      {/* Responsive Kanban Queue */}
       {loading ? (
         <LoadingSpinner text="Retrieving housekeeping queue..." />
-      ) : filteredTasks.length === 0 ? (
-        <Card className="py-12 text-center text-slate-400 text-xs">
-          No tasks found in this cleaning queue.
-        </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredTasks.map((t) => (
-            <Card key={t._id} className="hover:border-slate-300 transition-all flex flex-col justify-between">
-              <div>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-xl font-black text-slate-900">
-                      Room #{t.roomId?.roomNumber || 'Room'}
-                    </span>
-                    <span className="text-xs text-slate-400 block">
-                      Floor {t.roomId?.floor || '1'} • {t.taskType.replace(/_/g, ' ')}
-                    </span>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {STATUS_COLUMNS.map((column) => {
+            const columnTasks = filteredTasks.filter((task) => (
+              task.status === column.id || (task.status === 'rejected' && column.id === 'dirty')
+            ));
+            const StatusIcon = column.icon;
+
+            return (
+              <section
+                key={column.id}
+                aria-label={`${column.label} tasks`}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setDragOverStatus(column.id);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) setDragOverStatus(null);
+                }}
+                onDrop={(event) => handleDrop(event, column.id)}
+                className={`min-w-0 rounded-2xl border p-2.5 transition-colors ${
+                  dragOverStatus === column.id
+                    ? 'border-brand-500 bg-brand-50'
+                    : 'border-slate-200/80 bg-slate-100/70'
+                }`}
+              >
+                <div className="flex items-center justify-between px-1 pb-3 pt-1">
+                  <div className="flex items-center gap-2">
+                    <StatusIcon className="h-4 w-4 text-slate-500" />
+                    <h2 className="text-xs font-black uppercase tracking-wide text-slate-700">{column.label}</h2>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <Badge variant={t.priority}>{t.priority}</Badge>
-                    <Badge variant={t.status}>{t.status}</Badge>
-                  </div>
+                  <span className="min-w-6 rounded-full bg-white px-2 py-0.5 text-center text-xs font-bold text-slate-600 shadow-sm">
+                    {columnTasks.length}
+                  </span>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-100 space-y-1.5 text-xs text-slate-600">
-                  <p>
-                    <span className="font-semibold text-slate-700">Assigned Attendant:</span>{' '}
-                    {t.assignedTo?.name || 'Unassigned'}
-                  </p>
-                  {t.notes && (
-                    <p className="bg-slate-50 p-2 rounded-lg text-slate-500 text-[11px] border border-slate-100">
-                      {t.notes}
-                    </p>
-                  )}
-                  {t.damageReported && (
-                    <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-[11px]">
-                      <span className="font-bold">Damage Reported:</span> {t.damageDescription}
-                    </div>
-                  )}
-                  {t.rejectionReason && (
-                    <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-[11px]">
-                      <span className="font-bold">Rejection reason:</span> {t.rejectionReason}
-                    </div>
-                  )}
-                  {t.assignmentHistory?.length > 0 && (
-                    <div className="pt-1 text-[10px] text-slate-500">
-                      <span className="font-semibold">Assignment history:</span>{' '}
-                      {t.assignmentHistory.map((entry) => (
-                        `${entry.action}${entry.reason ? `: ${entry.reason}` : ''}`
-                      )).join(' → ')}
-                    </div>
-                  )}
-                </div>
-              </div>
+                <div className="space-y-3">
+                  {columnTasks.map((task) => {
+                    const nextStatus = NEXT_STATUS[task.status];
+                    const isUpdating = updatingTaskId === task._id;
+                    const isMovable = Boolean(nextStatus)
+                      && !isUpdating
+                      && (task.assignmentStatus === 'accepted' || user?.role !== 'housekeeping_staff');
 
-              {/* Action Buttons Workflow */}
-              <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                <button
-                  onClick={() => {
-                    setSelectedTask(t);
-                    setIsDamageOpen(true);
-                  }}
-                  className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1"
-                >
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  <span>Report Damage</span>
-                </button>
-
-                <div className="flex gap-1.5">
-                  {user?.role === 'housekeeping_staff'
-                    && t.assignmentStatus !== 'accepted'
-                    && t.status !== 'rejected'
-                    && !['clean', 'inspected'].includes(t.status) && (
-                      <>
-                        <Button size="sm" variant="success" onClick={() => handleAcceptTask(t._id)}>
-                          Accept
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => {
-                            setSelectedTask(t);
-                            setRejectionReason('');
-                            setRejectionError('');
-                            setIsRejectOpen(true);
-                          }}
-                        >
-                          Reject
-                        </Button>
-                      </>
-                    )}
-                  {t.status === 'dirty' && (
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      icon={Play}
-                      onClick={() => handleUpdateStatus(t._id, 'cleaning_in_progress')}
-                      disabled={user?.role === 'housekeeping_staff' && t.assignmentStatus !== 'accepted'}
-                    >
-                      Start
-                    </Button>
-                  )}
-                  {t.status === 'cleaning_in_progress' && (
-                    <Button
-                      size="sm"
-                      variant="success"
-                      icon={Check}
-                      onClick={() => handleUpdateStatus(t._id, 'clean')}
-                    >
-                      Mark Clean
-                    </Button>
-                  )}
-                  {t.status === 'clean' && (
-                    <Button
-                      size="sm"
-                      variant="gold"
-                      icon={ShieldCheck}
-                      onClick={() => handleUpdateStatus(t._id, 'inspected')}
-                    >
-                      Inspect & Pass
-                    </Button>
-                  )}
-                  {t.status === 'rejected' && ['hotel_admin', 'receptionist'].includes(user?.role) && (
-                    <div className="flex items-center gap-1">
-                      <select
-                        aria-label={`Reassign room ${t.roomId?.roomNumber || ''}`}
-                        className="max-w-36 rounded-lg border border-slate-300 px-2 py-1 text-[11px]"
-                        value={reassignmentSelections[t._id] || ''}
-                        onChange={(event) => setReassignmentSelections({
-                          ...reassignmentSelections,
-                          [t._id]: event.target.value
-                        })}
+                    return (
+                      <div
+                        key={task._id}
+                        draggable={isMovable}
+                        onDragStart={(event) => handleDragStart(event, task)}
+                        className={`transition-opacity ${isMovable ? 'cursor-grab active:cursor-grabbing' : ''} ${isUpdating ? 'opacity-60' : ''}`}
                       >
-                        <option value="">Choose attendant</option>
-                        {staff.map((employee) => (
-                          <option key={employee.userId?._id} value={employee.userId?._id}>
-                            {employee.userId?.name}
-                          </option>
-                        ))}
-                      </select>
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        disabled={!reassignmentSelections[t._id]}
-                        onClick={() => handleReassignTask(t._id)}
-                      >
-                        Reassign
-                      </Button>
+                        <Card className="h-full border-slate-200 hover:border-brand-300">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <GripVertical className="h-4 w-4 flex-shrink-0 text-slate-300" />
+                                <span className="text-lg font-black leading-tight text-slate-900">
+                                  Room #{task.roomId?.roomNumber || 'Room'}
+                                </span>
+                              </div>
+                              <span className="mt-1 block pl-5 text-[11px] text-slate-400">
+                                Floor {task.roomId?.floor || '1'} • {task.taskType.replace(/_/g, ' ')}
+                              </span>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              <Badge variant={task.priority}>{task.priority}</Badge>
+                              {task.status === 'rejected' && <Badge variant="danger">Rejected</Badge>}
+                            </div>
+                          </div>
+
+                          <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                            <p>
+                              <span className="font-semibold text-slate-700">Assigned Attendant:</span>{' '}
+                              {task.assignedTo?.name || 'Unassigned'}
+                            </p>
+                            {task.notes && (
+                              <p className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px] text-slate-500">
+                                {task.notes}
+                              </p>
+                            )}
+                            {task.damageReported && (
+                              <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-[11px] text-rose-800">
+                                <span className="font-bold">Damage Reported:</span> {task.damageDescription}
+                              </div>
+                            )}
+                            {task.rejectionReason && (
+                              <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-[11px] text-rose-800">
+                                <span className="font-bold">Rejection reason:</span> {task.rejectionReason}
+                              </div>
+                            )}
+                            {task.assignmentHistory?.length > 0 && (
+                              <div className="pt-1 text-[10px] text-slate-500">
+                                <span className="font-semibold">Assignment history:</span>{' '}
+                                {task.assignmentHistory.map((entry) => (
+                                  `${entry.action}${entry.reason ? `: ${entry.reason}` : ''}`
+                                )).join(' → ')}
+                              </div>
+                            )}
+                          </div>
+
+                          {isUpdating && (
+                            <p className="mt-3 text-[11px] font-semibold text-brand-600">Saving status…</p>
+                          )}
+
+                          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedTask(task);
+                                setIsDamageOpen(true);
+                              }}
+                              className="flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700"
+                            >
+                              <AlertTriangle className="h-3.5 w-3.5" /> Report Damage
+                            </button>
+
+                            {task.status === 'rejected'
+                              ? ['hotel_admin', 'receptionist'].includes(user?.role) && (
+                                <div className="flex w-full items-center gap-1">
+                                  <select
+                                    aria-label={`Reassign room ${task.roomId?.roomNumber || ''}`}
+                                    className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1 text-[11px]"
+                                    value={reassignmentSelections[task._id] || ''}
+                                    onChange={(event) => setReassignmentSelections({
+                                      ...reassignmentSelections,
+                                      [task._id]: event.target.value
+                                    })}
+                                  >
+                                    <option value="">Choose attendant</option>
+                                    {staff.map((employee) => (
+                                      <option key={employee.userId?._id} value={employee.userId?._id}>
+                                        {employee.userId?.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <Button
+                                    size="sm"
+                                    variant="primary"
+                                    disabled={!reassignmentSelections[task._id]}
+                                    onClick={() => handleReassignTask(task._id)}
+                                  >
+                                    Reassign
+                                  </Button>
+                                </div>
+                              )
+                              : (
+                                <div className="flex flex-wrap justify-end gap-1.5">
+                                  {user?.role === 'housekeeping_staff'
+                                    && task.assignmentStatus !== 'accepted'
+                                    && task.status !== 'rejected'
+                                    && !['clean', 'inspected'].includes(task.status) && (
+                                      <>
+                                        <Button size="sm" variant="success" onClick={() => handleAcceptTask(task._id)}>Accept</Button>
+                                        <Button
+                                          size="sm"
+                                          variant="danger"
+                                          onClick={() => {
+                                            setSelectedTask(task);
+                                            setRejectionReason('');
+                                            setRejectionError('');
+                                            setIsRejectOpen(true);
+                                          }}
+                                        >Reject</Button>
+                                      </>
+                                    )}
+                                  {nextStatus && isMovable && (
+                                    <Button
+                                      size="sm"
+                                      variant={task.status === 'clean' ? 'gold' : task.status === 'dirty' ? 'primary' : 'success'}
+                                      icon={task.status === 'clean' ? ShieldCheck : task.status === 'dirty' ? Play : Check}
+                                      disabled={isUpdating}
+                                      onClick={() => handleUpdateStatus(task._id, nextStatus)}
+                                      className="hidden sm:inline-flex"
+                                    >
+                                      {task.status === 'dirty' ? 'Start' : task.status === 'cleaning_in_progress' ? 'Mark Clean' : 'Inspect & Pass'}
+                                    </Button>
+                                  )}
+                                  {nextStatus && (
+                                    <label className="flex items-center gap-1.5 sm:hidden">
+                                      <span className="sr-only">Move room {task.roomId?.roomNumber}</span>
+                                      <select
+                                        value=""
+                                        disabled={!isMovable}
+                                        onChange={(event) => {
+                                          if (event.target.value) handleUpdateStatus(task._id, event.target.value);
+                                        }}
+                                        className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700"
+                                      >
+                                        <option value="">Move to…</option>
+                                        <option value={nextStatus}>{STATUS_LABELS[nextStatus]}</option>
+                                      </select>
+                                      <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                                    </label>
+                                  )}
+                                </div>
+                              )}
+                          </div>
+                        </Card>
+                      </div>
+                    );
+                  })}
+
+                  {columnTasks.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-300 px-3 py-8 text-center text-[11px] text-slate-400">
+                      No rooms
                     </div>
                   )}
                 </div>
-              </div>
-            </Card>
-          ))}
+              </section>
+            );
+          })}
         </div>
       )}
 
@@ -388,7 +520,7 @@ export const HousekeepingPage = () => {
             ))}
           </Select>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Assigned Attendant"
               value={taskForm.assignedTo}

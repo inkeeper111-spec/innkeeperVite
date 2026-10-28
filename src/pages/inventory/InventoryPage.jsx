@@ -178,10 +178,11 @@ export const InventoryPage = () => {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200">
+      <nav className="overflow-x-auto border-b border-slate-200" aria-label="Inventory sections">
+        <div className="flex min-w-max">
         <button
           onClick={() => setActiveTab('items')}
-          className={`py-3 px-6 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+          className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-all sm:px-6 ${
             activeTab === 'items'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -193,7 +194,7 @@ export const InventoryPage = () => {
 
         <button
           onClick={() => setActiveTab('vendors')}
-          className={`py-3 px-6 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+          className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-all sm:px-6 ${
             activeTab === 'vendors'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -205,7 +206,7 @@ export const InventoryPage = () => {
 
         <button
           onClick={() => setActiveTab('pos')}
-          className={`py-3 px-6 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+          className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-all sm:px-6 ${
             activeTab === 'pos'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -214,7 +215,8 @@ export const InventoryPage = () => {
           <PackageCheck className="w-4 h-4" />
           <span>Purchase Orders ({purchaseOrders.length})</span>
         </button>
-      </div>
+        </div>
+      </nav>
 
       {activeTab === 'items' && (
         <Card>
@@ -414,7 +416,7 @@ export const InventoryPage = () => {
             placeholder="Artisan Espresso Pods (Dark Roast)"
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="SKU / Stock Code"
               required
@@ -437,7 +439,7 @@ export const InventoryPage = () => {
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Input
               label="Current Stock"
               type="number"

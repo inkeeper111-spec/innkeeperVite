@@ -181,10 +181,11 @@ export const FrontDesk = () => {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200">
+      <nav className="overflow-x-auto border-b border-slate-200" aria-label="Front desk sections">
+        <div className="flex min-w-max">
         <button
           onClick={() => setActiveTab('arrivals')}
-          className={`py-3 px-6 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+          className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-all sm:px-6 ${
             activeTab === 'arrivals'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -199,7 +200,7 @@ export const FrontDesk = () => {
 
         <button
           onClick={() => setActiveTab('inhouse')}
-          className={`py-3 px-6 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+          className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-all sm:px-6 ${
             activeTab === 'inhouse'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -214,7 +215,7 @@ export const FrontDesk = () => {
 
         <button
           onClick={() => setActiveTab('departures')}
-          className={`py-3 px-6 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+          className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-all sm:px-6 ${
             activeTab === 'departures'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -226,7 +227,8 @@ export const FrontDesk = () => {
             {departures.length}
           </span>
         </button>
-      </div>
+        </div>
+      </nav>
 
       {/* Search Input */}
       <div className="flex items-center gap-3">
@@ -333,7 +335,7 @@ export const FrontDesk = () => {
             placeholder="John Smith"
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Phone Number"
               required
@@ -350,7 +352,7 @@ export const FrontDesk = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Select Available Room"
               required

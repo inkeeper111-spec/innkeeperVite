@@ -8,6 +8,7 @@ import { Card }           from '../components/ui/Card';
 import { Input }          from '../components/ui/Input';
 import { Modal }          from '../components/ui/Modal';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { DatePicker } from '../components/ui/DatePicker';
 
 // ─── Button ───────────────────────────────────────────────────────────────────
 describe('Button component', () => {
@@ -179,6 +180,24 @@ describe('Input component', () => {
   it('renders as password type', () => {
     render(<Input label="Password" type="password" />);
     expect(screen.getByLabelText(/password/i)).toHaveAttribute('type', 'password');
+  });
+
+  it('renders premium date fields through the shared input component', async () => {
+    const handleChange = vi.fn();
+    render(<Input label="Stay Date" type="date" value="" onChange={handleChange} />);
+    await userEvent.click(screen.getByRole('button', { name: /stay date/i }));
+    expect(screen.getByRole('dialog', { name: /choose date/i })).toBeInTheDocument();
+  });
+});
+
+// ─── DatePicker ──────────────────────────────────────────────────────────────
+describe('DatePicker component', () => {
+  it('selects a date and emits an input-compatible change event', async () => {
+    const handleChange = vi.fn();
+    render(<DatePicker label="Booking Date" value="2026-10-28" onChange={handleChange} />);
+    await userEvent.click(screen.getByRole('button', { name: /booking date/i }));
+    await userEvent.click(screen.getByRole('button', { name: /October 29, 2026/i }));
+    expect(handleChange).toHaveBeenCalledWith({ target: { name: undefined, value: '2026-10-29' } });
   });
 });
 

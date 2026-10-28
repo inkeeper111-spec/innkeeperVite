@@ -66,12 +66,13 @@ export const ReportsPage = () => {
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
           <Button
             variant="outline"
             size="sm"
             icon={FileSpreadsheet}
             onClick={() => handleDownloadCSV('reservations')}
+            className="w-full sm:w-auto"
           >
             Export Bookings CSV
           </Button>
@@ -80,6 +81,7 @@ export const ReportsPage = () => {
             size="sm"
             icon={Download}
             onClick={() => handleDownloadCSV('invoices')}
+            className="w-full sm:w-auto"
           >
             Export Invoices CSV
           </Button>
@@ -109,7 +111,7 @@ export const ReportsPage = () => {
 
       {/* Payment Methods Breakdown */}
       <Card title="Payment Method Collections" subtitle="Disbursement distribution across merchant channels">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
           {Object.entries(data?.paymentByMethod || {}).map(([method, amount]) => (
             <div key={method} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 capitalize">

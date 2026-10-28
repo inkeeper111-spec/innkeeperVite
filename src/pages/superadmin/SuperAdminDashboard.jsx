@@ -164,7 +164,7 @@ export const SuperAdminDashboard = () => {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-400 uppercase">Total Hotels</span>
@@ -471,7 +471,7 @@ export const SuperAdminDashboard = () => {
       <Modal isOpen={isNewPlanOpen} onClose={() => setIsNewPlanOpen(false)}
         title="Create Subscription Plan">
         <form onSubmit={handleCreatePlan} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Plan Name" required value={newPlanForm.name}
               onChange={(e) => setNewPlanForm({ ...newPlanForm, name: e.target.value })}
               placeholder="Growth Plan" />
@@ -482,14 +482,14 @@ export const SuperAdminDashboard = () => {
           <Input label="Description" value={newPlanForm.description}
             onChange={(e) => setNewPlanForm({ ...newPlanForm, description: e.target.value })}
             placeholder="Ideal for growing boutique hotels" />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Monthly Price ($)" type="number" required value={newPlanForm.monthlyPrice}
               onChange={(e) => setNewPlanForm({ ...newPlanForm, monthlyPrice: e.target.value })} />
             <Input label="Annual Price ($)" type="number" value={newPlanForm.annualPrice}
               onChange={(e) => setNewPlanForm({ ...newPlanForm, annualPrice: e.target.value })}
               placeholder="10× monthly" />
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Input label="Max Rooms" type="number" value={newPlanForm.maxRooms}
               onChange={(e) => setNewPlanForm({ ...newPlanForm, maxRooms: e.target.value })} />
             <Input label="Max Users" type="number" value={newPlanForm.maxUsers}

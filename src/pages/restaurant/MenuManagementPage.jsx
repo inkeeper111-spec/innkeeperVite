@@ -213,7 +213,8 @@ export const MenuManagementPage = () => {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200">
+      <nav className="overflow-x-auto border-b border-slate-200" aria-label="Menu sections">
+        <div className="flex min-w-max">
         {[
           { key: 'items',      label: `Menu Items (${items.length})`,       icon: UtensilsCrossed },
           { key: 'categories', label: `Categories (${categories.length})`,  icon: Tag }
@@ -221,7 +222,7 @@ export const MenuManagementPage = () => {
           <button
             key={key}
             onClick={() => setActiveTab(key)}
-            className={`py-3 px-6 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+            className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-all sm:px-6 ${
               activeTab === key
                 ? 'border-brand-600 text-brand-600'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -231,7 +232,8 @@ export const MenuManagementPage = () => {
             {label}
           </button>
         ))}
-      </div>
+        </div>
+      </nav>
 
       {/* ── MENU ITEMS TAB ── */}
       {activeTab === 'items' && (
@@ -439,7 +441,7 @@ export const MenuManagementPage = () => {
             placeholder="Short description for guests"
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Category"
               required
@@ -462,7 +464,7 @@ export const MenuManagementPage = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Tax Rate (%)"
               type="number"

@@ -18,9 +18,12 @@ export const DashboardLayout = () => {
         setIsMobileOpen={setIsMobileOpen}
       />
       <button
+        type="button"
         aria-label="Close navigation"
+        aria-hidden={!isMobileOpen}
+        tabIndex={isMobileOpen ? 0 : -1}
         onClick={() => setIsMobileOpen(false)}
-        className={`fixed inset-0 z-30 bg-orvelle-dark/50 md:hidden ${isMobileOpen ? 'block' : 'hidden'}`}
+        className={`fixed inset-0 z-30 bg-orvelle-dark/50 backdrop-blur-[1px] md:hidden ${isMobileOpen ? 'block' : 'hidden'}`}
       />
 
       {/* Main Container */}
@@ -35,7 +38,7 @@ export const DashboardLayout = () => {
           setIsMobileOpen={setIsMobileOpen}
         />
 
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 min-w-0 w-full max-w-[1600px] mx-auto px-3 py-4 sm:px-5 sm:py-6 lg:px-8 lg:py-8">
           <Outlet />
         </main>
         <AppFooter />
