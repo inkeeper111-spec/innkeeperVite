@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { DatePicker } from './DatePicker';
 
 export const Input = ({
@@ -10,7 +10,8 @@ export const Input = ({
   required,
   ...props
 }) => {
-  const inputId = id || props.name || `field-${Math.random().toString(36).substring(7)}`;
+  const generatedId = useId();
+  const inputId = id || props.name || generatedId;
 
   if (props.type === 'date') {
     return (
@@ -35,6 +36,7 @@ export const Input = ({
       )}
       <input
         id={inputId}
+        required={required}
         className={`w-full px-3.5 py-2.5 bg-white border rounded-lg text-sm text-orvelle-text placeholder:text-orvelle-muted focus:outline-none focus:ring-2 focus:ring-orvelle-champagne/30 focus:border-orvelle-champagne transition-all ${
           error ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500/20' : 'border-slate-300'
         } ${className}`}

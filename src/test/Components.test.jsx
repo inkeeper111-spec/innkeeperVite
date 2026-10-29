@@ -196,7 +196,7 @@ describe('DatePicker component', () => {
     const handleChange = vi.fn();
     render(<DatePicker label="Booking Date" value="2026-10-28" onChange={handleChange} />);
     await userEvent.click(screen.getByRole('button', { name: /booking date/i }));
-    await userEvent.click(screen.getByRole('button', { name: /October 29, 2026/i }));
+    await userEvent.click(screen.getByRole('button', { name: /29 October 2026|October 29, 2026/i }));
     expect(handleChange).toHaveBeenCalledWith({ target: { name: undefined, value: '2026-10-29' } });
   });
 });

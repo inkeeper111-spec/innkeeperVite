@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const pad = (value) => String(value).padStart(2, '0');
@@ -42,12 +43,16 @@ export const DatePicker = ({
 }) => {
   const rootRef = useRef(null);
   const inputRef = useRef(null);
+  const popupRef = useRef(null);
   const selectedDate = parseDate(value);
   const minimumDate = parseDate(min);
   const maximumDate = parseDate(max);
   const initialMonth = selectedDate || minimumDate || new Date();
   const [open, setOpen] = useState(false);
+  const [popupStyle, setPopupStyle] = useState(null);
   const [visibleMonth, setVisibleMonth] = useState(new Date(initialMonth.getFullYear(), initialMonth.getMonth(), 1));
+  const openRef = useRef(false);
+  openRef.current = open;
 
   useEffect(() => {
     const nextDate = parseDate(value);
@@ -55,11 +60,42 @@ export const DatePicker = ({
   }, [value]);
 
   useEffect(() => {
+    if (!open) return undefined;
+    const placePopup = () => {
+      const rect = inputRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.min(296, window.innerWidth - 16);
+      const height = popupRef.current?.offsetHeight || 340;
+      const margin = 8;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < height + margin && rect.top > spaceBelow;
+      const left = Math.min(Math.max(margin, rect.left), Math.max(margin, window.innerWidth - width - margin));
+      const top = openUpward
+        ? Math.max(margin, rect.top - height - margin)
+        : Math.min(rect.bottom + margin, Math.max(margin, window.innerHeight - height - margin));
+      setPopupStyle({ top, left, width });
+    };
+    placePopup();
+    const frame = window.requestAnimationFrame(placePopup);
+    window.addEventListener('resize', placePopup);
+    window.addEventListener('scroll', placePopup, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', placePopup);
+      window.removeEventListener('scroll', placePopup, true);
+    };
+  }, [open, visibleMonth, value]);
+
+  useEffect(() => {
     const handlePointerDown = (event) => {
-      if (!rootRef.current?.contains(event.target)) setOpen(false);
+      const target = event.target;
+      if (rootRef.current?.contains(target) || popupRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key !== 'Escape' || !openRef.current) return;
+      event.stopPropagation();
+      setOpen(false);
     };
     document.addEventListener('mousedown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
@@ -126,11 +162,13 @@ export const DatePicker = ({
         </span>
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
+          ref={popupRef}
           role="dialog"
           aria-label="Choose date"
-          className="absolute left-0 z-50 mt-2 w-[296px] max-w-[calc(100vw-2rem)] origin-top rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_18px_55px_rgba(48,35,29,0.18)] animate-toast-enter"
+          style={popupStyle || { top: 0, left: 0, width: 296, visibility: 'hidden' }}
+          className="fixed z-[80] origin-top rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_18px_55px_rgba(48,35,29,0.18)] animate-toast-enter"
         >
           <div className="mb-2 flex items-center justify-between rounded-xl bg-orvelle-primary px-2 py-2 text-white">
             <button type="button" aria-label="Previous month" onClick={() => setVisibleMonth((current) => addMonths(current, -1))} className="rounded-lg p-1.5 transition-colors hover:bg-white/10">
@@ -183,7 +221,8 @@ export const DatePicker = ({
               Clear date
             </button>
           )}
-        </div>
+        </div>,
+        document.body
       )}
       {error && <p className="mt-1.5 text-xs text-rose-500">{error}</p>}
       {!error && helperText && <p className="mt-1.5 text-xs text-slate-500">{helperText}</p>}

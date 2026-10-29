@@ -154,7 +154,14 @@ export const RestaurantPOS = () => {
         }
 
         clearCart();
-        if (orderType === 'dine_in') setSelectedTableId('');
+        const tableLabel = tables.find((table) => table._id === selectedTableId);
+        if (orderType === 'dine_in' && tableLabel) {
+          setMessage(
+            tableLabel.activeOrderId
+              ? `Added to Table ${tableLabel.tableNumber}. You can keep adding items.`
+              : `Order #${order.orderNumber} sent to Table ${tableLabel.tableNumber}. You can add another round.`
+          );
+        }
         fetchMenuAndOrders();
         setTimeout(() => setMessage(''), 4000);
       }
@@ -294,6 +301,13 @@ export const RestaurantPOS = () => {
     (i) => selectedCat === 'all' || i.categoryId?._id === selectedCat || i.categoryId === selectedCat
   );
   const activeTables = tables.filter((table) => table.isActive);
+  const selectedTable = activeTables.find((table) => table._id === selectedTableId) || null;
+  const openTableOrder = selectedTable?.activeOrderId
+    ? orders.find((order) => (
+      String(order._id) === String(selectedTable.activeOrderId) && order.status !== 'cancelled'
+    ))
+    : null;
+  const showTableFloor = orderType === 'dine_in' && !selectedTable;
   const tableBills = orders.filter((order) => (
     order.orderType === 'dine_in'
     && order.paymentStatus === 'unpaid'
@@ -472,9 +486,93 @@ export const RestaurantPOS = () => {
           )}
         </Card>
       ) : activeView === 'pos' && (
+        <div className="space-y-4">
+          <div className="grid max-w-lg grid-cols-3 gap-1.5 rounded-xl bg-slate-100 p-1">
+            {['dine_in', 'room_service', 'takeaway'].map((type) => (
+              <button
+                key={type}
+                onClick={() => setOrderType(type)}
+                className={`rounded-lg py-2 text-[11px] font-bold capitalize transition-all ${
+                  orderType === type ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                {type.replace(/_/g, ' ')}
+              </button>
+            ))}
+          </div>
+
+          {showTableFloor ? (
+            <Card>
+              <div className="mb-4">
+                <h2 className="text-lg font-black text-slate-900">Select a table</h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Tap any open or occupied table. The menu opens for that table, and you can keep adding items to it.
+                </p>
+              </div>
+              {loading ? (
+                <LoadingSpinner text="Loading restaurant tables..." />
+              ) : activeTables.length === 0 ? (
+                <p className="py-8 text-center text-sm text-rose-600">No active restaurant tables are configured.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {activeTables.map((table) => {
+                    const occupied = table.currentStatus === 'occupied';
+                    const reserved = table.currentStatus === 'reserved';
+                    return (
+                      <button
+                        key={table._id}
+                        type="button"
+                        disabled={reserved}
+                        onClick={() => setSelectedTableId(table._id)}
+                        className={`rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                          occupied
+                            ? 'border-amber-300 bg-amber-50 hover:border-amber-500 hover:shadow-md'
+                            : 'border-slate-200 bg-white hover:border-brand-500 hover:shadow-md'
+                        }`}
+                      >
+                        <span className="block text-lg font-black text-slate-900">
+                          Table {table.tableNumber}{table.name ? ` · ${table.name}` : ''}
+                        </span>
+                        <span className="mt-1 block text-xs capitalize text-slate-500">
+                          {table.currentStatus} · {table.capacity} seats
+                        </span>
+                        <span className={`mt-3 block text-xs font-bold ${occupied ? 'text-amber-800' : 'text-brand-700'}`}>
+                          {occupied ? 'Open menu and add more items' : reserved ? 'Reserved' : 'Open menu'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Menu Catalog (2 cols) */}
           <div className="lg:col-span-2 space-y-4">
+            {orderType === 'dine_in' && selectedTable && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <div>
+                  <p className="text-sm font-black text-slate-900">
+                    Table {selectedTable.tableNumber}{selectedTable.name ? ` · ${selectedTable.name}` : ''}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {openTableOrder
+                      ? `Bill #${openTableOrder.orderNumber} is open. Add another round whenever you need to.`
+                      : 'Choose items and send them to this table. You can add more after the first round.'}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    clearCart();
+                    setSelectedTableId('');
+                  }}
+                >
+                  All tables
+                </Button>
+              </div>
+            )}
             {/* Category Filter Pills */}
             <div className="flex flex-wrap gap-2 pb-2">
               <button
@@ -551,52 +649,39 @@ export const RestaurantPOS = () => {
                 )}
               </div>
 
-              {/* Order Type Toggle */}
-              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3 my-3 bg-slate-100 p-1 rounded-xl">
-                {['dine_in', 'room_service', 'takeaway'].map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => setOrderType(type)}
-                    className={`py-1 rounded-lg text-[11px] font-bold capitalize transition-all ${
-                      orderType === type ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-                    }`}
-                  >
-                    {type.replace(/_/g, ' ')}
-                  </button>
-                ))}
-              </div>
+              {orderType === 'dine_in' && selectedTable && (
+                <div className="my-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-bold text-slate-900">
+                    Assigning to Table {selectedTable.tableNumber}
+                  </p>
+                  <p className="mt-0.5 text-[11px] capitalize text-slate-500">
+                    {selectedTable.currentStatus} · {selectedTable.capacity} seats
+                  </p>
+                </div>
+              )}
 
-              {/* Service Destination */}
-              {orderType === 'dine_in' && (
-                <div className="mb-3 space-y-2">
-                  <p className="text-xs font-semibold text-slate-700">Select a table</p>
-                  {activeTables.length === 0 ? (
-                    <p className="text-xs text-rose-600">No active restaurant tables are configured.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {activeTables.map((table) => (
-                        <button
-                          key={table._id}
-                          type="button"
-                          disabled={table.currentStatus !== 'available'}
-                          onClick={() => setSelectedTableId(table._id)}
-                          className={`rounded-lg border p-2 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                            selectedTableId === table._id
-                              ? 'border-brand-600 bg-brand-50 ring-2 ring-brand-500/20'
-                              : 'border-slate-200 bg-white hover:border-brand-400'
-                          }`}
-                        >
-                          <span className="block font-bold">Table {table.tableNumber}{table.name ? ` · ${table.name}` : ''}</span>
-                          <span className="text-slate-500">{table.currentStatus} · {table.capacity} seats</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+              {openTableOrder && orderType === 'dine_in' && (
+                <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-amber-900">
+                    Already on this table
+                  </p>
+                  <div className="mt-2 space-y-1">
+                    {openTableOrder.items.map((item, index) => (
+                      <div key={`${openTableOrder._id}-${index}`} className="flex justify-between text-xs text-slate-700">
+                        <span>{item.quantity}x {item.name}</span>
+                        <span className="font-mono">${item.amount}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex justify-between border-t border-amber-200 pt-2 text-xs font-bold text-amber-950">
+                    <span>Open bill</span>
+                    <span>${openTableOrder.totalAmount}</span>
+                  </div>
                 </div>
               )}
 
               {orderType === 'room_service' && (
-                <div className="mb-3">
+                <div className="mb-3 mt-3">
                   <Select
                     label="Deliver to Room / Guest"
                     value={selectedReservationId}
@@ -612,11 +697,17 @@ export const RestaurantPOS = () => {
                 </div>
               )}
 
+              {orderType === 'dine_in' && openTableOrder && (
+                <p className="mt-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">New round</p>
+              )}
+
               {/* Cart Line Items */}
               <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 my-3">
                 {cart.length === 0 ? (
                   <div className="py-8 text-center text-slate-400 text-xs">
-                    Cart is empty. Click menu items to add.
+                    {orderType === 'dine_in'
+                      ? 'Tap menu items to assign them to this table.'
+                      : 'Cart is empty. Click menu items to add.'}
                   </div>
                 ) : (
                   cart.map((i) => (
@@ -682,15 +773,24 @@ export const RestaurantPOS = () => {
                   <Button
                     variant="primary"
                     className="w-full"
-                    disabled={cart.length === 0 || (orderType === 'dine_in' && !selectedTableId)}
+                    disabled={cart.length === 0 || (orderType === 'dine_in' && !selectedTable)}
                     onClick={() => handlePlaceOrder(true)}
                   >
-                    Send to Kitchen (${total})
+                    {orderType === 'dine_in' && selectedTable
+                      ? `${openTableOrder ? 'Add to' : 'Send to'} Table ${selectedTable.tableNumber} ($${total})`
+                      : `Send to Kitchen ($${total})`}
                   </Button>
+                )}
+                {orderType === 'dine_in' && selectedTable && (
+                  <p className="text-center text-[11px] text-slate-500">
+                    The menu stays on this table, so you can send another round right away.
+                  </p>
                 )}
               </div>
             </Card>
           </div>
+        </div>
+          )}
         </div>
       )}
 
