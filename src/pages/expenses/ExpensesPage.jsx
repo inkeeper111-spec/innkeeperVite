@@ -9,8 +9,10 @@ import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { DollarSign, PlusCircle, Filter, CheckCircle2, TrendingDown } from 'lucide-react';
 import dayjs from 'dayjs';
+import { useCurrency } from '../../hooks/useCurrency';
 
 export const ExpensesPage = () => {
+  const { currencySymbol, formatCurrency } = useCurrency();
   const [expenses, setExpenses] = useState([]);
   const [categorySummary, setCategorySummary] = useState([]);
   const [monthlyTotal, setMonthlyTotal] = useState(0);
@@ -114,7 +116,7 @@ export const ExpensesPage = () => {
               <TrendingDown className="w-5 h-5" />
             </div>
           </div>
-          <p className="text-3xl font-black mt-2">${Number(monthlyTotal || totalApproved).toLocaleString()}</p>
+          <p className="text-3xl font-black mt-2">{formatCurrency(Number(monthlyTotal || totalApproved))}</p>
           <p className="text-xs text-slate-400 mt-2">Approved expenses this month · {monthlySummary.length} categories</p>
         </Card>
 
@@ -128,7 +130,7 @@ export const ExpensesPage = () => {
                 <DollarSign className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-black text-slate-900 mt-2">${cat.total.toLocaleString()}</p>
+            <p className="text-2xl font-black text-slate-900 mt-2">{formatCurrency(cat.total)}</p>
             <p className="text-xs text-slate-400 mt-2">Departmental total</p>
           </Card>
         ))}
@@ -164,7 +166,7 @@ export const ExpensesPage = () => {
                       {exp.category.replace(/_/g, ' ')}
                     </td>
                     <td className="py-3 text-slate-700 font-medium">{exp.description}</td>
-                    <td className="py-3 font-black text-slate-900">${exp.amount}</td>
+                    <td className="py-3 font-black text-slate-900">{formatCurrency(exp.amount)}</td>
                     <td className="py-3 uppercase text-slate-500 text-[11px]">{exp.paymentMethod.replace(/_/g, ' ')}</td>
                     <td className="py-3 text-slate-500">{dayjs(exp.date).format('YYYY-MM-DD')}</td>
                     <td className="py-3 text-right">
@@ -204,7 +206,7 @@ export const ExpensesPage = () => {
               ]}
             />
             <Input
-              label="Amount ($)"
+              label={`Amount (${currencySymbol})`}
               type="number"
               step="0.01"
               required
@@ -256,4 +258,3 @@ export const ExpensesPage = () => {
     </div>
   );
 };
-

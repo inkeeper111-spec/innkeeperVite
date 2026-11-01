@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import { useCurrency } from '../../hooks/useCurrency';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -20,6 +21,7 @@ import {
 import dayjs from 'dayjs';
 
 export const MaintenancePage = () => {
+  const { currencySymbol } = useCurrency();
   const { user } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [rooms, setRooms] = useState([]);
@@ -399,7 +401,7 @@ export const MaintenancePage = () => {
             </Select>
 
             <Input
-              label="Estimated Cost ($)"
+              label={`Estimated Cost (${currencySymbol})`}
               type="number"
               value={ticketForm.estimatedCost}
               onChange={(e) => setTicketForm({ ...ticketForm, estimatedCost: e.target.value })}

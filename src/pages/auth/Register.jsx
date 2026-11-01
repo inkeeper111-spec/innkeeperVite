@@ -3,9 +3,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
 import { Building2, CheckCircle2 } from 'lucide-react';
-import { InnkeeperLogo } from '../../components/ui/InnkeeperLogo';
+import { NestnnLogo } from '../../components/ui/NestnnLogo';
 
 export const Register = () => {
   const { register } = useAuth();
@@ -59,7 +60,7 @@ export const Register = () => {
       <div className="sm:mx-auto sm:w-full sm:max-w-xl z-10">
         <div className="text-center mb-6">
           <div className="flex justify-center mb-4">
-            <InnkeeperLogo size="lg" dark />
+            <NestnnLogo size="lg" dark />
           </div>
           <h2 className="text-2xl font-black text-white tracking-tight">Register Your Hotel</h2>
           <p className="text-sm text-slate-400 mt-1">
@@ -173,13 +174,12 @@ export const Register = () => {
                 onChange={handleChange}
                 placeholder="Jane Doe"
               />
-              <Input
+              <PhoneInput
                 label="Phone Number"
-                name="phone"
                 required
                 value={formData.phone}
-                onChange={handleChange}
-                placeholder="+1 (555) 000-0000"
+                defaultCountry={formData.country}
+                onChange={(phone) => setFormData({ ...formData, phone })}
               />
             </div>
 
@@ -220,4 +220,3 @@ export const Register = () => {
     </div>
   );
 };
-

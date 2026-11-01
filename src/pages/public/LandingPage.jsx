@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
+import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
 import { DatePicker } from '../../components/ui/DatePicker';
 import { AppFooter } from '../../components/layout/AppFooter';
@@ -23,9 +24,8 @@ import {
   ArrowRight
 } from 'lucide-react';
 import dayjs from 'dayjs';
-
-const currencySymbol = (code) =>
-  ({ USD: '$', INR: '₹', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$' }[code] || '$');
+import { formatCurrency } from '../../utils/currency';
+import { NestnnLogo } from '../../components/ui/NestnnLogo';
 
 export const LandingPage = () => {
   const [hotels, setHotels] = useState([]);
@@ -132,19 +132,17 @@ export const LandingPage = () => {
   };
 
   const nights = dayjs(searchDates.checkOutDate).diff(dayjs(searchDates.checkInDate), 'day') || 1;
-  const money = currencySymbol(hotel?.currency);
+  const formatHotelCurrency = (amount) => formatCurrency(amount, hotel?.currency || 'USD');
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
       {/* Top Navigation */}
       <header className="min-h-16 bg-slate-900 text-white sticky top-0 z-30 px-3 sm:px-8 flex flex-wrap items-center justify-between gap-2 py-2 sm:min-h-20 sm:flex-nowrap border-b border-slate-800">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-orvelle-champagne text-orvelle-primary flex items-center justify-center font-serif font-black text-xl shadow-md">
-            O
-          </div>
+          <NestnnLogo size="sm" dark />
           <div>
             <span className="font-bold text-lg tracking-tight block">
-              {hotel?.name || 'Innkeeper Hotel & Spa'}
+              {hotel?.name || 'Nestnn Hotel & Spa'}
             </span>
             <span className="text-[10px] uppercase font-bold text-amber-400 tracking-widest">
               Luxury Hospitality
@@ -186,7 +184,7 @@ export const LandingPage = () => {
           </h1>
           <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed">
             Immerse yourself in timeless luxury, world-class amenities, and breathtaking views at{' '}
-            {hotel?.name || 'Innkeeper'}. Reserve your stay with guaranteed best rates.
+            {hotel?.name || 'Nestnn'}. Reserve your stay with guaranteed best rates.
           </p>
 
           {/* Availability Search Bar Widget */}
@@ -304,10 +302,10 @@ export const LandingPage = () => {
 
                     <div className="p-5 pt-0 border-t border-slate-50 mt-4 flex items-center justify-between">
                       <div>
-                        <span className="text-lg font-black text-slate-900">{money}{rt.basePrice}</span>
+                        <span className="text-lg font-black text-slate-900">{formatHotelCurrency(rt.basePrice)}</span>
                         <span className="text-[11px] text-slate-400"> / night</span>
                         <span className="text-[10px] text-slate-500 block font-semibold">
-                          Total: {money}{totalCost} ({nights} nts)
+                          Total: {formatHotelCurrency(totalCost)} ({nights} nts)
                         </span>
                       </div>
 
@@ -367,7 +365,7 @@ export const LandingPage = () => {
 
                 <div className="p-5 pt-0 border-t border-slate-50 flex items-center justify-between">
                   <div>
-                    <span className="text-lg font-black text-slate-900">{money}{rt.basePrice}</span>
+                    <span className="text-lg font-black text-slate-900">{formatHotelCurrency(rt.basePrice)}</span>
                     <span className="text-[11px] text-slate-400"> / night</span>
                   </div>
 
@@ -460,7 +458,7 @@ export const LandingPage = () => {
               </div>
               <div className="flex justify-between font-bold text-sm text-slate-900 border-t border-slate-200 pt-2">
                 <span>Total Folio Amount:</span>
-                <span>{money}{bookingSuccess.reservation?.totalAmount}</span>
+                <span>{formatHotelCurrency(bookingSuccess.reservation?.totalAmount)}</span>
               </div>
             </div>
 
@@ -491,27 +489,27 @@ export const LandingPage = () => {
                 onChange={(e) => setGuestForm({ ...guestForm, email: e.target.value })}
                 placeholder="evelyn@example.com"
               />
-              <Input
+              <PhoneInput
                 label="Phone Number"
                 required
                 value={guestForm.phone}
-                onChange={(e) => setGuestForm({ ...guestForm, phone: e.target.value })}
-                placeholder="+1 (555) 000-0000"
+                defaultCountry={hotel?.country}
+                onChange={(phone) => setGuestForm({ ...guestForm, phone })}
               />
             </div>
 
             <div className="p-3 bg-slate-50 rounded-xl space-y-1 text-xs">
               <div className="flex justify-between text-slate-600">
-                <span>Rate ({nights} Nights @ {money}{selectedType?.basePrice}):</span>
-                <span className="font-mono font-semibold">{money}{(selectedType?.basePrice || 0) * nights}</span>
+                <span>Rate ({nights} Nights @ {formatHotelCurrency(selectedType?.basePrice)}):</span>
+                <span className="font-mono font-semibold">{formatHotelCurrency((selectedType?.basePrice || 0) * nights)}</span>
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>Applicable Hospitality Tax (10%):</span>
-                <span className="font-mono font-semibold">{money}{Math.round((selectedType?.basePrice || 0) * nights * 0.10)}</span>
+                <span className="font-mono font-semibold">{formatHotelCurrency(Math.round((selectedType?.basePrice || 0) * nights * 0.10))}</span>
               </div>
               <div className="flex justify-between text-sm font-bold text-slate-900 border-t border-slate-200 pt-1.5">
                 <span>Estimated Total:</span>
-                <span className="font-mono">{money}{Math.round((selectedType?.basePrice || 0) * nights * 1.10)}</span>
+                <span className="font-mono">{formatHotelCurrency(Math.round((selectedType?.basePrice || 0) * nights * 1.10))}</span>
               </div>
             </div>
 

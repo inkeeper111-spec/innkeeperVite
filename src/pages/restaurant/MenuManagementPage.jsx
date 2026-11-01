@@ -7,6 +7,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { useCurrency } from '../../hooks/useCurrency';
 import {
   UtensilsCrossed,
   PlusCircle,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 
 export const MenuManagementPage = () => {
+  const { currencySymbol, formatCurrency } = useCurrency();
   const [activeTab, setActiveTab] = useState('items'); // 'items' | 'categories'
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
@@ -295,7 +297,7 @@ export const MenuManagementPage = () => {
                             {item.categoryId?.name || '—'}
                           </span>
                         </td>
-                        <td className="py-3.5 font-black text-slate-900">${item.price}</td>
+                        <td className="py-3.5 font-black text-slate-900">{formatCurrency(item.price)}</td>
                         <td className="py-3.5 text-slate-500">{item.taxRate ?? 5}%</td>
                         <td className="py-3.5 text-slate-500">{item.preparationTime ?? 15} min</td>
                         <td className="py-3.5">
@@ -454,7 +456,7 @@ export const MenuManagementPage = () => {
               ))}
             </Select>
             <Input
-              label="Price ($)"
+              label={`Price (${currencySymbol})`}
               type="number"
               step="0.01"
               required

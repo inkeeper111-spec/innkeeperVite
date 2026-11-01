@@ -5,8 +5,11 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
+import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../hooks/useCurrency';
 import {
   Boxes,
   AlertTriangle,
@@ -20,6 +23,8 @@ import {
 import dayjs from 'dayjs';
 
 export const InventoryPage = () => {
+  const { hotel } = useAuth();
+  const { currencySymbol, formatCurrency } = useCurrency();
   const [activeTab, setActiveTab] = useState('items'); // 'items', 'vendors', 'pos'
   const [items, setItems] = useState([]);
   const [vendors, setVendors] = useState([]);
@@ -253,7 +258,7 @@ export const InventoryPage = () => {
                         <td className="py-3.5 font-bold text-slate-900">
                           {it.currentStock} {it.unit}
                         </td>
-                        <td className="py-3.5 text-slate-700 font-mono">${it.unitCost}</td>
+                        <td className="py-3.5 text-slate-700 font-mono">{formatCurrency(it.unitCost)}</td>
                         <td className="py-3.5">
                           {isLow ? (
                             <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
@@ -328,7 +333,7 @@ export const InventoryPage = () => {
                     <tr key={po._id} className="hover:bg-slate-50 transition-colors">
                       <td className="py-3 font-mono font-bold text-slate-900">{po.poNumber}</td>
                       <td className="py-3 font-semibold text-slate-800">{po.vendorId?.name || 'Vendor'}</td>
-                      <td className="py-3 font-black text-slate-900">${po.totalAmount}</td>
+                      <td className="py-3 font-black text-slate-900">{formatCurrency(po.totalAmount)}</td>
                       <td className="py-3">
                         <Badge variant={po.status}>{po.status}</Badge>
                       </td>
@@ -455,7 +460,7 @@ export const InventoryPage = () => {
               onChange={(e) => setItemForm({ ...itemForm, minStockThreshold: e.target.value })}
             />
             <Input
-              label="Unit Cost ($)"
+              label={`Unit Cost (${currencySymbol})`}
               type="number"
               step="0.01"
               required
@@ -495,12 +500,12 @@ export const InventoryPage = () => {
             onChange={(e) => setVendorForm({ ...vendorForm, contactPerson: e.target.value })}
             placeholder="John Rogers"
           />
-          <Input
+          <PhoneInput
             label="Phone"
             required
             value={vendorForm.phone}
-            onChange={(e) => setVendorForm({ ...vendorForm, phone: e.target.value })}
-            placeholder="+1 (555) 888-9999"
+            defaultCountry={hotel?.country}
+            onChange={(phone) => setVendorForm({ ...vendorForm, phone })}
           />
           <div className="flex justify-end gap-3 pt-3">
             <Button variant="secondary" type="button" onClick={() => setIsAddVendorOpen(false)}>
@@ -515,4 +520,3 @@ export const InventoryPage = () => {
     </div>
   );
 };
-

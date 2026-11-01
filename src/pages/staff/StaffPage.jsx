@@ -5,9 +5,12 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
+import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { DatePicker } from '../../components/ui/DatePicker';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../hooks/useCurrency';
 import {
   UserCheck, PlusCircle, Calendar, Clock, CheckCircle2,
   DollarSign, Pencil, ClipboardList, BarChart3,
@@ -33,6 +36,8 @@ const STATUS_COLORS = {
 };
 
 export const StaffPage = () => {
+  const { hotel } = useAuth();
+  const { formatCurrency } = useCurrency();
   const [activeTab,   setActiveTab]   = useState('directory');
   const [staff,       setStaff]       = useState([]);
   const [shifts,      setShifts]      = useState([]);
@@ -361,7 +366,7 @@ export const StaffPage = () => {
                         {s.userId?.role?.replace(/_/g, ' ')}
                       </td>
                       <td className="py-3.5 font-black text-slate-900">
-                        ${Number(s.salary).toLocaleString()}
+                        {formatCurrency(s.salary)}
                       </td>
                       <td className="py-3.5"><Badge variant={s.status}>{s.status}</Badge></td>
                       <td className="py-3.5 text-right">
@@ -482,7 +487,7 @@ export const StaffPage = () => {
                 </div>
                 <div className="text-center">
                   <p className="text-slate-400 font-semibold uppercase text-[10px]">Total Payroll</p>
-                  <p className="font-black text-rose-600 text-lg">${summary.totalPayroll?.toLocaleString()}</p>
+                  <p className="font-black text-rose-600 text-lg">{formatCurrency(summary.totalPayroll)}</p>
                 </div>
               </div>
             )}
@@ -527,13 +532,13 @@ export const StaffPage = () => {
                         <td className="py-3 text-center text-purple-600 font-bold">{s.leaveDays}</td>
                         <td className="py-3 text-center text-amber-600 font-bold">{s.lateDays}</td>
                         <td className="py-3 text-right font-semibold text-slate-700">
-                          ${s.baseSalary.toLocaleString()}
+                          {formatCurrency(s.baseSalary)}
                         </td>
                         <td className="py-3 text-right font-bold text-rose-600">
-                          {s.deductionAmount > 0 ? `-$${s.deductionAmount.toLocaleString()}` : '—'}
+                          {s.deductionAmount > 0 ? `-${formatCurrency(s.deductionAmount)}` : '—'}
                         </td>
                         <td className="py-3 text-right font-black text-slate-900">
-                          ${s.earnedSalary.toLocaleString()}
+                          {formatCurrency(s.earnedSalary)}
                         </td>
                         <td className="py-3 text-right">
                           <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border capitalize ${
@@ -561,10 +566,10 @@ export const StaffPage = () => {
           {/* Summary cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: 'Paid This Month', value: `$${salaryHistory.filter(s => s.month === dayjs().format('YYYY-MM') && s.status === 'paid').reduce((a,b) => a + b.netSalary, 0).toLocaleString()}`, color: 'text-emerald-600' },
+              { label: 'Paid This Month', value: formatCurrency(salaryHistory.filter(s => s.month === dayjs().format('YYYY-MM') && s.status === 'paid').reduce((a,b) => a + b.netSalary, 0)), color: 'text-emerald-600' },
               { label: 'Records Total',   value: salaryHistory.length, color: 'text-slate-900' },
               { label: 'Unique Months',   value: [...new Set(salaryHistory.map(s => s.month))].length, color: 'text-brand-600' },
-              { label: 'Total Bonuses',   value: `$${salaryHistory.reduce((a,b) => a + (b.bonusAmount || 0), 0).toLocaleString()}`, color: 'text-amber-600' }
+              { label: 'Total Bonuses',   value: formatCurrency(salaryHistory.reduce((a,b) => a + (b.bonusAmount || 0), 0)), color: 'text-amber-600' }
             ].map(({ label, value, color }) => (
               <Card key={label}>
                 <p className="text-[10px] font-bold uppercase text-slate-400">{label}</p>
@@ -604,14 +609,14 @@ export const StaffPage = () => {
                           {dayjs(r.month).format('MMMM YYYY')}
                         </td>
                         <td className="py-3 text-center font-bold text-emerald-700">{r.presentDays}/{r.workingDays}</td>
-                        <td className="py-3 text-right font-semibold text-slate-700">${r.baseSalary?.toLocaleString()}</td>
+                        <td className="py-3 text-right font-semibold text-slate-700">{formatCurrency(r.baseSalary)}</td>
                         <td className="py-3 text-right font-bold text-rose-600">
-                          {r.deductionAmount > 0 ? `-$${r.deductionAmount}` : '—'}
+                          {r.deductionAmount > 0 ? `-${formatCurrency(r.deductionAmount)}` : '—'}
                         </td>
                         <td className="py-3 text-right font-bold text-amber-600">
-                          {r.bonusAmount > 0 ? `+$${r.bonusAmount}` : '—'}
+                          {r.bonusAmount > 0 ? `+${formatCurrency(r.bonusAmount)}` : '—'}
                         </td>
-                        <td className="py-3 text-right font-black text-slate-900">${r.netSalary?.toLocaleString()}</td>
+                        <td className="py-3 text-right font-black text-slate-900">{formatCurrency(r.netSalary)}</td>
                         <td className="py-3 capitalize text-slate-600 text-[11px]">
                           {r.paymentMethod?.replace(/_/g, ' ')}
                         </td>
@@ -679,7 +684,7 @@ export const StaffPage = () => {
                 <tr key={a._id}>
                   <td className="py-2 font-semibold">{a.userId?.name}</td>
                   <td className="py-2">{a.month}</td>
-                  <td className="py-2 font-black">${a.amount}</td>
+                  <td className="py-2 font-black">{formatCurrency(a.amount)}</td>
                   <td className="py-2"><Badge variant={a.status}>{a.status}</Badge></td>
                 </tr>
               ))}
@@ -736,6 +741,9 @@ export const StaffPage = () => {
             <Input label="Initial Password" type="password" required value={staffForm.password}
               onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} placeholder="••••••••" />
           </div>
+          <PhoneInput label="Phone" value={staffForm.phone}
+            defaultCountry={hotel?.country}
+            onChange={(phone) => setStaffForm({ ...staffForm, phone })} />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Select label="Department" value={staffForm.department}
               onChange={(e) => setStaffForm({ ...staffForm, department: e.target.value })}
@@ -784,8 +792,9 @@ export const StaffPage = () => {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Full Name" value={editForm.name || ''}
               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
-            <Input label="Phone" value={editForm.phone || ''}
-              onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+            <PhoneInput label="Phone" value={editForm.phone || ''}
+              defaultCountry={hotel?.country}
+              onChange={(phone) => setEditForm({ ...editForm, phone })} />
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Select label="Department" value={editForm.department || 'front_desk'}
@@ -944,7 +953,7 @@ export const StaffPage = () => {
                       <span className="text-slate-400 ml-2">{s.employeeId}</span>
                     </div>
                     <span className="font-bold text-slate-700">
-                      ${summaryRow ? summaryRow.earnedSalary.toLocaleString() : s.salary.toLocaleString()}
+                      {formatCurrency(summaryRow ? summaryRow.earnedSalary : s.salary)}
                     </span>
                     {alreadyPaid && <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Paid</span>}
                   </label>

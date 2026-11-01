@@ -8,8 +8,11 @@ import { Input } from '../../components/ui/Input';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { Search, Printer, ArrowLeft, CheckCircle2, Building2 } from 'lucide-react';
 import dayjs from 'dayjs';
+import { formatCurrency } from '../../utils/currency';
+import { NestnnLogo } from '../../components/ui/NestnnLogo';
 
 export const BookingLookupPage = () => {
+  const currency = data?.reservation?.hotelId?.currency || 'USD';
   const [searchParams] = useSearchParams();
   const [reference, setReference] = useState(searchParams.get('reference') || '');
   const [email, setEmail] = useState(searchParams.get('email') || '');
@@ -45,11 +48,13 @@ export const BookingLookupPage = () => {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 py-10 px-4 sm:px-6">
       <div className="max-w-2xl mx-auto space-y-6">
-        {/* Back Link */}
-        <Link to="/" className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-800">
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to Hotel Portal</span>
-        </Link>
+        <div className="flex items-center justify-between gap-4">
+          <NestnnLogo size="sm" />
+          <Link to="/" className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-800">
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Hotel Portal</span>
+          </Link>
+        </div>
 
         {/* Lookup Card */}
         <Card title="Find My Reservation & Invoice" subtitle="Enter your booking reference code and booking email">
@@ -162,7 +167,7 @@ export const BookingLookupPage = () => {
                         <tr key={idx}>
                           <td className="py-2 px-3 font-medium text-slate-800">{it.description}</td>
                           <td className="py-2 px-3 text-center">{it.quantity}</td>
-                          <td className="py-2 px-3 text-right font-mono">${it.amount}</td>
+                          <td className="py-2 px-3 text-right font-mono">{formatCurrency(it.amount, currency)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -173,19 +178,19 @@ export const BookingLookupPage = () => {
                   <div className="w-full max-w-56 space-y-1">
                     <div className="flex justify-between text-slate-600">
                       <span>Subtotal:</span>
-                      <span className="font-mono">${data.invoice.subtotal}</span>
+                      <span className="font-mono">{formatCurrency(data.invoice.subtotal, currency)}</span>
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>Taxes:</span>
-                      <span className="font-mono">${data.invoice.taxAmount}</span>
+                      <span className="font-mono">{formatCurrency(data.invoice.taxAmount, currency)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-1">
                       <span>Total Amount:</span>
-                      <span className="font-mono">${data.invoice.totalAmount}</span>
+                      <span className="font-mono">{formatCurrency(data.invoice.totalAmount, currency)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-rose-700">
                       <span>Remaining Balance:</span>
-                      <span className="font-mono">${data.invoice.balanceAmount}</span>
+                      <span className="font-mono">{formatCurrency(data.invoice.balanceAmount, currency)}</span>
                     </div>
                   </div>
                 </div>

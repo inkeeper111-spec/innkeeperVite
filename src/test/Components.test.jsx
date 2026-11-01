@@ -9,6 +9,7 @@ import { Input }          from '../components/ui/Input';
 import { Modal }          from '../components/ui/Modal';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { DatePicker } from '../components/ui/DatePicker';
+import { ReservationCheckoutModal } from '../components/ui/ReservationCheckoutModal';
 
 // ─── Button ───────────────────────────────────────────────────────────────────
 describe('Button component', () => {
@@ -242,19 +243,27 @@ describe('Modal component', () => {
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClose when backdrop is clicked', async () => {
+  it('does not call onClose when the backdrop is clicked', async () => {
     const handleClose = vi.fn();
     const { container } = render(
       <Modal isOpen={true} onClose={handleClose} title="Modal">
         Content
       </Modal>
     );
-    // The backdrop is the fixed inset-0 div before the dialog
-    const backdrop = container.querySelector('.fixed.inset-0.bg-slate-900\\/50');
-    if (backdrop) {
-      fireEvent.click(backdrop);
-      expect(handleClose).toHaveBeenCalled();
-    }
+    const backdrop = container.querySelector('[aria-hidden="true"]');
+    fireEvent.click(backdrop);
+    expect(handleClose).not.toHaveBeenCalled();
+  });
+
+  it('does not call onClose when dialog content is clicked', async () => {
+    const handleClose = vi.fn();
+    render(
+      <Modal isOpen={true} onClose={handleClose} title="Modal">
+        <button type="button">Inside action</button>
+      </Modal>
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Inside action' }));
+    expect(handleClose).not.toHaveBeenCalled();
   });
 
   it('calls onClose when Escape key is pressed', async () => {
@@ -268,6 +277,17 @@ describe('Modal component', () => {
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
 
+  it('can disable Escape dismissal', async () => {
+    const handleClose = vi.fn();
+    render(
+      <Modal isOpen={true} onClose={handleClose} closeOnEscape={false} title="Modal">
+        Content
+      </Modal>
+    );
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(handleClose).not.toHaveBeenCalled();
+  });
+
   it('renders footer when provided', () => {
     render(
       <Modal isOpen={true} onClose={() => {}} title="Modal"
@@ -276,6 +296,39 @@ describe('Modal component', () => {
       </Modal>
     );
     expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
+  });
+});
+
+describe('Reservation checkout modal', () => {
+  const reservation = {
+    _id: 'reservation-1',
+    bookingReference: 'BK-001',
+    guestName: 'Taylor Guest',
+    rooms: [{ roomNumber: '101' }],
+    checkInDate: '2026-01-01',
+    checkOutDate: '2026-01-03'
+  };
+
+  it('requires key-return confirmation before submitting checkout', async () => {
+    const onComplete = vi.fn();
+    render(
+      <ReservationCheckoutModal
+        reservation={reservation}
+        onClose={() => {}}
+        onComplete={onComplete}
+      />
+    );
+
+    expect(screen.getByText('BK-001')).toBeInTheDocument();
+    expect(screen.getByText('Taylor Guest')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm Checkout' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Complete Checkout' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/returned the room key/i);
+    expect(onComplete).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('checkbox'));
+    await userEvent.click(screen.getByRole('button', { name: 'Complete Checkout' }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledWith('reservation-1', { keyReturned: true }));
   });
 });
 

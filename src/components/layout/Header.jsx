@@ -17,6 +17,58 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 
 dayjs.extend(relativeTime);
 
+const NotificationDropdownItem = ({ notification, onVisible, onClick }) => {
+  const itemRef = useRef(null);
+  const onVisibleRef = useRef(onVisible);
+  onVisibleRef.current = onVisible;
+
+  useEffect(() => {
+    if (notification.isRead || !itemRef.current) return undefined;
+    if (!('IntersectionObserver' in window)) {
+      onVisibleRef.current(notification);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+        observer.disconnect();
+        onVisibleRef.current(notification);
+      }
+    }, { threshold: 0.5 });
+    observer.observe(itemRef.current);
+    return () => observer.disconnect();
+  }, [notification._id, notification.isRead]);
+
+  const n = notification;
+  return (
+    <div
+      ref={itemRef}
+      onClick={onClick}
+      className={`p-3.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-start gap-3 ${
+        !n.isRead ? 'bg-brand-50/30' : ''
+      }`}
+    >
+      <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600 mt-0.5 flex-shrink-0">
+        {n.type === 'inventory' ? (
+          <AlertCircle className="w-4 h-4 text-amber-500" />
+        ) : (
+          <CheckCircle2 className="w-4 h-4 text-brand-600" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-slate-800 truncate">{n.title}</p>
+        <p className="text-xs text-slate-600 line-clamp-2 mt-0.5">{n.message}</p>
+        <span className="text-[10px] text-slate-400 mt-1 block">
+          {dayjs(n.createdAt).fromNow()}
+        </span>
+        <span className={`mt-1 inline-block text-[9px] font-bold uppercase ${n.priority === 'critical' ? 'text-rose-700' : n.priority === 'high' ? 'text-amber-700' : 'text-slate-400'}`}>
+          {n.module || n.type} · {n.priority || 'medium'}
+        </span>
+      </div>
+    </div>
+  );
+};
+
 export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
   const { user, hotel, logout } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
@@ -27,6 +79,7 @@ export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
 
   const notifRef = useRef(null);
   const userRef = useRef(null);
+  const markReadRequests = useRef(new Map());
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -47,12 +100,22 @@ export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
     navigate('/login');
   };
 
+  const markNotificationRead = (notification) => {
+    if (notification.isRead) return Promise.resolve();
+    const existingRequest = markReadRequests.current.get(notification._id);
+    if (existingRequest) return existingRequest;
+
+    const request = markAsRead(notification._id)
+      .catch((error) => {
+        console.error('Failed to mark notification as read:', error);
+      })
+      .finally(() => markReadRequests.current.delete(notification._id));
+    markReadRequests.current.set(notification._id, request);
+    return request;
+  };
+
   const handleNotificationClick = async (notification) => {
-    try {
-      if (!notification.isRead) await markAsRead(notification._id);
-    } catch (error) {
-      console.error('Failed to mark notification as read:', error);
-    }
+    await markNotificationRead(notification);
     if (notification.link) navigate(notification.link);
     setShowNotifications(false);
   };
@@ -141,31 +204,12 @@ export const Header = ({ isCollapsed, setIsCollapsed, setIsMobileOpen }) => {
                   </div>
                 ) : (
                   notifications.map((n) => (
-                    <div
+                    <NotificationDropdownItem
                       key={n._id}
+                      notification={n}
+                      onVisible={markNotificationRead}
                       onClick={() => handleNotificationClick(n)}
-                      className={`p-3.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-start gap-3 ${
-                        !n.isRead ? 'bg-brand-50/30' : ''
-                      }`}
-                    >
-                      <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600 mt-0.5 flex-shrink-0">
-                        {n.type === 'inventory' ? (
-                          <AlertCircle className="w-4 h-4 text-amber-500" />
-                        ) : (
-                          <CheckCircle2 className="w-4 h-4 text-brand-600" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-slate-800 truncate">{n.title}</p>
-                        <p className="text-xs text-slate-600 line-clamp-2 mt-0.5">{n.message}</p>
-                        <span className="text-[10px] text-slate-400 mt-1 block">
-                          {dayjs(n.createdAt).fromNow()}
-                        </span>
-                        <span className={`mt-1 inline-block text-[9px] font-bold uppercase ${n.priority === 'critical' ? 'text-rose-700' : n.priority === 'high' ? 'text-amber-700' : 'text-slate-400'}`}>
-                          {n.module || n.type} · {n.priority || 'medium'}
-                        </span>
-                      </div>
-                    </div>
+                    />
                   ))
                 )}
               </div>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -38,6 +38,52 @@ const MODULES = [
   'housekeeping', 'maintenance', 'staff', 'leave', 'payroll', 'payments', 'platform', 'system'
 ];
 
+const NotificationListItem = ({ notification, onVisible, onOpen }) => {
+  const itemRef = useRef(null);
+  const onVisibleRef = useRef(onVisible);
+  onVisibleRef.current = onVisible;
+
+  useEffect(() => {
+    if (notification.isRead || !itemRef.current) return undefined;
+    if (!('IntersectionObserver' in window)) {
+      onVisibleRef.current(notification);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+        observer.disconnect();
+        onVisibleRef.current(notification);
+      }
+    }, { threshold: 0.5 });
+    observer.observe(itemRef.current);
+    return () => observer.disconnect();
+  }, [notification._id, notification.isRead]);
+
+  const { icon: Icon, color } = TYPE_META[notification.module || notification.type] || TYPE_META.info;
+  return (
+    <li
+      ref={itemRef}
+      className={`flex items-start gap-3 px-2 py-4 sm:gap-4 sm:px-4 ${notification.isRead ? '' : 'bg-brand-50/30'}`}
+    >
+      <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border ${color}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onOpen(notification)}>
+        <span className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <span className={`text-sm font-semibold ${notification.isRead ? 'text-slate-600' : 'text-slate-900'}`}>{notification.title}</span>
+          <span className="whitespace-nowrap text-[11px] text-slate-400">{dayjs(notification.createdAt).fromNow()}</span>
+        </span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-slate-500">{notification.message}</span>
+        <span className="mt-1 block text-[10px] font-semibold uppercase text-slate-400">
+          {notification.module || notification.type} · {notification.priority || 'medium'}
+        </span>
+      </button>
+      {notification.link && <span className="sr-only">Opens related page</span>}
+    </li>
+  );
+};
+
 export const NotificationsPage = () => {
   const navigate = useNavigate();
   const { unreadCount, markAsRead, markAllAsRead, fetchNotifications } = useNotifications();
@@ -53,6 +99,7 @@ export const NotificationsPage = () => {
     endDate: ''
   });
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const markingNotificationIds = useRef(new Set());
 
   const loadNotifications = useCallback(async (page = pagination.page) => {
     try {
@@ -79,14 +126,17 @@ export const NotificationsPage = () => {
   }, [filters]);
 
   const handleMarkRead = async (notification) => {
+    if (notification.isRead || markingNotificationIds.current.has(notification._id)) return;
+    markingNotificationIds.current.add(notification._id);
     try {
       await markAsRead(notification._id);
       setNotifications((current) => current.map((item) => (
         item._id === notification._id ? { ...item, isRead: true } : item
       )));
-      await fetchNotifications();
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Could not update notification status.');
+    } finally {
+      markingNotificationIds.current.delete(notification._id);
     }
   };
 
@@ -156,32 +206,14 @@ export const NotificationsPage = () => {
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {notifications.map((notification) => {
-              const { icon: Icon, color } = TYPE_META[notification.module || notification.type] || TYPE_META.info;
-              return (
-                <li key={notification._id} className={`flex items-start gap-3 px-2 py-4 sm:gap-4 sm:px-4 ${notification.isRead ? '' : 'bg-brand-50/30'}`}>
-                  <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border ${color}`}>
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openNotification(notification)}>
-                    <span className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <span className={`text-sm font-semibold ${notification.isRead ? 'text-slate-600' : 'text-slate-900'}`}>{notification.title}</span>
-                      <span className="whitespace-nowrap text-[11px] text-slate-400">{dayjs(notification.createdAt).fromNow()}</span>
-                    </span>
-                    <span className="mt-0.5 block text-xs leading-relaxed text-slate-500">{notification.message}</span>
-                    <span className="mt-1 block text-[10px] font-semibold uppercase text-slate-400">
-                      {notification.module || notification.type} · {notification.priority || 'medium'}
-                    </span>
-                  </button>
-                  {!notification.isRead && (
-                    <button type="button" onClick={() => handleMarkRead(notification)} className="self-start whitespace-nowrap text-xs font-semibold text-brand-600 hover:text-brand-800">
-                      Mark read
-                    </button>
-                  )}
-                  {notification.link && <span className="sr-only">Opens related page</span>}
-                </li>
-              );
-            })}
+            {notifications.map((notification) => (
+              <NotificationListItem
+                key={notification._id}
+                notification={notification}
+                onVisible={handleMarkRead}
+                onOpen={openNotification}
+              />
+            ))}
           </ul>
         )}
         {pagination.pages > 1 && (

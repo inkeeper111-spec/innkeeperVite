@@ -25,7 +25,7 @@ import {
   Bell
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { InnkeeperLogo } from '../ui/InnkeeperLogo';
+import { NestnnLogo } from '../ui/NestnnLogo';
 import { useNotifications } from '../../contexts/NotificationContext';
 
 export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen }) => {
@@ -179,18 +179,18 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
       role="dialog"
       aria-modal={isMobileOpen ? 'true' : undefined}
       aria-label="Application navigation"
-      className={`fixed top-0 left-0 z-40 h-screen bg-orvelle-sidebar text-slate-300 transition-all duration-300 flex flex-col border-r border-orvelle-dark transform ${
+      className={`fixed top-0 left-0 z-40 h-screen bg-orvelle-sidebar text-slate-300 transition-all duration-300 flex flex-col border-r border-orvelle-dark transform lg:top-4 lg:left-4 lg:h-[calc(100dvh-2rem)] lg:overflow-hidden lg:rounded-[1.75rem] lg:border lg:border-white/10 lg:shadow-[0_24px_70px_rgba(29,16,11,0.28)] ${
         isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       } ${isCollapsed ? 'md:w-20' : 'w-72 md:w-64'}`}
     >
       {/* Brand Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-white/10 bg-black/30">
-        <InnkeeperLogo size="sm" dark className="overflow-hidden md:hidden" />
+        <NestnnLogo size="md" dark className="overflow-hidden md:hidden" />
         {!isCollapsed && (
-          <InnkeeperLogo size="sm" dark className="hidden overflow-hidden md:block" />
+          <NestnnLogo size="md" dark className="hidden overflow-hidden md:block" />
         )}
         {isCollapsed && (
-          <InnkeeperLogo size="sm" variant="icon" dark className="hidden mx-auto md:block" />
+          <NestnnLogo size="md" variant="icon" dark className="hidden mx-auto md:block" />
         )}
 
         <button

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../hooks/useCurrency';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -35,6 +36,7 @@ import dayjs from 'dayjs';
 
 export const Dashboard = () => {
   const { hotel, user } = useAuth();
+  const { currencySymbol, formatCurrency } = useCurrency();
   const navigate = useNavigate();
 
   const [data, setData] = useState(null);
@@ -74,8 +76,6 @@ export const Dashboard = () => {
       </div>
     );
   }
-
-  const currencySymbol = hotel?.currency === 'EUR' ? '€' : hotel?.currency === 'GBP' ? '£' : hotel?.currency === 'INR' ? '₹' : '$';
 
   return (
     <div className="space-y-6">
@@ -183,11 +183,11 @@ export const Dashboard = () => {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-slate-900">
-              {currencySymbol}{data.monthlyRevenue.toLocaleString()}
+              {formatCurrency(data.monthlyRevenue)}
             </span>
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            Today: <span className="font-semibold text-slate-800">{currencySymbol}{data.todayRevenue.toLocaleString()}</span>
+            Today: <span className="font-semibold text-slate-800">{formatCurrency(data.todayRevenue)}</span>
           </p>
         </Card>
 
@@ -203,7 +203,7 @@ export const Dashboard = () => {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-slate-900">
-              {currencySymbol}{data.pendingPayments.toLocaleString()}
+              {formatCurrency(data.pendingPayments)}
             </span>
           </div>
           <p className="mt-3 text-xs text-rose-600 font-medium">
@@ -276,10 +276,10 @@ export const Dashboard = () => {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
               <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} tickLine={false} />
-              <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} tickFormatter={(v) => `${currencySymbol}${v}`} />
+              <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} tickFormatter={formatCurrency} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
-                formatter={(val) => [`${currencySymbol}${val}`, 'Revenue']}
+                formatter={(val) => [formatCurrency(val), 'Revenue']}
               />
               <Area type="monotone" dataKey="revenue" stroke="#2c5e8d" strokeWidth={2.5} fillOpacity={1} fill="url(#revenueGrad)" />
             </AreaChart>
@@ -332,7 +332,7 @@ export const Dashboard = () => {
                           <Badge variant={b.status}>{b.status}</Badge>
                         </td>
                         <td className="py-3 text-right font-bold text-slate-900">
-                          {currencySymbol}{b.totalAmount}
+                          {formatCurrency(b.totalAmount)}
                         </td>
                       </tr>
                     ))
@@ -417,4 +417,3 @@ export const Dashboard = () => {
     </div>
   );
 };
-

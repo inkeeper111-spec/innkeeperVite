@@ -5,8 +5,13 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
+import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { ReservationCheckoutModal } from '../../components/ui/ReservationCheckoutModal';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../hooks/useCurrency';
+import { isReservationOverstaying } from '../../utils/reservationTime';
 import {
   UserCheck,
   UserMinus,
@@ -18,17 +23,23 @@ import {
   Mail,
   Calendar,
   CreditCard,
-  CheckCircle2
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
 export const FrontDesk = () => {
+  const { user, hotel } = useAuth();
+  const { formatCurrency } = useCurrency();
+  const canCheckout = ['hotel_admin', 'receptionist'].includes(user?.role);
   const [activeTab, setActiveTab] = useState('arrivals'); // arrivals, inhouse, departures
   const [reservations, setReservations] = useState([]);
   const [availableRooms, setAvailableRooms] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(() => dayjs());
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState('');
+  const [checkoutBooking, setCheckoutBooking] = useState(null);
 
   // Walk-in Express Booking Modal
   const [isWalkInOpen, setIsWalkInOpen] = useState(false);
@@ -69,6 +80,11 @@ export const FrontDesk = () => {
     fetchFrontDeskData();
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(dayjs()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const handleCheckIn = async (reservationId) => {
     try {
       const res = await api.post(`/reservations/${reservationId}/check-in`);
@@ -82,16 +98,15 @@ export const FrontDesk = () => {
     }
   };
 
-  const handleCheckOut = async (reservationId) => {
+  const handleCheckOut = async (reservationId, checkoutConfirmation) => {
     try {
-      const res = await api.post(`/reservations/${reservationId}/check-out`);
-      if (res.data.success) {
-        setMessage('Guest checked out successfully! Housekeeping cleaning requested.');
-        fetchFrontDeskData();
-        setTimeout(() => setMessage(''), 4000);
-      }
+      const response = await api.post(`/reservations/${reservationId}/check-out`, checkoutConfirmation);
+      setCheckoutBooking(null);
+      setMessage(response.data.message || 'Guest checked out successfully. Room cleaning tasks have been added to housekeeping.');
+      await fetchFrontDeskData();
+      setTimeout(() => setMessage(''), 4000);
     } catch (err) {
-      alert(err.response?.data?.message || 'Check-out failed');
+      throw new Error(err.response?.data?.message || 'Check-out failed.');
     }
   };
 
@@ -140,7 +155,7 @@ export const FrontDesk = () => {
   const inHouse = reservations.filter((r) => r.status === 'checked_in');
 
   const departures = reservations.filter(
-    (r) => r.status === 'checked_in' && dayjs(r.checkOutDate).format('YYYY-MM-DD') <= todayStr
+    (r) => isReservationOverstaying(r, hotel?.checkOutTime, currentTime)
   );
 
   const displayedList =
@@ -272,6 +287,12 @@ export const FrontDesk = () => {
                     <td className="py-3">
                       <p className="font-semibold text-slate-800">{r.guestName}</p>
                       <p className="text-[11px] text-slate-400">{r.guestPhone}</p>
+                      {isReservationOverstaying(r, hotel?.checkOutTime, currentTime) && (
+                        <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700" role="status">
+                          <AlertTriangle className="h-3 w-3" />
+                          Overstaying — manual checkout required
+                        </p>
+                      )}
                     </td>
                     <td className="py-3">
                       {r.rooms?.map((rm) => (
@@ -285,7 +306,7 @@ export const FrontDesk = () => {
                     </td>
                     <td className="py-3">
                       <span className={`font-bold ${r.balanceAmount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                        ${r.balanceAmount}
+                        {formatCurrency(r.balanceAmount)}
                       </span>
                       {r.balanceAmount > 0 && <span className="text-[10px] text-slate-400 block">due at desk</span>}
                     </td>
@@ -300,14 +321,17 @@ export const FrontDesk = () => {
                           Check In
                         </Button>
                       )}
-                      {(activeTab === 'departures' || activeTab === 'inhouse') && (
+                      {canCheckout
+                        && r.status === 'checked_in'
+                        && r.paymentStatus !== 'unpaid'
+                        && (activeTab === 'departures' || activeTab === 'inhouse') && (
                         <Button
                           size="sm"
                           variant={r.balanceAmount > 0 ? 'outline' : 'secondary'}
                           icon={UserMinus}
-                          onClick={() => handleCheckOut(r._id)}
+                          onClick={() => setCheckoutBooking(r)}
                         >
-                          Check Out
+                          Checkout
                         </Button>
                       )}
                     </td>
@@ -320,6 +344,12 @@ export const FrontDesk = () => {
       </Card>
 
       {/* Express Walk-in Modal */}
+      <ReservationCheckoutModal
+        reservation={checkoutBooking}
+        onClose={() => setCheckoutBooking(null)}
+        onComplete={handleCheckOut}
+      />
+
       <Modal
         isOpen={isWalkInOpen}
         onClose={() => setIsWalkInOpen(false)}
@@ -336,12 +366,12 @@ export const FrontDesk = () => {
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
+            <PhoneInput
               label="Phone Number"
               required
               value={walkInData.guestPhone}
-              onChange={(e) => setWalkInData({ ...walkInData, guestPhone: e.target.value })}
-              placeholder="+1 (555) 000-0000"
+              defaultCountry={hotel?.country}
+              onChange={(phone) => setWalkInData({ ...walkInData, guestPhone: phone })}
             />
             <Input
               label="Email"
@@ -372,7 +402,7 @@ export const FrontDesk = () => {
               <option value="">-- Choose Ready Room --</option>
               {availableRooms.map((rm) => (
                 <option key={rm._id} value={rm._id}>
-                  Room {rm.roomNumber} - {rm.roomTypeId?.name} (${rm.roomTypeId?.basePrice}/night)
+                  Room {rm.roomNumber} - {rm.roomTypeId?.name} ({formatCurrency(rm.roomTypeId?.basePrice)}/night)
                 </option>
               ))}
             </Select>
@@ -391,7 +421,7 @@ export const FrontDesk = () => {
             <div className="p-3 bg-brand-50 border border-brand-200 rounded-xl flex items-center justify-between text-xs">
               <span className="font-semibold text-brand-900">Estimated Total (Stay + 10% Tax):</span>
               <span className="font-bold text-brand-700 text-sm">
-                ${Math.round(walkInData.ratePerNight * walkInData.nights * 1.10)}
+                {formatCurrency(Math.round(walkInData.ratePerNight * walkInData.nights * 1.10))}
               </span>
             </div>
           )}

@@ -3,6 +3,7 @@ import api from '../../api/axios';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { useCurrency } from '../../hooks/useCurrency';
 import {
   Bot,
   Sparkles,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export const AIAssistantPage = () => {
+  const { formatCurrency } = useCurrency();
   const [query, setQuery] = useState('');
   const [conversation, setConversation] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -115,7 +117,7 @@ export const AIAssistantPage = () => {
           <div className="p-3 bg-white rounded-xl border border-slate-200/80 flex items-center justify-between">
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400">Average Daily Rate</p>
-              <p className="text-lg font-black text-slate-900">${metrics.adr}</p>
+              <p className="text-lg font-black text-slate-900">{formatCurrency(metrics.adr)}</p>
             </div>
             <DollarSign className="w-5 h-5 text-emerald-600" />
           </div>
@@ -131,7 +133,7 @@ export const AIAssistantPage = () => {
           <div className="p-3 bg-white rounded-xl border border-slate-200/80 flex items-center justify-between">
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400">Month Invoiced</p>
-              <p className="text-lg font-black text-slate-900">${metrics.thisMonthRevenue?.toLocaleString()}</p>
+              <p className="text-lg font-black text-slate-900">{formatCurrency(metrics.thisMonthRevenue)}</p>
             </div>
             <Sparkles className="w-5 h-5 text-indigo-500" />
           </div>
@@ -166,7 +168,7 @@ export const AIAssistantPage = () => {
                   <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-3">
                     <Sparkles className="w-6 h-6" />
                   </div>
-                  <h3 className="font-bold text-slate-700 text-sm">Ask Innkeeper AI Anything</h3>
+                  <h3 className="font-bold text-slate-700 text-sm">Ask Nestnn AI Anything</h3>
                   <p className="text-xs text-slate-400 max-w-sm mt-1">
                     Ask questions regarding revenue pacing, unpaid room charges, occupancy trends, or inventory thresholds.
                   </p>
@@ -251,4 +253,3 @@ export const AIAssistantPage = () => {
     </div>
   );
 };
-

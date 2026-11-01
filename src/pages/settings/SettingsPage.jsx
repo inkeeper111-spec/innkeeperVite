@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { Settings, Building2, User, Key, CheckCircle2 } from 'lucide-react';
@@ -173,11 +174,12 @@ export const SettingsPage = () => {
                 value={hotelForm.name}
                 onChange={(e) => setHotelForm({ ...hotelForm, name: e.target.value })}
               />
-              <Input
+              <PhoneInput
                 label="Public Phone Contact"
                 required
                 value={hotelForm.phone}
-                onChange={(e) => setHotelForm({ ...hotelForm, phone: e.target.value })}
+                defaultCountry={hotel?.country}
+                onChange={(phone) => setHotelForm({ ...hotelForm, phone })}
               />
             </div>
 
@@ -322,10 +324,11 @@ export const SettingsPage = () => {
               value={profileForm.name}
               onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
             />
-            <Input
+            <PhoneInput
               label="Mobile Number"
               value={profileForm.phone}
-              onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+              defaultCountry={hotel?.country}
+              onChange={(phone) => setProfileForm({ ...profileForm, phone })}
             />
           </div>
 

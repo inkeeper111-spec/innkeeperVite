@@ -8,7 +8,8 @@ export const Modal = ({
   subtitle,
   children,
   maxWidth = 'max-w-xl',
-  footer
+  footer,
+  closeOnEscape = true
 }) => {
   const titleId = useId();
   const dialogRef = useRef(null);
@@ -18,7 +19,7 @@ export const Modal = ({
   useEffect(() => {
     if (!isOpen) return undefined;
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') onCloseRef.current?.();
+      if (closeOnEscape && event.key === 'Escape') onCloseRef.current?.();
     };
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -29,7 +30,7 @@ export const Modal = ({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, closeOnEscape]);
 
   if (!isOpen) return null;
 
@@ -39,7 +40,6 @@ export const Modal = ({
       <div
         aria-hidden="true"
         className="fixed inset-0 cursor-default bg-orvelle-dark/60 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
       />
 
       {/* Modal Dialog */}
@@ -80,4 +80,3 @@ export const Modal = ({
     </div>
   );
 };
-

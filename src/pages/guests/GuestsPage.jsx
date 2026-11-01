@@ -1,16 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import { useCurrency } from '../../hooks/useCurrency';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
+import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { useAuth } from '../../contexts/AuthContext';
 import { Users, PlusCircle, Search, Phone, Mail, MapPin, Eye, CheckCircle2 } from 'lucide-react';
 import dayjs from 'dayjs';
 
+const EMPTY_GUEST_FORM = {
+  name: '',
+  phone: '',
+  email: '',
+  city: '',
+  country: '',
+  idDocumentType: '',
+  idDocumentNumber: '',
+  preferences: ''
+};
+
 export const GuestsPage = () => {
+  const { formatCurrency } = useCurrency();
+  const { hotel } = useAuth();
   const [guests, setGuests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -21,16 +37,7 @@ export const GuestsPage = () => {
   const [selectedGuest, setSelectedGuest] = useState(null);
   const [guestHistory, setGuestHistory] = useState({ reservations: [], invoices: [] });
 
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    city: '',
-    country: 'United States',
-    idDocumentType: 'passport',
-    idDocumentNumber: '',
-    preferences: ''
-  });
+  const [formData, setFormData] = useState(EMPTY_GUEST_FORM);
 
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -57,20 +64,15 @@ export const GuestsPage = () => {
     e.preventDefault();
     setError('');
     try {
-      const res = await api.post('/guests', formData);
+      const { idDocumentType, ...guestData } = formData;
+      const res = await api.post('/guests', {
+        ...guestData,
+        ...(idDocumentType ? { idDocumentType } : {})
+      });
       if (res.data.success) {
         setIsAddOpen(false);
         setMessage(`Guest ${formData.name} added to directory.`);
-        setFormData({
-          name: '',
-          phone: '',
-          email: '',
-          city: '',
-          country: 'United States',
-          idDocumentType: 'passport',
-          idDocumentNumber: '',
-          preferences: ''
-        });
+        setFormData({ ...EMPTY_GUEST_FORM });
         fetchGuests();
         setTimeout(() => setMessage(''), 3000);
       }
@@ -95,6 +97,18 @@ export const GuestsPage = () => {
     }
   };
 
+  const openAddGuestModal = () => {
+    setFormData({ ...EMPTY_GUEST_FORM });
+    setError('');
+    setIsAddOpen(true);
+  };
+
+  const closeAddGuestModal = () => {
+    setIsAddOpen(false);
+    setFormData({ ...EMPTY_GUEST_FORM });
+    setError('');
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -102,11 +116,11 @@ export const GuestsPage = () => {
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">Guest Directory</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Maintain guest profiles, document records, stay histories, and VIP preferences
+            Maintain guest profiles, contact details, documents, and stay histories
           </p>
         </div>
 
-        <Button variant="primary" icon={PlusCircle} onClick={() => setIsAddOpen(true)}>
+        <Button variant="primary" icon={PlusCircle} onClick={openAddGuestModal}>
           Register New Guest
         </Button>
       </div>
@@ -146,10 +160,10 @@ export const GuestsPage = () => {
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Guest Name</th>
-                  <th className="pb-3">Contact</th>
+                  <th className="pb-3">Phone Number</th>
+                  <th className="pb-3">Email</th>
                   <th className="pb-3">Location</th>
                   <th className="pb-3">ID Document</th>
-                  <th className="pb-3">VIP Status</th>
                   <th className="pb-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -157,10 +171,8 @@ export const GuestsPage = () => {
                 {guests.map((g) => (
                   <tr key={g._id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3.5 font-bold text-slate-900">{g.name}</td>
-                    <td className="py-3.5 text-slate-600">
-                      <p>{g.phone}</p>
-                      <p className="text-[11px] text-slate-400">{g.email}</p>
-                    </td>
+                    <td className="py-3.5 text-slate-600">{g.phone}</td>
+                    <td className="py-3.5 text-slate-600">{g.email || '—'}</td>
                     <td className="py-3.5 text-slate-600">
                       {g.city ? `${g.city}, ` : ''}{g.country}
                     </td>
@@ -168,15 +180,6 @@ export const GuestsPage = () => {
                       <span className="font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]">
                         {g.idDocumentType.toUpperCase()}: {g.idDocumentNumber || 'N/A'}
                       </span>
-                    </td>
-                    <td className="py-3.5">
-                      {g.vipStatus ? (
-                        <span className="font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full text-[10px]">
-                          VIP GUEST
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">Regular</span>
-                      )}
                     </td>
                     <td className="py-3.5 text-right">
                       <Button
@@ -199,7 +202,7 @@ export const GuestsPage = () => {
       {/* Add Guest Modal */}
       <Modal
         isOpen={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
+        onClose={closeAddGuestModal}
         title="Add Guest Profile"
         subtitle="Register guest contact and identification"
       >
@@ -218,12 +221,12 @@ export const GuestsPage = () => {
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
+            <PhoneInput
               label="Phone Number"
               required
               value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              placeholder="+1 (555) 000-0000"
+              defaultCountry={hotel?.country}
+              onChange={(phone) => setFormData({ ...formData, phone })}
             />
             <Input
               label="Email"
@@ -252,17 +255,19 @@ export const GuestsPage = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="ID Document Type"
+              required
               value={formData.idDocumentType}
               onChange={(e) => setFormData({ ...formData, idDocumentType: e.target.value })}
               options={[
+                { label: 'Select document type', value: '' },
                 { label: 'Passport', value: 'passport' },
                 { label: 'Driver License', value: 'driver_license' },
-                { label: 'National ID', value: 'national_id' },
-                { label: 'None', value: 'none' }
+                { label: 'National ID', value: 'national_id' }
               ]}
             />
             <Input
               label="Document Number"
+              required
               value={formData.idDocumentNumber}
               onChange={(e) => setFormData({ ...formData, idDocumentNumber: e.target.value })}
               placeholder="P9842104"
@@ -277,7 +282,7 @@ export const GuestsPage = () => {
           />
 
           <div className="flex justify-end gap-3 pt-3">
-            <Button variant="secondary" type="button" onClick={() => setIsAddOpen(false)}>
+            <Button variant="secondary" type="button" onClick={closeAddGuestModal}>
               Cancel
             </Button>
             <Button variant="primary" type="submit">
@@ -337,7 +342,7 @@ export const GuestsPage = () => {
                       </div>
                       <div className="text-right">
                         <Badge variant={r.status}>{r.status}</Badge>
-                        <span className="block font-black text-slate-900 mt-1">${r.totalAmount}</span>
+                        <span className="block font-black text-slate-900 mt-1">{formatCurrency(r.totalAmount)}</span>
                       </div>
                     </div>
                   ))}
@@ -350,4 +355,3 @@ export const GuestsPage = () => {
     </div>
   );
 };
-

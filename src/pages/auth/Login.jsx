@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Building2, Shield, User, Utensils, Sparkles, Wrench, Eye, EyeOff } from 'lucide-react';
-import { InnkeeperLogo } from '../../components/ui/InnkeeperLogo';
+import { NestnnLogo } from '../../components/ui/NestnnLogo';
 import { Modal } from '../../components/ui/Modal';
 
 export const Login = () => {
@@ -65,7 +65,7 @@ export const Login = () => {
 
             <div className="absolute left-10 right-10 top-8 flex items-center justify-between text-white">
               <div className="rounded-full border border-white/25 bg-black/15 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.25em] backdrop-blur-md">
-                InnKeeper · Hospitality Suite
+                Nestnn · Hospitality Suite
               </div>
               <span className="hidden text-xs font-medium text-white/80 xl:block">Your hotel, beautifully managed</span>
             </div>
@@ -91,7 +91,7 @@ export const Login = () => {
 
             <div className="login-card relative max-h-full w-full max-w-[430px] overflow-y-auto rounded-[20px] bg-white/95 px-4 py-4 shadow-[0_20px_70px_rgba(38,27,19,0.22)] backdrop-blur-xl sm:px-8 sm:py-6 lg:overflow-visible lg:bg-transparent lg:px-0 lg:py-0 lg:shadow-none lg:backdrop-blur-none">
               <div className="login-brand mb-5 flex justify-center lg:mb-6 lg:justify-start">
-                <InnkeeperLogo size="lg" />
+                <NestnnLogo size="lg" />
               </div>
 
               <div className="login-heading mb-5 lg:mb-6">
@@ -214,4 +214,3 @@ export const Login = () => {
     </main>
   );
 };
-

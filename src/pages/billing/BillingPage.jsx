@@ -7,6 +7,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { useCurrency } from '../../hooks/useCurrency';
 import {
   Receipt,
   CreditCard,
@@ -21,6 +22,7 @@ import {
 import dayjs from 'dayjs';
 
 export const BillingPage = () => {
+  const { currencySymbol, formatCurrency } = useCurrency();
   const [activeTab, setActiveTab] = useState('invoices'); // 'invoices' or 'payments'
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -30,8 +32,13 @@ export const BillingPage = () => {
 
   // Modals
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [selectedPayment, setSelectedPayment] = useState(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [refundFormData, setRefundFormData] = useState({ amount: '', reason: '' });
+  const [refundError, setRefundError] = useState('');
+  const [processingRefund, setProcessingRefund] = useState(false);
 
   // Payment Form
   const [payFormData, setPayFormData] = useState({
@@ -101,7 +108,7 @@ export const BillingPage = () => {
       });
       if (res.data.success) {
         setIsPaymentModalOpen(false);
-        setMessage(`Payment of $${payFormData.amount} recorded successfully.`);
+        setMessage(`Payment of ${formatCurrency(payFormData.amount)} recorded successfully.`);
         fetchBillingData();
         setTimeout(() => setMessage(''), 4000);
       }
@@ -112,38 +119,41 @@ export const BillingPage = () => {
     }
   };
 
-  const handleRazorpayOnline = async (invoice) => {
+  const handleOpenRefund = (payment) => {
+    setSelectedPayment(payment);
+    setRefundFormData({ amount: '', reason: '' });
+    setRefundError('');
+    setIsRefundModalOpen(true);
+  };
+
+  const handleCloseRefund = () => {
+    setIsRefundModalOpen(false);
+    setSelectedPayment(null);
+    setRefundFormData({ amount: '', reason: '' });
+    setRefundError('');
+  };
+
+  const handleRecordRefund = async (e) => {
+    e.preventDefault();
+    if (!selectedPayment) return;
+    setRefundError('');
+    setProcessingRefund(true);
     try {
-      setProcessingPayment(true);
-      const orderRes = await api.post('/billing/payments/create-order', {
-        invoiceId: invoice._id,
-        amount: invoice.balanceAmount
+      const response = await api.post('/billing/payments/refund', {
+        paymentId: selectedPayment._id,
+        amount: Number(refundFormData.amount),
+        reason: refundFormData.reason.trim()
       });
-
-      if (!orderRes.data.success) {
-        throw new Error('Order creation failed');
-      }
-
-      const { order } = orderRes.data.data;
-
-      // Simulate verification callback with real server verification
-      const verifyRes = await api.post('/billing/payments/verify', {
-        invoiceId: invoice._id,
-        razorpayOrderId: order.id,
-        razorpayPaymentId: `pay_${Math.random().toString(36).substring(2, 10)}`,
-        razorpaySignature: `sig_${Math.random().toString(36).substring(2, 12)}`,
-        amount: invoice.balanceAmount
-      });
-
-      if (verifyRes.data.success) {
-        setMessage('Razorpay online checkout verified and captured successfully!');
-        fetchBillingData();
+      if (response.data.success) {
+        handleCloseRefund();
+        setMessage(`Refund of ${formatCurrency(refundFormData.amount)} recorded successfully.`);
+        await fetchBillingData();
         setTimeout(() => setMessage(''), 4000);
       }
-    } catch (err) {
-      alert(err.response?.data?.message || 'Online payment failed');
+    } catch (requestError) {
+      setRefundError(requestError.response?.data?.message || 'Refund could not be recorded.');
     } finally {
-      setProcessingPayment(false);
+      setProcessingRefund(false);
     }
   };
 
@@ -162,7 +172,7 @@ export const BillingPage = () => {
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">Billing & Folio Invoices</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Generate itemized tax invoices, record multi-method settlements, and process online payments
+            Generate itemized tax invoices and record multi-method settlements
           </p>
         </div>
       </div>
@@ -266,10 +276,10 @@ export const BillingPage = () => {
                         <td className="py-3.5 text-slate-500">
                           {dayjs(inv.createdAt).format('MMM D, YYYY')}
                         </td>
-                        <td className="py-3.5 font-bold text-slate-900">${inv.totalAmount}</td>
-                        <td className="py-3.5 font-medium text-emerald-600">${inv.paidAmount}</td>
+                        <td className="py-3.5 font-bold text-slate-900">{formatCurrency(inv.totalAmount)}</td>
+                        <td className="py-3.5 font-medium text-emerald-600">{formatCurrency(inv.paidAmount)}</td>
                         <td className="py-3.5 font-black text-rose-600">
-                          ${inv.balanceAmount}
+                          {formatCurrency(inv.balanceAmount)}
                         </td>
                         <td className="py-3.5">
                           <Badge variant={inv.status}>{inv.status}</Badge>
@@ -279,28 +289,21 @@ export const BillingPage = () => {
                             size="sm"
                             variant="secondary"
                             icon={FileText}
+                            className="!p-2"
+                            aria-label={`View and print invoice ${inv.invoiceNumber}`}
+                            title="View and print invoice"
                             onClick={() => handleOpenInvoice(inv._id)}
-                          >
-                            View & Print
-                          </Button>
+                          />
                           {inv.balanceAmount > 0 && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="primary"
-                                icon={DollarSign}
-                                onClick={() => handleOpenPayment(inv)}
-                              >
-                                Record Pay
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="gold"
-                                onClick={() => handleRazorpayOnline(inv)}
-                              >
-                                Razorpay
-                              </Button>
-                            </>
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              icon={DollarSign}
+                              className="!p-2"
+                              aria-label={`Record payment for invoice ${inv.invoiceNumber}`}
+                              title="Record payment"
+                              onClick={() => handleOpenPayment(inv)}
+                            />
                           )}
                         </td>
                       </tr>
@@ -333,6 +336,7 @@ export const BillingPage = () => {
                     <th className="pb-3">Amount</th>
                     <th className="pb-3">Recorded At</th>
                     <th className="pb-3">Recorded By</th>
+                    <th className="pb-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -346,9 +350,29 @@ export const BillingPage = () => {
                           {p.method}
                         </span>
                       </td>
-                      <td className="py-3 font-black text-emerald-600">${p.amount}</td>
+                      <td className="py-3 font-black text-emerald-600">
+                        <div>{formatCurrency(p.amount)}</div>
+                        {p.refundedAmount > 0 && (
+                          <div className="mt-1 text-[10px] font-medium text-rose-600">
+                            Refunded {formatCurrency(p.refundedAmount)}
+                          </div>
+                        )}
+                      </td>
                       <td className="py-3 text-slate-500">{dayjs(p.paymentDate).format('YYYY-MM-DD HH:mm')}</td>
                       <td className="py-3 text-slate-600">{p.recordedBy?.name || 'Staff'}</td>
+                      <td className="py-3 text-right">
+                        {p.refundableAmount > 0 && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            icon={RotateCcw}
+                            className="!p-2"
+                            aria-label={`Record refund for payment ${p.transactionRef || p._id}`}
+                            title={`Record refund (up to ${formatCurrency(p.refundableAmount)})`}
+                            onClick={() => handleOpenRefund(p)}
+                          />
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -385,7 +409,7 @@ export const BillingPage = () => {
             <div className="flex justify-between items-start border-b border-slate-200 pb-5">
               <div>
                 <h2 className="text-xl font-black text-brand-950 uppercase tracking-tight">
-                  {selectedInvoice.hotelId?.name || 'Innkeeper'}
+                  {selectedInvoice.hotelId?.name || 'Nestnn'}
                 </h2>
                 <p className="text-slate-500 mt-1">{selectedInvoice.hotelId?.address}</p>
                 <p className="text-slate-500">
@@ -451,9 +475,9 @@ export const BillingPage = () => {
                     <tr key={idx}>
                       <td className="py-2.5 px-3 font-medium text-slate-800">{item.description}</td>
                       <td className="py-2.5 px-3 text-center">{item.quantity}</td>
-                      <td className="py-2.5 px-3 text-right font-mono">${item.unitPrice}</td>
+                      <td className="py-2.5 px-3 text-right font-mono">{formatCurrency(item.unitPrice)}</td>
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
-                        ${item.amount}
+                        {formatCurrency(item.amount)}
                       </td>
                     </tr>
                   ))}
@@ -466,35 +490,35 @@ export const BillingPage = () => {
               <div className="w-64 space-y-2 border-t border-slate-200 pt-3">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal:</span>
-                  <span className="font-mono font-semibold">${selectedInvoice.subtotal}</span>
+                  <span className="font-mono font-semibold">{formatCurrency(selectedInvoice.subtotal)}</span>
                 </div>
                 {selectedInvoice.discountAmount > 0 && (
                   <div className="flex justify-between text-emerald-600">
                     <span>Discount:</span>
-                    <span className="font-mono">-${selectedInvoice.discountAmount}</span>
+                    <span className="font-mono">-{formatCurrency(selectedInvoice.discountAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-slate-600">
                   <span>Taxes ({selectedInvoice.taxRatePercent || 10}%):</span>
-                  <span className="font-mono font-semibold">${selectedInvoice.taxAmount}</span>
+                  <span className="font-mono font-semibold">{formatCurrency(selectedInvoice.taxAmount)}</span>
                 </div>
                 <div className="flex justify-between text-sm font-black text-slate-900 border-t border-slate-200 pt-2">
                   <span>Total Due:</span>
-                  <span className="font-mono">${selectedInvoice.totalAmount}</span>
+                  <span className="font-mono">{formatCurrency(selectedInvoice.totalAmount)}</span>
                 </div>
                 <div className="flex justify-between text-emerald-700 font-bold">
                   <span>Payments Received:</span>
-                  <span className="font-mono">-${selectedInvoice.paidAmount}</span>
+                  <span className="font-mono">-{formatCurrency(selectedInvoice.paidAmount)}</span>
                 </div>
                 <div className="flex justify-between text-sm font-black text-rose-700 border-t border-slate-200 pt-2">
                   <span>Balance Due:</span>
-                  <span className="font-mono">${selectedInvoice.balanceAmount}</span>
+                  <span className="font-mono">{formatCurrency(selectedInvoice.balanceAmount)}</span>
                 </div>
               </div>
             </div>
 
             <div className="pt-6 border-t border-slate-200 text-center text-slate-400 text-[10px]">
-              Thank you for choosing {selectedInvoice.hotelId?.name || 'Innkeeper Hotels'}. We hope you enjoy your stay!
+              Thank you for choosing {selectedInvoice.hotelId?.name || 'Nestnn Hotels'}. We hope you enjoy your stay!
             </div>
           </div>
         )}
@@ -514,7 +538,7 @@ export const BillingPage = () => {
         )}
         <form onSubmit={handleRecordPayment} className="space-y-4">
           <Input
-            label="Payment Amount ($)"
+            label={`Payment Amount (${currencySymbol})`}
             type="number"
             step="0.01"
             required
@@ -559,7 +583,63 @@ export const BillingPage = () => {
           </div>
         </form>
       </Modal>
+
+      <Modal
+        isOpen={isRefundModalOpen}
+        onClose={handleCloseRefund}
+        title="Record Refund"
+        subtitle="Record the refund after returning funds to the guest using your usual process."
+      >
+        {refundError && (
+          <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+            {refundError}
+          </div>
+        )}
+        {selectedPayment && (
+          <form onSubmit={handleRecordRefund} className="space-y-4">
+            <div className="rounded-xl border border-orvelle-border bg-orvelle-ivory/60 p-3 text-sm">
+              <p>Original payment: <strong>{formatCurrency(selectedPayment.amount)}</strong></p>
+              <p>Refundable balance: <strong>{formatCurrency(selectedPayment.refundableAmount)}</strong></p>
+              <p className="capitalize">Method: <strong>{selectedPayment.method.replace(/_/g, ' ')}</strong></p>
+            </div>
+            <Input
+              label={`Refund Amount (${currencySymbol})`}
+              type="number"
+              min="0.01"
+              max={selectedPayment.refundableAmount}
+              step="0.01"
+              required
+              value={refundFormData.amount}
+              onChange={(event) => setRefundFormData((current) => ({ ...current, amount: event.target.value }))}
+              placeholder="Enter refund amount"
+              helperText={`Maximum refund: ${formatCurrency(selectedPayment.refundableAmount)}`}
+            />
+            <div>
+              <label htmlFor="refund-reason" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-orvelle-primary">
+                Refund Reason <span className="text-orvelle-error">*</span>
+              </label>
+              <textarea
+                id="refund-reason"
+                required
+                rows={3}
+                maxLength={500}
+                value={refundFormData.reason}
+                onChange={(event) => setRefundFormData((current) => ({ ...current, reason: event.target.value }))}
+                placeholder="Enter the reason for this refund"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-orvelle-text placeholder:text-orvelle-muted focus:border-orvelle-champagne focus:outline-none focus:ring-2 focus:ring-orvelle-champagne/30"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-3">
+              <Button variant="secondary" type="button" onClick={handleCloseRefund}>
+                Cancel
+              </Button>
+              <Button variant="primary" type="submit" loading={processingRefund}>
+                Confirm Refund
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 };
-

@@ -4,6 +4,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { getStaffAccessToken } from '../../auth/staffSession';
+import { useCurrency } from '../../hooks/useCurrency';
 import {
   BarChart3,
   Download,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 
 export const ReportsPage = () => {
+  const { formatCurrency } = useCurrency();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -92,19 +94,19 @@ export const ReportsPage = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Invoiced</span>
-          <p className="text-2xl font-black text-slate-900 mt-2">${data?.totalInvoiced?.toLocaleString()}</p>
+          <p className="text-2xl font-black text-slate-900 mt-2">{formatCurrency(data?.totalInvoiced)}</p>
           <p className="text-xs text-slate-500 mt-1">{data?.invoicesCount} invoices issued</p>
         </Card>
 
         <Card>
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Collected Revenue</span>
-          <p className="text-2xl font-black text-emerald-600 mt-2">${data?.totalCollected?.toLocaleString()}</p>
+          <p className="text-2xl font-black text-emerald-600 mt-2">{formatCurrency(data?.totalCollected)}</p>
           <p className="text-xs text-slate-500 mt-1">{data?.paymentsCount} cleared payments</p>
         </Card>
 
         <Card>
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Outstanding Balance</span>
-          <p className="text-2xl font-black text-rose-600 mt-2">${data?.totalOutstanding?.toLocaleString()}</p>
+          <p className="text-2xl font-black text-rose-600 mt-2">{formatCurrency(data?.totalOutstanding)}</p>
           <p className="text-xs text-slate-500 mt-1">Receivables in collection</p>
         </Card>
       </div>
@@ -117,7 +119,7 @@ export const ReportsPage = () => {
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 capitalize">
                 {method.replace(/_/g, ' ')}
               </span>
-              <p className="text-xl font-black text-slate-900 mt-1">${amount.toLocaleString()}</p>
+              <p className="text-xl font-black text-slate-900 mt-1">{formatCurrency(amount)}</p>
             </div>
           ))}
         </div>

@@ -8,6 +8,7 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../hooks/useCurrency';
 import {
   DoorClosed,
   PlusCircle,
@@ -21,8 +22,25 @@ import {
   Tag
 } from 'lucide-react';
 
+const getRoomDisplayStatus = (room) => (
+  room.roomStatus !== 'out_of_service'
+    && (room.housekeepingStatus !== 'clean' || room.maintenanceStatus === 'out_of_order')
+    ? 'not_ready'
+    : room.roomStatus
+);
+
+const EMPTY_ROOM_TYPE_FORM = {
+  name: '',
+  code: '',
+  basePrice: '',
+  maxOccupancy: '',
+  bedConfiguration: '',
+  amenities: ''
+};
+
 export const RoomsPage = () => {
   const { user } = useAuth();
+  const { currencySymbol, formatCurrency } = useCurrency();
   const canManageRooms = user?.role === 'hotel_admin' || user?.role === 'super_admin';
   const [activeTab, setActiveTab] = useState('rooms'); // 'rooms' or 'categories'
   const [rooms, setRooms] = useState([]);
@@ -41,14 +59,7 @@ export const RoomsPage = () => {
     floor: '1',
     notes: ''
   });
-  const [typeFormData, setTypeFormData] = useState({
-    name: '',
-    code: '',
-    basePrice: '',
-    maxOccupancy: 2,
-    bedConfiguration: '1 King Bed',
-    amenities: 'High-Speed Wi-Fi, Smart TV, Balcony, Minibar'
-  });
+  const [typeFormData, setTypeFormData] = useState(EMPTY_ROOM_TYPE_FORM);
 
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -94,24 +105,18 @@ export const RoomsPage = () => {
     e.preventDefault();
     setError('');
     try {
-      const amenitiesArr = typeFormData.amenities.split(',').map((s) => s.trim());
+      const { maxOccupancy, bedConfiguration, amenities, ...requiredFields } = typeFormData;
       const res = await api.post('/room-types', {
-        ...typeFormData,
-        basePrice: Number(typeFormData.basePrice),
-        amenities: amenitiesArr
+        ...requiredFields,
+        ...(maxOccupancy ? { maxOccupancy: Number(maxOccupancy) } : {}),
+        ...(bedConfiguration.trim() ? { bedConfiguration: bedConfiguration.trim() } : {}),
+        amenities: amenities.split(',').map((item) => item.trim()).filter(Boolean)
       });
       if (res.data.success) {
         setIsAddTypeOpen(false);
         setActiveTab('categories');
         setMessage(`Category ${typeFormData.name} added.`);
-        setTypeFormData({
-          name: '',
-          code: '',
-          basePrice: '',
-          maxOccupancy: 2,
-          bedConfiguration: '1 King Bed',
-          amenities: 'High-Speed Wi-Fi, Smart TV, Balcony, Minibar'
-        });
+        setTypeFormData({ ...EMPTY_ROOM_TYPE_FORM });
         fetchData();
         setTimeout(() => setMessage(''), 3000);
       }
@@ -129,11 +134,23 @@ export const RoomsPage = () => {
     }
   };
 
+  const openAddTypeModal = () => {
+    setTypeFormData({ ...EMPTY_ROOM_TYPE_FORM });
+    setError('');
+    setIsAddTypeOpen(true);
+  };
+
+  const closeAddTypeModal = () => {
+    setIsAddTypeOpen(false);
+    setTypeFormData({ ...EMPTY_ROOM_TYPE_FORM });
+    setError('');
+  };
+
   const filteredRooms = rooms.filter((r) => {
     const matchesSearch =
       r.roomNumber.toLowerCase().includes(search.toLowerCase()) ||
       r.roomTypeId?.name.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || r.roomStatus === statusFilter;
+    const matchesStatus = statusFilter === 'all' || getRoomDisplayStatus(r) === statusFilter;
     const matchesHK = housekeepingFilter === 'all' || r.housekeepingStatus === housekeepingFilter;
     return matchesSearch && matchesStatus && matchesHK;
   });
@@ -151,7 +168,7 @@ export const RoomsPage = () => {
 
         {canManageRooms && (
           <div className="flex items-center gap-2.5">
-            <Button variant="outline" size="sm" icon={Tag} onClick={() => setIsAddTypeOpen(true)}>
+            <Button variant="outline" size="sm" icon={Tag} onClick={openAddTypeModal}>
               New Category
             </Button>
             <Button variant="primary" size="sm" icon={PlusCircle} onClick={() => setIsAddRoomOpen(true)}>
@@ -219,6 +236,7 @@ export const RoomsPage = () => {
                 options={[
                   { value: 'all', label: 'All Room Statuses' },
                   { value: 'available', label: 'Available' },
+                  { value: 'not_ready', label: 'Not Ready' },
                   { value: 'occupied', label: 'Occupied' },
                   { value: 'reserved', label: 'Reserved' },
                   { value: 'out_of_service', label: 'Out of Service' }
@@ -261,7 +279,11 @@ export const RoomsPage = () => {
                       </p>
                     </div>
 
-                    <Badge variant={room.roomStatus}>{room.roomStatus}</Badge>
+                    <Badge
+                      variant={getRoomDisplayStatus(room) === 'not_ready' ? 'out_of_service' : room.roomStatus}
+                    >
+                      {getRoomDisplayStatus(room) === 'not_ready' ? 'Not Ready' : room.roomStatus}
+                    </Badge>
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
@@ -278,7 +300,7 @@ export const RoomsPage = () => {
                         Nightly Rate
                       </p>
                       <span className="font-bold text-slate-900 text-sm">
-                        ${room.roomTypeId?.basePrice || 0}
+                        {formatCurrency(room.roomTypeId?.basePrice || 0)}
                       </span>
                     </div>
                   </div>
@@ -289,12 +311,33 @@ export const RoomsPage = () => {
                     <Select
                       size="sm"
                       className="w-[150px]"
-                      value={room.roomStatus}
+                      value={getRoomDisplayStatus(room)}
                       onChange={(e) => handleStatusChange(room._id, e.target.value)}
                       options={[
-                        { value: 'available', label: 'Available' },
-                        { value: 'occupied', label: 'Occupied' },
-                        { value: 'reserved', label: 'Reserved' },
+                        ...(getRoomDisplayStatus(room) === 'not_ready'
+                          ? [{ value: 'not_ready', label: 'Not Ready', disabled: true }]
+                          : []),
+                        {
+                          value: 'available',
+                          label: 'Available',
+                          disabled: room.housekeepingStatus !== 'clean'
+                            || room.maintenanceStatus === 'out_of_order'
+                            || ['occupied', 'reserved'].includes(room.roomStatus)
+                        },
+                        {
+                          value: 'occupied',
+                          label: 'Occupied',
+                          disabled: room.housekeepingStatus !== 'clean'
+                            || room.maintenanceStatus === 'out_of_order'
+                            || room.roomStatus === 'out_of_service'
+                        },
+                        {
+                          value: 'reserved',
+                          label: 'Reserved',
+                          disabled: room.housekeepingStatus !== 'clean'
+                            || room.maintenanceStatus === 'out_of_order'
+                            || room.roomStatus === 'out_of_service'
+                        },
                         { value: 'out_of_service', label: 'Out of Service' }
                       ]}
                     />
@@ -318,7 +361,7 @@ export const RoomsPage = () => {
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-md text-white text-xs font-bold px-2.5 py-1 rounded-full">
-                    ${type.basePrice} / night
+                    {formatCurrency(type.basePrice)} / night
                   </div>
                 </div>
               )}
@@ -331,7 +374,7 @@ export const RoomsPage = () => {
                 </div>
                 {!type.images?.[0] && (
                   <span className="text-base font-black text-slate-900">
-                    ${type.basePrice}
+                    {formatCurrency(type.basePrice)}
                   </span>
                 )}
               </div>
@@ -398,7 +441,7 @@ export const RoomsPage = () => {
             <option value="">-- Select Room Category --</option>
             {roomTypes.map((t) => (
               <option key={t._id} value={t._id}>
-                {t.name} (${t.basePrice}/night)
+                {t.name} ({formatCurrency(t.basePrice)}/night)
               </option>
             ))}
           </Select>
@@ -424,7 +467,7 @@ export const RoomsPage = () => {
       {/* Add Category Modal */}
       <Modal
         isOpen={isAddTypeOpen}
-        onClose={() => setIsAddTypeOpen(false)}
+        onClose={closeAddTypeModal}
         title="Add Room Category"
         subtitle="Define room specifications and baseline pricing"
       >
@@ -453,7 +496,7 @@ export const RoomsPage = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
-              label="Base Price per Night ($)"
+              label={`Base Price per Night (${currencySymbol})`}
               type="number"
               required
               value={typeFormData.basePrice}
@@ -465,6 +508,7 @@ export const RoomsPage = () => {
               type="number"
               value={typeFormData.maxOccupancy}
               onChange={(e) => setTypeFormData({ ...typeFormData, maxOccupancy: e.target.value })}
+              placeholder="2"
             />
           </div>
 
@@ -479,10 +523,11 @@ export const RoomsPage = () => {
             label="Amenities (comma-separated)"
             value={typeFormData.amenities}
             onChange={(e) => setTypeFormData({ ...typeFormData, amenities: e.target.value })}
+            placeholder="High-Speed Wi-Fi, Smart TV, Balcony, Minibar"
           />
 
           <div className="flex justify-end gap-3 pt-3">
-            <Button variant="secondary" type="button" onClick={() => setIsAddTypeOpen(false)}>
+            <Button variant="secondary" type="button" onClick={closeAddTypeModal}>
               Cancel
             </Button>
             <Button variant="primary" type="submit">

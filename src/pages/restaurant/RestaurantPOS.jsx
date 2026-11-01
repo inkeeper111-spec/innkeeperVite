@@ -8,6 +8,7 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../hooks/useCurrency';
 import {
   UtensilsCrossed,
   Plus,
@@ -20,12 +21,17 @@ import {
   Building2,
   DollarSign,
   Pencil,
-  IndianRupee,
   History
 } from 'lucide-react';
 
+const getTableLabel = (table, nameFallback = '') => {
+  const name = table?.name?.trim() || nameFallback?.trim();
+  return name ? `Table · ${name}` : 'Table';
+};
+
 export const RestaurantPOS = () => {
   const { user } = useAuth();
+  const { currencySymbol, formatCurrency } = useCurrency();
   const canManageTables = user?.role === 'hotel_admin' || user?.role === 'super_admin';
   const [activeView, setActiveView] = useState('pos'); // 'pos' or 'kitchen'
   const [showTableManagement, setShowTableManagement] = useState(false);
@@ -42,6 +48,7 @@ export const RestaurantPOS = () => {
   const [orderType, setOrderType] = useState('dine_in'); // dine_in, room_service, takeaway
   const [selectedTableId, setSelectedTableId] = useState('');
   const [selectedReservationId, setSelectedReservationId] = useState('');
+  const [selectedRoomId, setSelectedRoomId] = useState('');
   const [message, setMessage] = useState('');
   const [isFolioModalOpen, setIsFolioModalOpen] = useState(false);
   const [selectedOrderForFolio, setSelectedOrderForFolio] = useState(null);
@@ -60,7 +67,7 @@ export const RestaurantPOS = () => {
       const [menuRes, ordersRes, resvRes, tablesRes] = await Promise.all([
         api.get('/restaurant/menu'),
         api.get('/restaurant/orders'),
-        api.get('/reservations?status=checked_in'),
+        api.get('/reservations?status=checked_in&limit=100'),
         api.get(`/restaurant/tables${canManageTables ? '?includeInactive=true' : ''}`)
       ]);
 
@@ -125,11 +132,14 @@ export const RestaurantPOS = () => {
 
     try {
       const selectedResv = inHouseReservations.find((r) => r._id === selectedReservationId);
+      const selectedRoom = selectedResv?.rooms?.find((room) => (
+        String(room.roomId?._id || room.roomId) === String(selectedRoomId)
+      ));
 
       const payload = {
         orderType,
         tableId: orderType === 'dine_in' ? selectedTableId : undefined,
-        roomId: selectedResv?.rooms?.[0]?.roomId?._id,
+        roomId: selectedRoom?.roomId?._id || selectedRoom?.roomId,
         reservationId: selectedResv?._id,
         items: cart.map((i) => ({
           menuItemId: i._id,
@@ -148,7 +158,7 @@ export const RestaurantPOS = () => {
             orderId: order._id,
             reservationId: selectedReservationId
           });
-          setMessage(`Order #${order.orderNumber} placed & transferred to Room ${selectedResv?.rooms?.[0]?.roomNumber} Folio!`);
+          setMessage(`Order #${order.orderNumber} placed & transferred to Room ${selectedRoom?.roomNumber} Folio!`);
         } else {
           setMessage(`Order #${order.orderNumber} sent to kitchen!`);
         }
@@ -156,10 +166,11 @@ export const RestaurantPOS = () => {
         clearCart();
         const tableLabel = tables.find((table) => table._id === selectedTableId);
         if (orderType === 'dine_in' && tableLabel) {
+          const displayTableLabel = getTableLabel(tableLabel);
           setMessage(
             tableLabel.activeOrderId
-              ? `Added to Table ${tableLabel.tableNumber}. You can keep adding items.`
-              : `Order #${order.orderNumber} sent to Table ${tableLabel.tableNumber}. You can add another round.`
+              ? `Added to ${displayTableLabel}. You can keep adding items.`
+              : `Order #${order.orderNumber} sent to ${displayTableLabel}. You can add another round.`
           );
         }
         fetchMenuAndOrders();
@@ -301,6 +312,16 @@ export const RestaurantPOS = () => {
     (i) => selectedCat === 'all' || i.categoryId?._id === selectedCat || i.categoryId === selectedCat
   );
   const activeTables = tables.filter((table) => table.isActive);
+  const occupiedRoomOptions = inHouseReservations.flatMap((reservation) => (
+    (reservation.rooms || [])
+      .filter((room) => room.roomId?.roomStatus === 'occupied')
+      .map((room) => ({
+        roomId: String(room.roomId._id),
+        reservationId: reservation._id,
+        roomNumber: room.roomNumber || room.roomId.roomNumber,
+        guestName: reservation.guestName
+      }))
+  ));
   const selectedTable = activeTables.find((table) => table._id === selectedTableId) || null;
   const openTableOrder = selectedTable?.activeOrderId
     ? orders.find((order) => (
@@ -316,10 +337,6 @@ export const RestaurantPOS = () => {
     Number(first.tableId?.tableNumber || first.tableNumber?.match(/\d+/)?.[0] || 0)
     - Number(second.tableId?.tableNumber || second.tableNumber?.match(/\d+/)?.[0] || 0)
   ));
-  const formatRupees = (amount) => new Intl.NumberFormat('en-IN', {
-    style: 'currency', currency: 'INR', minimumFractionDigits: 2
-  }).format(Number(amount || 0));
-
   const ModificationIndicator = ({ order, field, itemIndex }) => {
     const modifications = (order.amountModifications || []).filter((entry) => (
       entry.field === field && (itemIndex === undefined || entry.itemIndex === itemIndex)
@@ -333,7 +350,7 @@ export const RestaurantPOS = () => {
       <span className="relative inline-flex align-middle">
         <button
           type="button"
-          aria-label={`Amount modified from ${formatRupees(latest.originalAmount)} to ${formatRupees(latest.revisedAmount)}`}
+          aria-label={`Amount modified from ${formatCurrency(latest.originalAmount)} to ${formatCurrency(latest.revisedAmount)}`}
           aria-describedby={isOpen ? tooltipId : undefined}
           onMouseEnter={() => setOpenModification(tooltipId)}
           onMouseLeave={() => setOpenModification((current) => current === tooltipId ? null : current)}
@@ -354,7 +371,7 @@ export const RestaurantPOS = () => {
             className="absolute bottom-full left-1/2 z-30 mb-2 w-64 -translate-x-1/2 rounded-lg bg-slate-900 p-3 text-left text-[11px] normal-case leading-relaxed text-white shadow-xl"
           >
             <strong className="block text-xs">Amount modified</strong>
-            <span>{formatRupees(latest.originalAmount)} → {formatRupees(latest.revisedAmount)}</span>
+            <span>{formatCurrency(latest.originalAmount)} → {formatCurrency(latest.revisedAmount)}</span>
             <span className="block">by {latest.editorName || 'Authorized staff'}</span>
             {latest.reason && <span className="mt-1 block text-slate-300">Reason: {latest.reason}</span>}
             {latest.timestamp && <span className="mt-1 block text-slate-400">{new Date(latest.timestamp).toLocaleString()}</span>}
@@ -378,7 +395,13 @@ export const RestaurantPOS = () => {
         {/* View Switcher */}
         <div className="flex bg-slate-200/80 p-1 rounded-xl">
           <button
-            onClick={() => setActiveView('pos')}
+            onClick={() => {
+              setActiveView('pos');
+              setShowTableManagement(false);
+              setOrderType('dine_in');
+              setSelectedReservationId('');
+              setSelectedRoomId('');
+            }}
             className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
               activeView === 'pos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
@@ -451,7 +474,7 @@ export const RestaurantPOS = () => {
               {tables.map((table) => (
                 <div key={table._id} className="rounded-xl border border-slate-200 p-4 flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-bold text-slate-900">Table {table.tableNumber}{table.name ? ` · ${table.name}` : ''}</p>
+                    <p className="font-bold text-slate-900">{getTableLabel(table)}</p>
                     <p className="text-xs text-slate-500">Capacity {table.capacity} · {table.currentStatus}</p>
                   </div>
                   <div className="flex gap-2">
@@ -531,7 +554,7 @@ export const RestaurantPOS = () => {
                         }`}
                       >
                         <span className="block text-lg font-black text-slate-900">
-                          Table {table.tableNumber}{table.name ? ` · ${table.name}` : ''}
+                          {getTableLabel(table)}
                         </span>
                         <span className="mt-1 block text-xs capitalize text-slate-500">
                           {table.currentStatus} · {table.capacity} seats
@@ -553,7 +576,7 @@ export const RestaurantPOS = () => {
               <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
                 <div>
                   <p className="text-sm font-black text-slate-900">
-                    Table {selectedTable.tableNumber}{selectedTable.name ? ` · ${selectedTable.name}` : ''}
+                    {getTableLabel(selectedTable)}
                   </p>
                   <p className="text-xs text-slate-500">
                     {openTableOrder
@@ -622,7 +645,7 @@ export const RestaurantPOS = () => {
 
                     <div className="flex items-center justify-between w-full pt-2 border-t border-slate-100">
                       <span className="font-black text-slate-900 text-sm">
-                        ${item.price}
+                        {formatCurrency(item.price)}
                       </span>
                       <span className="w-6 h-6 rounded-lg bg-brand-50 group-hover:bg-brand-600 text-brand-600 group-hover:text-white flex items-center justify-center transition-colors">
                         <Plus className="w-3.5 h-3.5" />
@@ -652,7 +675,7 @@ export const RestaurantPOS = () => {
               {orderType === 'dine_in' && selectedTable && (
                 <div className="my-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs font-bold text-slate-900">
-                    Assigning to Table {selectedTable.tableNumber}
+                    Assigning to {getTableLabel(selectedTable)}
                   </p>
                   <p className="mt-0.5 text-[11px] capitalize text-slate-500">
                     {selectedTable.currentStatus} · {selectedTable.capacity} seats
@@ -669,13 +692,13 @@ export const RestaurantPOS = () => {
                     {openTableOrder.items.map((item, index) => (
                       <div key={`${openTableOrder._id}-${index}`} className="flex justify-between text-xs text-slate-700">
                         <span>{item.quantity}x {item.name}</span>
-                        <span className="font-mono">${item.amount}</span>
+                        <span className="font-mono">{formatCurrency(item.amount)}</span>
                       </div>
                     ))}
                   </div>
                   <div className="mt-2 flex justify-between border-t border-amber-200 pt-2 text-xs font-bold text-amber-950">
                     <span>Open bill</span>
-                    <span>${openTableOrder.totalAmount}</span>
+                    <span>{formatCurrency(openTableOrder.totalAmount)}</span>
                   </div>
                 </div>
               )}
@@ -684,13 +707,17 @@ export const RestaurantPOS = () => {
                 <div className="mb-3 mt-3">
                   <Select
                     label="Deliver to Room / Guest"
-                    value={selectedReservationId}
-                    onChange={(e) => setSelectedReservationId(e.target.value)}
+                    value={selectedRoomId}
+                    onChange={(e) => {
+                      const roomOption = occupiedRoomOptions.find((room) => room.roomId === e.target.value);
+                      setSelectedRoomId(roomOption?.roomId || '');
+                      setSelectedReservationId(roomOption?.reservationId || '');
+                    }}
                   >
                     <option value="">-- Choose In-House Room --</option>
-                    {inHouseReservations.map((r) => (
-                      <option key={r._id} value={r._id}>
-                        Room {r.rooms?.[0]?.roomNumber} - {r.guestName}
+                    {occupiedRoomOptions.map((room) => (
+                      <option key={room.roomId} value={room.roomId}>
+                        Room {room.roomNumber} - {room.guestName}
                       </option>
                     ))}
                   </Select>
@@ -714,7 +741,7 @@ export const RestaurantPOS = () => {
                     <div key={i._id} className="py-2.5 flex items-center justify-between text-xs">
                       <div className="pr-2 min-w-0">
                         <p className="font-semibold text-slate-800 truncate">{i.name}</p>
-                        <p className="text-[11px] text-slate-400">${i.price} each</p>
+                        <p className="text-[11px] text-slate-400">{formatCurrency(i.price)} each</p>
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -734,7 +761,7 @@ export const RestaurantPOS = () => {
                           </button>
                         </div>
                         <span className="font-bold text-slate-900 w-12 text-right">
-                          ${i.price * i.quantity}
+                          {formatCurrency(i.price * i.quantity)}
                         </span>
                       </div>
                     </div>
@@ -746,15 +773,15 @@ export const RestaurantPOS = () => {
               <div className="border-t border-slate-100 pt-3 space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-500">
                   <span>Subtotal:</span>
-                  <span className="font-mono font-medium">${subtotal}</span>
+                  <span className="font-mono font-medium">{formatCurrency(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-slate-500">
                   <span>F&B Tax (5%):</span>
-                  <span className="font-mono font-medium">${tax}</span>
+                  <span className="font-mono font-medium">{formatCurrency(tax)}</span>
                 </div>
                 <div className="flex justify-between text-sm font-black text-slate-900 border-t border-slate-100 pt-2">
                   <span>Order Total:</span>
-                  <span className="font-mono">${total}</span>
+                  <span className="font-mono">{formatCurrency(total)}</span>
                 </div>
               </div>
 
@@ -767,7 +794,7 @@ export const RestaurantPOS = () => {
                     disabled={cart.length === 0}
                     onClick={() => handlePlaceOrder(false)}
                   >
-                    Transfer ${total} to Room Folio
+                    Transfer {formatCurrency(total)} to Room Folio
                   </Button>
                 ) : (
                   <Button
@@ -777,8 +804,8 @@ export const RestaurantPOS = () => {
                     onClick={() => handlePlaceOrder(true)}
                   >
                     {orderType === 'dine_in' && selectedTable
-                      ? `${openTableOrder ? 'Add to' : 'Send to'} Table ${selectedTable.tableNumber} ($${total})`
-                      : `Send to Kitchen ($${total})`}
+                      ? `${openTableOrder ? 'Add to' : 'Send to'} ${getTableLabel(selectedTable)} (${formatCurrency(total)})`
+                      : `Send to Kitchen (${formatCurrency(total)})`}
                   </Button>
                 )}
                 {orderType === 'dine_in' && selectedTable && (
@@ -811,9 +838,7 @@ export const RestaurantPOS = () => {
                 const editing = billEdit?.orderId === order._id;
                 const canEdit = order.paymentStatus === 'unpaid'
                   && !['cancelled', 'served'].includes(order.status);
-                const tableLabel = order.tableId?.tableNumber
-                  ? `Table ${order.tableId.tableNumber}`
-                  : order.tableNumber || 'Table';
+                const tableLabel = getTableLabel(order.tableId, order.tableNameSnapshot);
 
                 return (
                   <Card key={order._id} className="h-fit border-slate-200">
@@ -821,7 +846,7 @@ export const RestaurantPOS = () => {
                       <div>
                         <h2 className="text-lg font-black text-slate-900">{tableLabel}</h2>
                         <p className="text-[11px] text-slate-500">
-                          {order.tableId?.name || order.tableNameSnapshot || 'Dining'} · Bill #{order.orderNumber}
+                          Bill #{order.orderNumber}
                         </p>
                       </div>
                       <Badge variant={order.status}>{order.status}</Badge>
@@ -843,7 +868,7 @@ export const RestaurantPOS = () => {
                             </div>
                             {editing ? (
                               <div className="flex w-28 items-center rounded border border-slate-200 bg-white px-2">
-                                <IndianRupee className="h-3 w-3 text-slate-400" />
+                                <span className="text-[10px] font-semibold text-slate-400">{currencySymbol}</span>
                                 <input
                                   aria-label={`Unit price for ${item.name} on mobile`}
                                   type="number" min="0" step="0.01"
@@ -855,7 +880,7 @@ export const RestaurantPOS = () => {
                                   className="h-8 min-w-0 flex-1 text-right text-xs outline-none" />
                               </div>
                             ) : (
-                              <span className="shrink-0 font-mono font-semibold text-slate-800">₹{Number(item.amount).toLocaleString()}</span>
+                              <span className="shrink-0 font-mono font-semibold text-slate-800">{formatCurrency(item.amount)}</span>
                             )}
                           </div>
                         ))}
@@ -910,7 +935,7 @@ export const RestaurantPOS = () => {
                                     </div>
                                   ) : (
                                     <span className="inline-flex items-center justify-end font-mono font-medium text-slate-700">
-                                      {formatRupees(item.unitPrice)}
+                                      {formatCurrency(item.unitPrice)}
                                       {unitPriceModifications.length > 0 && (
                                         <ModificationIndicator order={order} field="unitPrice" itemIndex={index} />
                                       )}
@@ -918,7 +943,7 @@ export const RestaurantPOS = () => {
                                   )}
                                 </td>
                                 <td className="py-3 pl-2 text-right font-mono font-bold text-slate-900">
-                                  {formatRupees(lineAmount)}
+                                  {formatCurrency(lineAmount)}
                                 </td>
                               </tr>
                             );
@@ -931,7 +956,7 @@ export const RestaurantPOS = () => {
                       <div className="flex items-center justify-between text-slate-500">
                         <span>Subtotal</span>
                         <span className="font-mono font-medium">
-                          {formatRupees(editing
+                          {formatCurrency(editing
                             ? order.items.reduce((sum, item) => sum + (Number(billEdit.itemUnitPrices[order.items.indexOf(item)]) || 0) * item.quantity, 0)
                             : order.subtotal)}
                         </span>
@@ -939,7 +964,7 @@ export const RestaurantPOS = () => {
                       <div className="flex items-center justify-between text-slate-500">
                         <span>Tax (5%)</span>
                         <span className="font-mono font-medium">
-                          {formatRupees(editing
+                          {formatCurrency(editing
                             ? (order.items.reduce((sum, item) => sum + (Number(billEdit.itemUnitPrices[order.items.indexOf(item)]) || 0) * item.quantity, 0) * 0.05)
                             : order.taxAmount)}
                         </span>
@@ -961,7 +986,7 @@ export const RestaurantPOS = () => {
                           </div>
                         ) : (
                           <span className="inline-flex items-center font-mono font-medium">
-                            −{formatRupees(order.discountAmount)}
+                            −{formatCurrency(order.discountAmount)}
                             {(order.amountModifications || []).some((entry) => entry.field === 'discountAmount') && (
                               <ModificationIndicator order={order} field="discountAmount" />
                             )}
@@ -971,7 +996,7 @@ export const RestaurantPOS = () => {
                       <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-base font-black text-slate-900">
                         <span>Grand total</span>
                         <span className="font-mono">
-                          {formatRupees(editing
+                          {formatCurrency(editing
                             ? (() => {
                                 const previewSubtotal = order.items.reduce((sum, item) => sum + (Number(billEdit.itemUnitPrices[order.items.indexOf(item)]) || 0) * item.quantity, 0);
                                 return Math.max(0, previewSubtotal - (Number(billEdit.discountAmount) || 0) + previewSubtotal * 0.05);
@@ -1022,7 +1047,7 @@ export const RestaurantPOS = () => {
                           {[...order.amountModifications].reverse().map((entry, index) => (
                             <div key={`${entry.timestamp}-${index}`} className="text-[10px] leading-relaxed text-slate-600">
                               <strong>{entry.field === 'unitPrice' ? `Item ${entry.itemIndex + 1} unit price` : 'Discount'}</strong>
-                              : {formatRupees(entry.originalAmount)} → {formatRupees(entry.revisedAmount)} by {entry.editorName || 'Authorized staff'}
+                              : {formatCurrency(entry.originalAmount)} → {formatCurrency(entry.revisedAmount)} by {entry.editorName || 'Authorized staff'}
                               {entry.reason && <span className="block">Reason: {entry.reason}</span>}
                               {entry.timestamp && <span className="block text-slate-400">{new Date(entry.timestamp).toLocaleString()}</span>}
                             </div>
@@ -1072,9 +1097,8 @@ export const RestaurantPOS = () => {
                               {o.orderType === 'dine_in' && (
                                 <span className="mt-1 block rounded bg-amber-100 px-2 py-1 text-sm font-black text-amber-900">
                                   {o.tableId?.tableNumber
-                                    ? `Table ${o.tableId.tableNumber}`
-                                    : o.tableNumber}
-                                  {o.tableNameSnapshot ? ` · ${o.tableNameSnapshot}` : ''}
+                                    ? getTableLabel(o.tableId, o.tableNameSnapshot)
+                                    : getTableLabel(null, o.tableNameSnapshot)}
                                 </span>
                               )}
                               {o.orderType === 'room_service' && o.roomNumber && (
@@ -1090,13 +1114,13 @@ export const RestaurantPOS = () => {
                                 <span className="text-slate-800 font-medium">
                                   {it.quantity}x {it.name}
                                 </span>
-                                <span className="text-slate-400 font-mono">${it.amount}</span>
+                                <span className="text-slate-400 font-mono">{formatCurrency(it.amount)}</span>
                               </div>
                             ))}
                           </div>
 
                           <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span className="font-bold text-slate-900">${o.totalAmount}</span>
+                            <span className="font-bold text-slate-900">{formatCurrency(o.totalAmount)}</span>
 
                             <div className="flex gap-1.5">
                               {o.status === 'pending' && (
@@ -1163,7 +1187,7 @@ export const RestaurantPOS = () => {
           setIsTableModalOpen(false);
           setTableError('');
         }}
-        title={editingTable ? `Edit Table ${editingTable.tableNumber}` : 'Add Restaurant Table'}
+        title={editingTable ? `Edit ${getTableLabel(editingTable)}` : 'Add Restaurant Table'}
         subtitle={editingTable ? 'Update table details and availability.' : 'The next sequential table number will be assigned automatically.'}
       >
         {tableError && (
@@ -1172,11 +1196,6 @@ export const RestaurantPOS = () => {
           </div>
         )}
         <form onSubmit={handleSaveTable} className="space-y-4">
-          {!editingTable && (
-            <p className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">
-              Table {tables.reduce((highest, table) => Math.max(highest, table.tableNumber), 0) + 1}
-            </p>
-          )}
           <Input
             label="Optional Table Name"
             value={tableForm.name}
