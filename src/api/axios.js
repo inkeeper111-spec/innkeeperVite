@@ -84,7 +84,7 @@ api.interceptors.response.use(
     if (!response.config?.skipToast) {
       if (response.data?.success === false) {
         dispatchToast('error', getErrorMessage({ response }), operationKey(response.config, response.status));
-      } else if (MUTATING_METHODS.has(method)) {
+      } else if (MUTATING_METHODS.has(method) && !response.config?.skipSuccessToast) {
         dispatchToast('success', getSuccessMessage(response), operationKey(response.config, response.status));
       }
     }

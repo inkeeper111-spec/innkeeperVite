@@ -14,6 +14,7 @@ const countryOptions = getCountries()
   .sort((a, b) => a.name.localeCompare(b.name));
 
 const preferredCountries = ['US', 'IN', 'GB', 'CA', 'AU', 'DE', 'FR', 'JP'];
+const PHONE_VALIDATION_MESSAGE = 'Digits only; the full number including country code must be 10 to 15 digits.';
 
 const getNumberPlaceholder = (country) => ({
   US: '5555555555',
@@ -74,15 +75,20 @@ export const PhoneInput = ({
   className = ''
 }) => {
   const id = useId();
+  const numberInputRef = useRef(null);
   const countryPickerRef = useRef(null);
   const searchInputRef = useRef(null);
   const [country, setCountry] = useState(() => resolveCountry(defaultCountry));
   const [isCountryPickerOpen, setIsCountryPickerOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
+  const [touched, setTouched] = useState(false);
   const normalizedDefault = useMemo(() => resolveCountry(defaultCountry), [defaultCountry]);
   const callingCode = getCountryCallingCode(country);
   const parsedValue = parsePhoneValue(value, country);
   const nationalNumber = parsedValue.nationalNumber.slice(0, 15 - callingCode.length);
+  const hasValue = Boolean(value);
+  const phoneIsValid = hasValue ? isValidPhoneNumber(value) : !required;
+  const showValidationError = !phoneIsValid && (touched || hasValue);
   const filteredCountries = useMemo(() => {
     const query = countrySearch.trim().toLowerCase();
     const matches = countryOptions.filter(({ country: code, name, callingCode: dialCode }) =>
@@ -108,6 +114,12 @@ export const PhoneInput = ({
   }, [value]);
 
   useEffect(() => {
+    numberInputRef.current?.setCustomValidity(
+      phoneIsValid ? '' : PHONE_VALIDATION_MESSAGE
+    );
+  }, [phoneIsValid]);
+
+  useEffect(() => {
     if (isCountryPickerOpen) searchInputRef.current?.focus();
   }, [isCountryPickerOpen]);
 
@@ -123,12 +135,26 @@ export const PhoneInput = ({
     const nextCountry = event.target.value;
     const nextCode = getCountryCallingCode(nextCountry);
     setCountry(nextCountry);
-    onChange(formatPhoneNumber(nextCountry, nationalNumber.slice(0, 15 - nextCode.length)));
+    const nextValue = formatPhoneNumber(nextCountry, nationalNumber.slice(0, 15 - nextCode.length));
+    numberInputRef.current?.setCustomValidity(
+      nextValue && isValidPhoneNumber(nextValue)
+        ? ''
+        : required && !nextValue
+          ? PHONE_VALIDATION_MESSAGE
+          : ''
+    );
+    onChange(nextValue);
   };
 
   const handleNumberChange = (event) => {
     const nextNumber = event.target.value.replace(/\D/g, '').slice(0, 15 - callingCode.length);
-    onChange(formatPhoneNumber(country, nextNumber));
+    const nextValue = formatPhoneNumber(country, nextNumber);
+    numberInputRef.current?.setCustomValidity(
+      isValidPhoneNumber(nextValue) || (!required && !nextValue)
+        ? ''
+        : PHONE_VALIDATION_MESSAGE
+    );
+    onChange(nextValue);
   };
 
   return (
@@ -191,24 +217,36 @@ export const PhoneInput = ({
           )}
         </div>
         <input
+          ref={numberInputRef}
           id={`${id}-number`}
           type="tel"
           inputMode="numeric"
           autoComplete="tel-national"
           required={required}
-          minLength={Math.max(1, 10 - callingCode.length)}
           maxLength={15 - callingCode.length}
-          pattern={`[0-9]{${Math.max(1, 10 - callingCode.length)},${15 - callingCode.length}}`}
-          title="Enter digits only; the full number including the country calling code must contain 10 to 15 digits."
+          aria-invalid={showValidationError}
+          aria-describedby={showValidationError ? `${id}-error` : undefined}
+          onBlur={() => setTouched(true)}
+          onInvalid={() => setTouched(true)}
           value={nationalNumber}
           onChange={handleNumberChange}
           placeholder={getNumberPlaceholder(country)}
-          className="h-8 min-w-0 flex-1 rounded-r-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-orvelle-text placeholder:text-orvelle-muted focus:z-10 focus:outline-none focus:ring-2 focus:ring-orvelle-champagne/30 focus:border-orvelle-champagne transition-all"
+          className={`h-8 min-w-0 flex-1 rounded-r-lg border bg-white px-3 py-1.5 text-xs text-orvelle-text placeholder:text-orvelle-muted focus:z-10 focus:outline-none focus:ring-2 focus:ring-orvelle-champagne/30 transition-all ${
+            showValidationError
+              ? 'border-rose-500 focus:border-rose-500'
+              : 'border-slate-300 focus:border-orvelle-champagne'
+          }`}
         />
       </div>
-      <p className="mt-1.5 text-xs text-slate-500">
-        {helperText || 'Digits only; the full number including country code must be 10 to 15 digits.'}
-      </p>
+      {(showValidationError || helperText) && (
+        <p
+          id={showValidationError ? `${id}-error` : undefined}
+          role={showValidationError ? 'alert' : undefined}
+          className={`mt-1.5 text-xs ${showValidationError ? 'text-rose-600' : 'text-slate-500'}`}
+        >
+          {showValidationError ? PHONE_VALIDATION_MESSAGE : helperText}
+        </p>
+      )}
     </div>
   );
 };

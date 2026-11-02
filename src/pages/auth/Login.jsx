@@ -27,7 +27,21 @@ export const Login = () => {
 
     try {
       const data = await login(email, password);
-      navigate(data.data.homePath || (data.data.user.role === 'super_admin' ? '/superadmin' : '/dashboard'));
+      const { user, hotel } = data.data;
+      const registrationStatus = hotel?.registrationStatus
+        || (hotel?.status === 'pending_approval' ? 'pending' : hotel?.status === 'rejected' ? 'rejected' : 'approved');
+      const paidThrough = hotel?.currentSubscription?.endDate
+        && new Date(hotel.currentSubscription.endDate) > new Date();
+      const hasActiveSubscription = hotel?.currentSubscription
+        && ['active', 'canceled', 'trialing'].includes(hotel.currentSubscription.status)
+        && paidThrough;
+      const target = user.role === 'super_admin' ? '/superadmin'
+        : registrationStatus === 'pending' ? '/registration/pending'
+          : registrationStatus === 'rejected' ? '/registration/rejected'
+            : registrationStatus === 'suspended' || hotel?.status === 'suspended' ? '/registration/suspended'
+              : !hasActiveSubscription ? '/subscription'
+                : data.data.homePath || '/dashboard';
+      navigate(target);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Login failed.');
     } finally {

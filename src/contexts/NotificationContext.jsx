@@ -46,7 +46,7 @@ export const NotificationProvider = ({ children }) => {
   const markAsRead = async (id) => {
     const generation = requestGeneration.current;
     try {
-      await api.patch(`/notifications/${id}/read`);
+      await api.patch(`/notifications/${id}/read`, {}, { skipSuccessToast: true });
       if (requestGeneration.current !== generation) return;
       const wasUnread = notifications.some((notification) => notification._id === id && !notification.isRead);
       setNotifications((previous) => previous.map((notification) => (
@@ -62,7 +62,7 @@ export const NotificationProvider = ({ children }) => {
   const markAllAsRead = async () => {
     const generation = requestGeneration.current;
     try {
-      await api.patch('/notifications/read-all');
+      await api.patch('/notifications/read-all', {}, { skipSuccessToast: true });
       if (requestGeneration.current !== generation) return;
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true, readAt: new Date().toISOString() })));
       setUnreadCount(0);

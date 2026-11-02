@@ -23,8 +23,10 @@ export const SettingsPage = () => {
     taxNumber: '',
     currency: 'USD',
     timezone: 'UTC',
-    checkInTime: '15:00',
+    checkInTime: '12:00',
     checkOutTime: '11:00',
+    allowCustomCheckInTime: false,
+    allowCustomCheckOutTime: false,
     cancellationPolicy: '',
     invoicePrefix: 'INV',
     attendanceLocation: { latitude: '', longitude: '' }
@@ -56,8 +58,10 @@ export const SettingsPage = () => {
         taxNumber: hotel.taxNumber || '',
         currency: hotel.currency || 'USD',
         timezone: hotel.timezone || 'UTC',
-        checkInTime: hotel.checkInTime || '15:00',
+        checkInTime: hotel.checkInTime || '12:00',
         checkOutTime: hotel.checkOutTime || '11:00',
+        allowCustomCheckInTime: Boolean(hotel.allowCustomCheckInTime),
+        allowCustomCheckOutTime: Boolean(hotel.allowCustomCheckOutTime),
         cancellationPolicy: hotel.cancellationPolicy || '',
         invoicePrefix: hotel.invoicePrefix || 'INV',
         attendanceLocation: {
@@ -256,6 +260,32 @@ export const SettingsPage = () => {
                 value={hotelForm.checkOutTime}
                 onChange={(e) => setHotelForm({ ...hotelForm, checkOutTime: e.target.value })}
               />
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-sm font-bold text-slate-800">Reservation Time Overrides</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Custom times can only be chosen by a Hotel Admin when the corresponding permission is enabled.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="flex items-start gap-2 text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={hotelForm.allowCustomCheckInTime}
+                    onChange={(e) => setHotelForm({ ...hotelForm, allowCustomCheckInTime: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 accent-amber-700"
+                  />
+                  Allow custom check-in time
+                </label>
+                <label className="flex items-start gap-2 text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={hotelForm.allowCustomCheckOutTime}
+                    onChange={(e) => setHotelForm({ ...hotelForm, allowCustomCheckOutTime: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 accent-amber-700"
+                  />
+                  Allow custom check-out time
+                </label>
+              </div>
             </div>
 
             <Input

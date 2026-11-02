@@ -24,6 +24,24 @@ describe('PhoneInput', () => {
     expect(screen.getByRole('button', { name: /country calling code/i })).toHaveTextContent('IN +91');
     expect(screen.getByRole('textbox', { name: /Phone/ })).toHaveAttribute('type', 'tel');
     expect(screen.getByRole('textbox', { name: /Phone/ })).toHaveAttribute('placeholder', '9876543210');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows only the red validation message after an invalid number is blurred', () => {
+    render(<ControlledPhoneInput label="Phone" defaultCountry="India" required />);
+    const input = screen.getByRole('textbox', { name: /Phone/ });
+
+    fireEvent.change(input, { target: { value: '123' } });
+    fireEvent.blur(input);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Digits only; the full number including country code must be 10 to 15 digits.'
+    );
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+
+    fireEvent.change(input, { target: { value: '9876543210' } });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(input).toHaveAttribute('aria-invalid', 'false');
   });
 
   it('searches countries in a short list without a scrollable menu', () => {

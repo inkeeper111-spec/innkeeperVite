@@ -21,9 +21,9 @@ export const Register = () => {
     address: '',
     city: '',
     state: '',
-    country: 'United States',
+    country: 'India',
     postalCode: '',
-    currency: 'USD'
+    currency: 'INR'
   });
 
   const [loading, setLoading] = useState(false);
@@ -64,7 +64,7 @@ export const Register = () => {
           </div>
           <h2 className="text-2xl font-black text-white tracking-tight">Register Your Hotel</h2>
           <p className="text-sm text-slate-400 mt-1">
-            Start your 14-day free trial. Complete multi-tenant SaaS hotel management.
+            Submit your hotel details for Super Admin approval.
           </p>
         </div>
 
@@ -79,8 +79,7 @@ export const Register = () => {
             <div className="mb-5 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-medium flex items-center gap-3">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
               <span>
-                Application submitted for approval. This is the first administrator account for your hotel.
-                Product Admin approval is required before you can access the hotel workspace.
+                Your hotel registration has been submitted successfully. Our Super Admin team will review your application. You will receive a notification once your registration is approved.
               </span>
             </div>
           )}
@@ -105,10 +104,10 @@ export const Register = () => {
                 value={formData.currency}
                 onChange={handleChange}
                 options={[
+                  { label: 'INR (₹)', value: 'INR' },
                   { label: 'USD ($)', value: 'USD' },
                   { label: 'EUR (€)', value: 'EUR' },
                   { label: 'GBP (£)', value: 'GBP' },
-                  { label: 'INR (₹)', value: 'INR' },
                   { label: 'CAD ($)', value: 'CAD' },
                   { label: 'AUD ($)', value: 'AUD' }
                 ]}
@@ -205,7 +204,7 @@ export const Register = () => {
             </div>
 
             <Button type="submit" loading={loading} className="w-full mt-4" size="lg">
-              Complete Registration & Start Trial
+              Submit Hotel Registration
             </Button>
           </form>
 

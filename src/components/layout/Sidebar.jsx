@@ -84,6 +84,12 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
       roles: ['hotel_admin', 'receptionist', 'super_admin']
     },
     {
+      to: '/subscription',
+      label: 'Subscription',
+      icon: Receipt,
+      roles: ['hotel_admin']
+    },
+    {
       to: '/housekeeping',
       label: 'Housekeeping',
       icon: Sparkles,
@@ -171,7 +177,29 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
 
   const filteredItems = navItems.filter((item) => {
     if (!user) return false;
-    return item.roles.includes(user.role);
+    if (!item.roles.includes(user.role)) return false;
+    if (user.role === 'super_admin') return true;
+    const moduleByPath = {
+      '/frontdesk': 'frontdesk',
+      '/reservations': 'reservations',
+      '/rooms': 'rooms',
+      '/guests': 'guests',
+      '/housekeeping': 'housekeeping',
+      '/restaurant': 'restaurant',
+      '/menu-management': 'restaurant',
+      '/inventory': 'inventory',
+      '/maintenance': 'maintenance',
+      '/expenses': 'expenses',
+      '/staff': 'staff',
+      '/leave-management': 'staff',
+      '/my-leave': 'staff',
+      '/attendance': 'staff',
+      '/reports': 'reports',
+      '/ai-assistant': 'ai_assistant'
+    };
+    const moduleKey = moduleByPath[item.to];
+    const selectedModules = hotel?.currentSubscription?.selectedModules || [];
+    return !moduleKey || !selectedModules.length || selectedModules.includes(moduleKey);
   });
 
   return (

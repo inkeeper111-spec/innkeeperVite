@@ -23,6 +23,8 @@ export const SuperAdminDashboard = () => {
   const [hotels,       setHotels]       = useState([]);
   const [plans,        setPlans]        = useState([]);
   const [subscriptions,setSubscriptions]= useState([]);
+  const [moduleConfigs, setModuleConfigs] = useState([]);
+  const [minimumMonthlyAmount, setMinimumMonthlyAmount] = useState('999');
   const [auditLogs,    setAuditLogs]    = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [activeTab,    setActiveTab]    = useState('approvals');
@@ -37,6 +39,9 @@ export const SuperAdminDashboard = () => {
 
   // Create Plan modal
   const [isNewPlanOpen, setIsNewPlanOpen] = useState(false);
+  const [detailsHotel, setDetailsHotel] = useState(null);
+  const [moduleSubscribers, setModuleSubscribers] = useState(null);
+  const [subscriptionFilter, setSubscriptionFilter] = useState('all');
   const [newPlanForm,   setNewPlanForm]   = useState({
     name: '', code: '', description: '', monthlyPrice: '',
     annualPrice: '', maxRooms: 50, maxUsers: 10,
@@ -50,18 +55,23 @@ export const SuperAdminDashboard = () => {
   const fetchAll = async () => {
     try {
       setLoading(true);
-      const [statsRes, hotelsRes, plansRes, subsRes, logsRes] = await Promise.all([
+      const [statsRes, hotelsRes, plansRes, subsRes, logsRes, modulesRes] = await Promise.all([
         api.get('/superadmin/stats'),
         api.get('/superadmin/hotels?limit=50'),
         api.get('/superadmin/plans'),
-        api.get('/superadmin/subscriptions?limit=20'),
-        api.get('/superadmin/audit-logs?limit=30')
+        api.get('/superadmin/subscriptions?limit=100'),
+        api.get('/superadmin/audit-logs?limit=30'),
+        api.get('/superadmin/modules')
       ]);
       if (statsRes.data.success)        setStats(statsRes.data.data);
       if (hotelsRes.data.success)       setHotels(hotelsRes.data.data.hotels);
       if (plansRes.data.success)        setPlans(plansRes.data.data);
       if (subsRes.data.success)         setSubscriptions(subsRes.data.data.subscriptions);
       if (logsRes.data.success)         setAuditLogs(logsRes.data.data.logs);
+      if (modulesRes.data.success) {
+        setModuleConfigs(modulesRes.data.data.modules);
+        setMinimumMonthlyAmount(String(modulesRes.data.data.settings.minimumMonthlyAmount));
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -126,12 +136,71 @@ export const SuperAdminDashboard = () => {
     }
   };
 
+  const saveMinimumAmount = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.put('/superadmin/subscription-settings', { minimumMonthlyAmount: Number(minimumMonthlyAmount) });
+      setMinimumMonthlyAmount(String(res.data.data.minimumMonthlyAmount));
+      showMessage(res.data.message);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Unable to update the minimum subscription amount.');
+    }
+  };
+
+  const saveModule = async (module) => {
+    try {
+      const res = await api.put(`/superadmin/modules/${module.key}`, {
+        name: module.name,
+        description: module.description,
+        monthlyPrice: Number(module.monthlyPrice),
+        annualPrice: Number(module.annualPrice),
+        enabled: module.enabled
+      });
+      setModuleConfigs((previous) => previous.map((item) => item.key === module.key ? res.data.data : item));
+      showMessage(`${module.name} pricing updated.`);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Unable to update module configuration.');
+    }
+  };
+
+  const viewModuleSubscribers = async (module) => {
+    try {
+      const res = await api.get(`/superadmin/modules/${module.key}/hotels`);
+      setModuleSubscribers(res.data.data);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Unable to load hotels subscribed to this module.');
+    }
+  };
+
+  const manageSubscription = async (subscription, action) => {
+    const days = action === 'extend' ? prompt('Number of days to extend:', '30') : undefined;
+    if (action === 'extend' && (!days || !Number.isInteger(Number(days)))) return;
+    try {
+      const res = await api.patch(`/superadmin/subscriptions/${subscription._id}/manage`, { action, days: Number(days) });
+      showMessage(res.data.message);
+      fetchAll();
+    } catch (err) {
+      alert(err.response?.data?.message || `Unable to ${action} subscription.`);
+    }
+  };
+
   const filteredHotels = hotels.filter((h) => {
     const matchSearch = h.name.toLowerCase().includes(search.toLowerCase()) ||
       h.email.toLowerCase().includes(search.toLowerCase()) ||
       (h.city || '').toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === 'all' || h.status === statusFilter;
     return matchSearch && matchStatus;
+  });
+  const filteredSubscriptions = subscriptions.filter((subscription) => {
+    const endDate = subscription.endDate ? dayjs(subscription.endDate) : null;
+    const isExpired = subscription.status === 'expired' || (endDate && endDate.isBefore(dayjs()));
+    if (subscriptionFilter === 'expired') return isExpired;
+    if (subscriptionFilter === 'upcoming') {
+      return !isExpired && endDate && endDate.isBefore(dayjs().add(30, 'day'));
+    }
+    if (subscriptionFilter === 'active') return subscription.status === 'active' && !isExpired;
+    if (subscriptionFilter === 'suspended') return subscription.status === 'suspended';
+    return true;
   });
 
   if (loading) return <LoadingSpinner text="Connecting to Platform Control Layer..." />;
@@ -232,6 +301,7 @@ export const SuperAdminDashboard = () => {
       <div className="flex flex-wrap border-b border-slate-200 gap-0">
         {[
           { key: 'approvals',     label: `Hotels (${hotels.length})`,          icon: Building2 },
+          { key: 'modules',       label: `Modules (${moduleConfigs.length})`,   icon: CreditCard },
           { key: 'plans',         label: `Plans (${plans.length})`,             icon: CreditCard },
           { key: 'subscriptions', label: `Subscriptions (${subscriptions.length})`, icon: TrendingUp },
           { key: 'audit',         label: 'Audit Trail',                         icon: FileText }
@@ -281,8 +351,8 @@ export const SuperAdminDashboard = () => {
                   <th className="pb-3">Hotel</th>
                   <th className="pb-3">Owner</th>
                   <th className="pb-3">Location</th>
-                  <th className="pb-3">Plan</th>
-                  <th className="pb-3">Status</th>
+                  <th className="pb-3">Registered</th>
+                  <th className="pb-3">Registration</th>
                   <th className="pb-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -299,33 +369,24 @@ export const SuperAdminDashboard = () => {
                     </td>
                     <td className="py-3.5 text-slate-600">{h.city}, {h.country}</td>
                     <td className="py-3.5">
-                      <button onClick={() => handleOpenPlanAssign(h)}
-                        className="text-[11px] font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200 hover:bg-brand-100 transition-colors flex items-center gap-1">
-                        {h.currentPlanId?.name || 'No Plan'}
-                        <Pencil className="w-2.5 h-2.5" />
-                      </button>
+                      {dayjs(h.createdAt).format('MMM D, YYYY')}
                     </td>
-                    <td className="py-3.5"><Badge variant={h.status}>{h.status}</Badge></td>
+                    <td className="py-3.5"><Badge variant={h.registrationStatus || h.status}>{(h.registrationStatus || h.status).replace(/_/g, ' ')}</Badge></td>
                     <td className="py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                        {h.status !== 'active' && (
-                          <Button size="sm" variant="success" icon={CheckCircle}
-                            onClick={() => handleUpdateStatus(h._id, 'active')}>
-                            Approve
-                          </Button>
-                        )}
-                        {h.status === 'active' && (
+                        <Button size="sm" variant="outline" onClick={() => setDetailsHotel(h)}>View Details</Button>
+                        {(h.registrationStatus || h.status) === 'pending' || h.status === 'pending_approval' ? (
+                          <>
+                            <Button size="sm" variant="success" icon={CheckCircle}
+                              onClick={() => handleUpdateStatus(h._id, 'active')}>Approve</Button>
+                            <Button size="sm" variant="outline" onClick={() => handleReject(h)}>Reject</Button>
+                          </>
+                        ) : (h.registrationStatus || h.status) === 'approved' && h.status !== 'suspended' ? (
                           <Button size="sm" variant="danger" icon={XCircle}
-                            onClick={() => handleUpdateStatus(h._id, 'suspended')}>
-                            Suspend
-                          </Button>
-                        )}
-                        {h.status !== 'rejected' && h.status !== 'active' && (
-                          <Button size="sm" variant="outline"
-                            onClick={() => handleReject(h)}>
-                            Reject
-                          </Button>
-                        )}
+                            onClick={() => handleUpdateStatus(h._id, 'suspended')}>Suspend</Button>
+                        ) : h.status === 'suspended' ? (
+                          <Button size="sm" variant="success" onClick={() => handleUpdateStatus(h._id, 'active')}>Reactivate</Button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -334,6 +395,50 @@ export const SuperAdminDashboard = () => {
             </table>
           </div>
         </Card>
+      )}
+
+      {/* ── MODULE PRICING TAB ── */}
+      {activeTab === 'modules' && (
+        <div className="space-y-5">
+          <Card>
+            <form onSubmit={saveMinimumAmount} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="max-w-xs flex-1">
+                <Input label="Minimum monthly subscription (₹)" type="number" min="999" step="0.01"
+                  value={minimumMonthlyAmount}
+                  onChange={(event) => setMinimumMonthlyAmount(event.target.value)} />
+              </div>
+              <Button type="submit">Save minimum</Button>
+              <p className="text-xs text-slate-500">The final amount is the greater of this minimum (×12 for annual) and the selected module total.</p>
+            </form>
+          </Card>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {moduleConfigs.map((module) => (
+              <Card key={module.key} className="space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-slate-900">{module.name}</h3>
+                    <p className="text-xs text-slate-500">{module.key}</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                    <input type="checkbox" checked={module.enabled}
+                      onChange={(event) => setModuleConfigs((previous) => previous.map((item) => item.key === module.key ? { ...item, enabled: event.target.checked } : item))} />
+                    Available for subscription
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Input label="Monthly price (₹)" type="number" min="0" step="0.01" value={module.monthlyPrice}
+                    onChange={(event) => setModuleConfigs((previous) => previous.map((item) => item.key === module.key ? { ...item, monthlyPrice: event.target.value } : item))} />
+                  <Input label="Annual price (₹)" type="number" min="0" step="0.01" value={module.annualPrice}
+                    onChange={(event) => setModuleConfigs((previous) => previous.map((item) => item.key === module.key ? { ...item, annualPrice: event.target.value } : item))} />
+                </div>
+                <div className="flex flex-wrap justify-between gap-2">
+                  <Button size="sm" variant="outline" onClick={() => viewModuleSubscribers(module)}>Hotels subscribed</Button>
+                  <Button size="sm" onClick={() => saveModule(module)}>Save module</Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* ── PLANS TAB ── */}
@@ -373,29 +478,66 @@ export const SuperAdminDashboard = () => {
       {/* ── SUBSCRIPTIONS TAB ── */}
       {activeTab === 'subscriptions' && (
         <Card>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-500">Review payment history, upcoming renewals, and expired hotel subscriptions.</p>
+            <Select size="sm" className="max-w-xs" value={subscriptionFilter}
+              onChange={(event) => setSubscriptionFilter(event.target.value)}
+              options={[
+                { value: 'all', label: 'All subscriptions' },
+                { value: 'active', label: 'Active' },
+                { value: 'upcoming', label: 'Upcoming renewals (30 days)' },
+                { value: 'expired', label: 'Expired' },
+                { value: 'suspended', label: 'Suspended' }
+              ]} />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Hotel</th>
-                  <th className="pb-3">Plan</th>
+                  <th className="pb-3">Subscribed Modules</th>
                   <th className="pb-3">Cycle</th>
                   <th className="pb-3">Amount</th>
-                  <th className="pb-3">Expires</th>
-                  <th className="pb-3 text-right">Status</th>
+                  <th className="pb-3">Next renewal</th>
+                  <th className="pb-3">Payments</th>
+                  <th className="pb-3">Status</th>
+                  <th className="pb-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {subscriptions.map((s) => (
+                {filteredSubscriptions.map((s) => (
                   <tr key={s._id} className="hover:bg-slate-50">
                     <td className="py-3 font-bold text-slate-900">{s.hotelId?.name || '—'}</td>
-                    <td className="py-3 font-semibold text-brand-700">{s.planId?.name || '—'}</td>
+                    <td className="max-w-xs py-3 text-slate-600">{s.selectedModules?.length ? s.selectedModules.join(', ') : s.planId?.name || 'Legacy plan'}</td>
                     <td className="py-3 capitalize text-slate-600">{s.billingCycle}</td>
-                    <td className="py-3 font-black text-slate-900">${s.amount}</td>
+                    <td className="py-3 font-black text-slate-900">{s.currency === 'INR' ? '₹' : '$'}{s.finalAmount || s.amount}</td>
                     <td className="py-3 text-slate-500">
-                      {s.endDate ? dayjs(s.endDate).format('MMM D, YYYY') : '—'}
+                      {(s.nextBillingDate || s.endDate) ? dayjs(s.nextBillingDate || s.endDate).format('MMM D, YYYY') : '—'}
                     </td>
-                    <td className="py-3 text-right"><Badge variant={s.status}>{s.status}</Badge></td>
+                    <td className="py-3 text-slate-600">
+                      {(s.paymentHistory || []).map((payment) => (
+                        <div key={payment._id}>{payment.status} · {dayjs(payment.paymentDate || payment.createdAt).format('MMM D')}</div>
+                      ))}
+                      {!s.paymentHistory?.length && (s.razorpayPaymentId || '—')}
+                    </td>
+                    <td className="py-3">
+                      <Badge variant={(s.status === 'active' || s.status === 'canceled')
+                        && s.endDate && dayjs(s.endDate).isBefore(dayjs()) ? 'expired' : s.status}>
+                        {(s.status === 'active' || s.status === 'canceled')
+                        && s.endDate && dayjs(s.endDate).isBefore(dayjs()) ? 'expired' : s.status}
+                      </Badge>
+                    </td>
+                    <td className="py-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        {s.status === 'suspended' || s.status === 'pending' || s.status === 'past_due'
+                          || ((s.status === 'active' || s.status === 'canceled') && s.endDate && dayjs(s.endDate).isBefore(dayjs())) ? (
+                          <Button size="sm" variant="success" onClick={() => manageSubscription(s, 'activate')}>Activate</Button>
+                        ) : s.status === 'active' ? (
+                          <Button size="sm" variant="danger" onClick={() => manageSubscription(s, 'suspend')}>Suspend</Button>
+                        ) : null}
+                        <Button size="sm" variant="outline" onClick={() => manageSubscription(s, 'extend')}>Extend</Button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -504,6 +646,39 @@ export const SuperAdminDashboard = () => {
             <Button variant="primary" type="submit">Create Plan</Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal isOpen={Boolean(detailsHotel)} onClose={() => setDetailsHotel(null)}
+        title={detailsHotel?.name || 'Hotel registration details'}
+        subtitle="Hotel application and administrator information">
+        {detailsHotel && (
+          <div className="grid gap-4 text-sm sm:grid-cols-2">
+            <div><p className="text-xs text-slate-500">Hotel email</p><p className="font-semibold">{detailsHotel.email}</p></div>
+            <div><p className="text-xs text-slate-500">Hotel phone</p><p className="font-semibold">{detailsHotel.phone}</p></div>
+            <div><p className="text-xs text-slate-500">Hotel administrator</p><p className="font-semibold">{detailsHotel.ownerId?.name || '—'}</p></div>
+            <div><p className="text-xs text-slate-500">Administrator email</p><p className="font-semibold">{detailsHotel.ownerId?.email || detailsHotel.email}</p></div>
+            <div><p className="text-xs text-slate-500">Address</p><p className="font-semibold">{detailsHotel.address}, {detailsHotel.city}, {detailsHotel.state} {detailsHotel.postalCode}, {detailsHotel.country}</p></div>
+            <div><p className="text-xs text-slate-500">Registration date / status</p><p className="font-semibold">{dayjs(detailsHotel.createdAt).format('MMM D, YYYY')} · {detailsHotel.registrationStatus || detailsHotel.status}</p></div>
+            {detailsHotel.rejectionReason && <div className="sm:col-span-2"><p className="text-xs text-slate-500">Rejection reason</p><p className="font-semibold text-rose-700">{detailsHotel.rejectionReason}</p></div>}
+          </div>
+        )}
+      </Modal>
+
+      <Modal isOpen={Boolean(moduleSubscribers)} onClose={() => setModuleSubscribers(null)}
+        title={`${moduleSubscribers?.module?.name || 'Module'} subscribers`}
+        subtitle="Hotels with current access to this module">
+        <div className="space-y-3">
+          {!moduleSubscribers?.subscriptions?.length && <p className="text-sm text-slate-500">No current subscribers.</p>}
+          {moduleSubscribers?.subscriptions?.map((item) => (
+            <div key={item._id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 p-3 text-sm">
+              <div>
+                <p className="font-semibold text-slate-900">{item.hotelId?.name || 'Hotel'}</p>
+                <p className="text-xs text-slate-500">{item.hotelId?.email} · {item.hotelId?.phone}</p>
+              </div>
+              <p className="text-xs text-slate-500">Expires {dayjs(item.endDate).format('MMM D, YYYY')}</p>
+            </div>
+          ))}
+        </div>
       </Modal>
     </div>
   );

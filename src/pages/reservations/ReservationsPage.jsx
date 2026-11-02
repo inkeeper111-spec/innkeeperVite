@@ -11,7 +11,14 @@ import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { ReservationCheckoutModal } from '../../components/ui/ReservationCheckoutModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../hooks/useCurrency';
-import { getScheduledCheckoutAt, isReservationOverstaying } from '../../utils/reservationTime';
+import {
+  formatHotelDateTime,
+  formatHotelTime,
+  getExpectedCheckInAt,
+  getExpectedCheckOutAt,
+  isReservationOverstaying
+} from '../../utils/reservationTime';
+import { addDateDays, getHotelLocalDate, validateReservationDateRange } from '../../utils/hotelDate';
 import {
   CalendarDays,
   PlusCircle,
@@ -26,24 +33,34 @@ import {
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
-const createInitialBookingForm = () => ({
-  guestName: '',
-  guestEmail: '',
-  guestPhone: '',
-  checkInDate: dayjs().format('YYYY-MM-DD'),
-  checkOutDate: dayjs().add(2, 'day').format('YYYY-MM-DD'),
-  roomId: '',
-  roomTypeId: '',
-  adultsCount: 2,
-  childrenCount: 0,
-  specialRequests: ''
-});
+const createInitialBookingForm = (hotel) => {
+  const timeZone = hotel?.timezone;
+  const checkInDate = getHotelLocalDate(timeZone);
+  return {
+    guestName: '',
+    guestEmail: '',
+    guestPhone: '',
+    checkInDate,
+    checkOutDate: addDateDays(checkInDate, 2),
+    checkInTime: hotel?.checkInTime || '12:00',
+    checkOutTime: hotel?.checkOutTime || '11:00',
+    roomId: '',
+    roomTypeId: '',
+    adultsCount: 2,
+    childrenCount: 0,
+    specialRequests: ''
+  };
+};
 
 export const ReservationsPage = () => {
   const { user, hotel } = useAuth();
   const { formatCurrency } = useCurrency();
   const canReviewRequests = ['hotel_admin', 'receptionist'].includes(user?.role);
   const canCheckout = ['hotel_admin', 'receptionist'].includes(user?.role);
+  const canOverrideCheckInTime = ['hotel_admin', 'super_admin'].includes(user?.role)
+    && Boolean(hotel?.allowCustomCheckInTime);
+  const canOverrideCheckOutTime = ['hotel_admin', 'super_admin'].includes(user?.role)
+    && Boolean(hotel?.allowCustomCheckOutTime);
   const [reservations, setReservations] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 0, limit: 20 });
   const reservationRequestVersion = useRef(0);
@@ -71,18 +88,27 @@ export const ReservationsPage = () => {
   const [cancellingReservation, setCancellingReservation] = useState(false);
   const [checkoutBooking, setCheckoutBooking] = useState(null);
   const [availabilityRefreshToken, setAvailabilityRefreshToken] = useState(0);
+  const availabilityRequestVersion = useRef(0);
 
   // New Booking Form
-  const [bookingForm, setBookingForm] = useState(createInitialBookingForm);
+  const [bookingForm, setBookingForm] = useState(() => createInitialBookingForm(hotel));
 
   const [availableRooms, setAvailableRooms] = useState([]);
   const [searchingRooms, setSearchingRooms] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [availabilityError, setAvailabilityError] = useState('');
+  const hotelToday = getHotelLocalDate(hotel?.timezone);
+  const dateValidationMessage = validateReservationDateRange(
+    bookingForm.checkInDate,
+    bookingForm.checkOutDate,
+    hotel?.timezone
+  );
 
   const closeNewReservationModal = () => {
-    setBookingForm(createInitialBookingForm());
+    setBookingForm(createInitialBookingForm(hotel));
     setAvailableRooms([]);
+    setAvailabilityError('');
     setError('');
     setIsNewBookingOpen(false);
   };
@@ -204,29 +230,50 @@ export const ReservationsPage = () => {
   // Check availability when dates change in modal
   useEffect(() => {
     const checkAvailability = async () => {
-      if (!isNewBookingOpen) return;
-      if (bookingForm.checkInDate && bookingForm.checkOutDate) {
-        try {
-          setSearchingRooms(true);
-          const res = await api.get(
-            `/rooms/availability?checkInDate=${bookingForm.checkInDate}&checkOutDate=${bookingForm.checkOutDate}`
-          );
-          if (res.data.success) {
-            setAvailableRooms(res.data.data.rooms);
-          }
-        } catch (e) {
-          console.error(e);
-        } finally {
-          setSearchingRooms(false);
+      const requestVersion = ++availabilityRequestVersion.current;
+      if (!isNewBookingOpen || dateValidationMessage) {
+        setAvailableRooms([]);
+        setSearchingRooms(false);
+        return;
+      }
+
+      setAvailableRooms([]);
+      setAvailabilityError('');
+      setSearchingRooms(true);
+      try {
+        const params = new URLSearchParams({
+          checkInDate: bookingForm.checkInDate,
+          checkOutDate: bookingForm.checkOutDate
+        });
+        const res = await api.get(`/rooms/availability?${params}`);
+        if (requestVersion === availabilityRequestVersion.current && res.data.success) {
+          setAvailableRooms(res.data.data.rooms);
         }
+      } catch (availabilityRequestError) {
+        if (requestVersion === availabilityRequestVersion.current) {
+          setAvailabilityError(
+            availabilityRequestError.response?.data?.message
+              || 'Room availability could not be checked. Please try again.'
+          );
+        }
+      } finally {
+        if (requestVersion === availabilityRequestVersion.current) setSearchingRooms(false);
       }
     };
     checkAvailability();
-  }, [bookingForm.checkInDate, bookingForm.checkOutDate, isNewBookingOpen, availabilityRefreshToken]);
+  }, [bookingForm.checkInDate, bookingForm.checkOutDate, dateValidationMessage, isNewBookingOpen, availabilityRefreshToken]);
 
   const handleCreateReservation = async (e) => {
     e.preventDefault();
     setError('');
+    if (dateValidationMessage) {
+      setError(dateValidationMessage);
+      return;
+    }
+    if (searchingRooms || !bookingForm.roomId || !availableRooms.some((room) => room._id === bookingForm.roomId)) {
+      setError('Please select an available room for the selected dates.');
+      return;
+    }
     try {
       const res = await api.post('/reservations', {
         guestData: {
@@ -236,6 +283,12 @@ export const ReservationsPage = () => {
         },
         checkInDate: bookingForm.checkInDate,
         checkOutDate: bookingForm.checkOutDate,
+        ...(canOverrideCheckInTime && bookingForm.checkInTime !== (hotel?.checkInTime || '12:00')
+          ? { checkInTime: bookingForm.checkInTime }
+          : {}),
+        ...(canOverrideCheckOutTime && bookingForm.checkOutTime !== (hotel?.checkOutTime || '11:00')
+          ? { checkOutTime: bookingForm.checkOutTime }
+          : {}),
         rooms: [{
           roomId: bookingForm.roomId,
           roomTypeId: bookingForm.roomTypeId
@@ -327,8 +380,9 @@ export const ReservationsPage = () => {
           variant="primary"
           icon={PlusCircle}
           onClick={() => {
-            setBookingForm(createInitialBookingForm());
+            setBookingForm(createInitialBookingForm(hotel));
             setAvailableRooms([]);
+            setAvailabilityError('');
             setIsNewBookingOpen(true);
             setError('');
           }}
@@ -498,8 +552,8 @@ export const ReservationsPage = () => {
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Reference</th>
                   <th className="pb-3">Guest Information</th>
-                  <th className="pb-3">Stay Dates</th>
-                  <th className="pb-3">Checkout Date &amp; Time</th>
+                  <th className="pb-3">Expected Check-In</th>
+                  <th className="pb-3">Expected Check-Out</th>
                   <th className="pb-3">Rooms</th>
                   <th className="pb-3">Status</th>
                   <th className="pb-3">Payment</th>
@@ -518,16 +572,21 @@ export const ReservationsPage = () => {
                       <p className="text-[11px] text-slate-400">{resv.guestPhone}</p>
                     </td>
                     <td className="py-3.5 text-slate-600">
-                      <div>{dayjs(resv.checkInDate).format('MMM D')} - {dayjs(resv.checkOutDate).format('MMM D, YYYY')}</div>
+                      <div>{formatHotelDateTime(getExpectedCheckInAt(resv, hotel), hotel?.timezone)}</div>
+                      {resv.checkedInAt && (
+                        <div className="mt-1 text-[10px] font-medium text-emerald-700">
+                          Actual: {formatHotelDateTime(resv.checkedInAt, hotel?.timezone)}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3.5 text-slate-600">
                       {resv.checkedOutAt ? (
                         <span className="font-medium text-emerald-700">
-                          {dayjs(resv.checkedOutAt).format('MMM D, YYYY h:mm A')}
+                          Actual: {formatHotelDateTime(resv.checkedOutAt, hotel?.timezone)}
                         </span>
                       ) : (
                         <span className="text-slate-500">
-                          Scheduled: {getScheduledCheckoutAt(resv.checkOutDate, hotel?.checkOutTime).format('MMM D, YYYY h:mm A')}
+                          {formatHotelDateTime(getExpectedCheckOutAt(resv, hotel), hotel?.timezone)}
                         </span>
                       )}
                     </td>
@@ -540,7 +599,7 @@ export const ReservationsPage = () => {
                     </td>
                     <td className="py-3.5">
                       <Badge variant={resv.status}>{resv.status}</Badge>
-                      {isReservationOverstaying(resv, hotel?.checkOutTime, currentTime) && (
+                      {isReservationOverstaying(resv, hotel?.checkOutTime, currentTime, hotel?.timezone) && (
                         <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800" role="status">
                           <AlertTriangle className="h-3 w-3" />
                           Overstaying — checkout required
@@ -641,9 +700,9 @@ export const ReservationsPage = () => {
         title="Create New Reservation"
         subtitle="Reserve room dates with automatic conflict validation"
       >
-        {error && (
+        {(error || dateValidationMessage || availabilityError) && (
           <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl">
-            {error}
+            {error || dateValidationMessage || availabilityError}
           </div>
         )}
         <form onSubmit={handleCreateReservation} className="space-y-4">
@@ -678,21 +737,94 @@ export const ReservationsPage = () => {
               type="date"
               required
               value={bookingForm.checkInDate}
-              onChange={(e) => setBookingForm({ ...bookingForm, checkInDate: e.target.value })}
+              min={hotelToday}
+              onChange={(e) => {
+                const nextCheckInDate = e.target.value;
+                if (!nextCheckInDate) {
+                  setError('Please select a valid reservation date.');
+                  setBookingForm((current) => ({ ...current, checkInDate: '', roomId: '', roomTypeId: '' }));
+                  return;
+                }
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(nextCheckInDate)) {
+                  setError('Please select a valid reservation date.');
+                  return;
+                }
+                if (nextCheckInDate < hotelToday) {
+                  setError('Past dates are not allowed.');
+                  return;
+                }
+                setError('');
+                setBookingForm((current) => ({
+                  ...current,
+                  checkInDate: nextCheckInDate,
+                  checkOutDate: current.checkOutDate > nextCheckInDate
+                    ? current.checkOutDate
+                    : addDateDays(nextCheckInDate, 1),
+                  roomId: '',
+                  roomTypeId: ''
+                }));
+              }}
             />
             <Input
               label="Check-Out Date"
               type="date"
               required
               value={bookingForm.checkOutDate}
-              onChange={(e) => setBookingForm({ ...bookingForm, checkOutDate: e.target.value })}
+              min={bookingForm.checkInDate ? addDateDays(bookingForm.checkInDate, 1) : addDateDays(hotelToday, 1)}
+              onChange={(e) => {
+                const nextCheckOutDate = e.target.value;
+                if (!nextCheckOutDate || !/^\d{4}-\d{2}-\d{2}$/.test(nextCheckOutDate)) {
+                  setError('Please select a valid reservation date.');
+                  return;
+                }
+                if (nextCheckOutDate < hotelToday) {
+                  setError('Past dates are not allowed.');
+                  return;
+                }
+                if (nextCheckOutDate <= bookingForm.checkInDate) {
+                  setError('Check-out date must be later than check-in date.');
+                  return;
+                }
+                setError('');
+                setBookingForm((current) => ({ ...current, checkOutDate: nextCheckOutDate, roomId: '', roomTypeId: '' }));
+              }}
             />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Standard Check-In</p>
+              {canOverrideCheckInTime ? (
+                <Input
+                  type="time"
+                  aria-label="Custom check-in time"
+                  value={bookingForm.checkInTime}
+                  onChange={(e) => setBookingForm((current) => ({ ...current, checkInTime: e.target.value }))}
+                />
+              ) : (
+                <p className="mt-1 text-sm font-semibold text-slate-800">{formatHotelTime(hotel?.checkInTime || '12:00')}</p>
+              )}
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Standard Check-Out</p>
+              {canOverrideCheckOutTime ? (
+                <Input
+                  type="time"
+                  aria-label="Custom check-out time"
+                  value={bookingForm.checkOutTime}
+                  onChange={(e) => setBookingForm((current) => ({ ...current, checkOutTime: e.target.value }))}
+                />
+              ) : (
+                <p className="mt-1 text-sm font-semibold text-slate-800">{formatHotelTime(hotel?.checkOutTime || '11:00')}</p>
+              )}
+            </div>
           </div>
 
           <Select
             label="Allocated Room (Conflict-Free)"
             required
             value={bookingForm.roomId}
+            disabled={searchingRooms || Boolean(dateValidationMessage) || availableRooms.length === 0}
             onChange={(e) => {
               const selected = availableRooms.find((r) => r._id === e.target.value);
               if (selected) {
@@ -725,7 +857,11 @@ export const ReservationsPage = () => {
             <Button variant="secondary" type="button" onClick={closeNewReservationModal}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit" disabled={!bookingForm.roomId}>
+            <Button
+              variant="primary"
+              type="submit"
+              disabled={!bookingForm.roomId || searchingRooms || Boolean(dateValidationMessage) || !availableRooms.some((room) => room._id === bookingForm.roomId)}
+            >
               Confirm Reservation
             </Button>
           </div>
@@ -853,14 +989,32 @@ export const ReservationsPage = () => {
                   {dayjs(selectedBooking.checkInDate).format('YYYY-MM-DD')} to {dayjs(selectedBooking.checkOutDate).format('YYYY-MM-DD')}
                 </span>
               </div>
+              <div className="flex justify-between gap-4">
+                <span className="shrink-0 text-slate-500">Expected Check-In:</span>
+                <span className="text-right font-semibold text-slate-700">
+                  {formatHotelDateTime(getExpectedCheckInAt(selectedBooking, hotel), hotel?.timezone)}
+                </span>
+              </div>
+              {selectedBooking.checkedInAt && (
+                <div className="flex justify-between gap-4">
+                  <span className="shrink-0 text-slate-500">Actual Check-In:</span>
+                  <span className="text-right font-semibold text-emerald-700">
+                    {formatHotelDateTime(selectedBooking.checkedInAt, hotel?.timezone)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between gap-4">
+                <span className="shrink-0 text-slate-500">Expected Check-Out:</span>
+                <span className="text-right font-semibold text-slate-700">
+                  {formatHotelDateTime(getExpectedCheckOutAt(selectedBooking, hotel), hotel?.timezone)}
+                </span>
+              </div>
               {selectedBooking.status === 'checked_out' && (
                 <>
                   <div className="flex justify-between gap-4">
                     <span className="shrink-0 text-slate-500">Actual Checkout:</span>
                     <span className="text-right font-semibold text-emerald-700">
-                      {selectedBooking.checkedOutAt
-                        ? dayjs(selectedBooking.checkedOutAt).format('MMM D, YYYY h:mm A')
-                        : 'Not recorded'}
+                      {formatHotelDateTime(selectedBooking.checkedOutAt, hotel?.timezone)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-4">

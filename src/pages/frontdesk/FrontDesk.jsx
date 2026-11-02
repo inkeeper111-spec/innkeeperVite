@@ -11,7 +11,14 @@ import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { ReservationCheckoutModal } from '../../components/ui/ReservationCheckoutModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../hooks/useCurrency';
-import { isReservationOverstaying } from '../../utils/reservationTime';
+import {
+  formatHotelDateTime,
+  formatHotelTime,
+  getExpectedCheckInAt,
+  getExpectedCheckOutAt,
+  isReservationOverstaying
+} from '../../utils/reservationTime';
+import { addDateDays, getHotelLocalDate } from '../../utils/hotelDate';
 import {
   UserCheck,
   UserMinus,
@@ -40,6 +47,9 @@ export const FrontDesk = () => {
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState('');
   const [checkoutBooking, setCheckoutBooking] = useState(null);
+  const [checkInBooking, setCheckInBooking] = useState(null);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [checkInError, setCheckInError] = useState('');
 
   // Walk-in Express Booking Modal
   const [isWalkInOpen, setIsWalkInOpen] = useState(false);
@@ -63,8 +73,8 @@ export const FrontDesk = () => {
       }
 
       // Also get available rooms for walk-in
-      const today = dayjs().format('YYYY-MM-DD');
-      const tomorrow = dayjs().add(1, 'day').format('YYYY-MM-DD');
+      const today = getHotelLocalDate(hotel?.timezone);
+      const tomorrow = addDateDays(today, 1);
       const roomsRes = await api.get(`/rooms/availability?checkInDate=${today}&checkOutDate=${tomorrow}`);
       if (roomsRes.data.success) {
         setAvailableRooms(roomsRes.data.data.rooms);
@@ -78,23 +88,29 @@ export const FrontDesk = () => {
 
   useEffect(() => {
     fetchFrontDeskData();
-  }, []);
+  }, [hotel?.timezone]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(dayjs()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const handleCheckIn = async (reservationId) => {
+  const handleCheckIn = async () => {
+    if (!checkInBooking) return;
+    setCheckingIn(true);
+    setCheckInError('');
     try {
-      const res = await api.post(`/reservations/${reservationId}/check-in`);
+      const res = await api.post(`/reservations/${checkInBooking._id}/check-in`, { confirmed: true });
       if (res.data.success) {
+        setCheckInBooking(null);
         setMessage('Guest checked in successfully! Room marked occupied.');
-        fetchFrontDeskData();
+        await fetchFrontDeskData();
         setTimeout(() => setMessage(''), 4000);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Check-in failed');
+      setCheckInError(err.response?.data?.message || 'Check-in failed. Please try again.');
+    } finally {
+      setCheckingIn(false);
     }
   };
 
@@ -113,8 +129,8 @@ export const FrontDesk = () => {
   const handleWalkInSubmit = async (e) => {
     e.preventDefault();
     try {
-      const today = dayjs().startOf('day').toDate();
-      const end = dayjs().add(Number(walkInData.nights), 'day').startOf('day').toDate();
+      const today = getHotelLocalDate(hotel?.timezone);
+      const end = addDateDays(today, Number(walkInData.nights));
 
       const res = await api.post('/reservations', {
         guestData: {
@@ -133,12 +149,10 @@ export const FrontDesk = () => {
       });
 
       if (res.data.success) {
-        // Automatically check-in the walk-in guest immediately!
-        await api.post(`/reservations/${res.data.data.reservation._id}/check-in`);
         setIsWalkInOpen(false);
-        setMessage('Walk-in guest registered and checked in successfully!');
-        fetchFrontDeskData();
-        setTimeout(() => setMessage(''), 4000);
+        setCheckInError('');
+        setCheckInBooking(res.data.data.reservation);
+        await fetchFrontDeskData();
       }
     } catch (err) {
       alert(err.response?.data?.message || 'Walk-in booking failed');
@@ -146,16 +160,16 @@ export const FrontDesk = () => {
   };
 
   // Filter lists based on operational status
-  const todayStr = dayjs().format('YYYY-MM-DD');
+  const todayStr = getHotelLocalDate(hotel?.timezone);
 
   const arrivals = reservations.filter(
-    (r) => ['approved', 'confirmed'].includes(r.status) && dayjs(r.checkInDate).format('YYYY-MM-DD') <= todayStr
+    (r) => ['approved', 'confirmed'].includes(r.status) && String(r.checkInDate).slice(0, 10) <= todayStr
   );
 
   const inHouse = reservations.filter((r) => r.status === 'checked_in');
 
   const departures = reservations.filter(
-    (r) => isReservationOverstaying(r, hotel?.checkOutTime, currentTime)
+    (r) => isReservationOverstaying(r, hotel?.checkOutTime, currentTime, hotel?.timezone)
   );
 
   const displayedList =
@@ -287,7 +301,7 @@ export const FrontDesk = () => {
                     <td className="py-3">
                       <p className="font-semibold text-slate-800">{r.guestName}</p>
                       <p className="text-[11px] text-slate-400">{r.guestPhone}</p>
-                      {isReservationOverstaying(r, hotel?.checkOutTime, currentTime) && (
+                      {isReservationOverstaying(r, hotel?.checkOutTime, currentTime, hotel?.timezone) && (
                         <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700" role="status">
                           <AlertTriangle className="h-3 w-3" />
                           Overstaying — manual checkout required
@@ -302,7 +316,23 @@ export const FrontDesk = () => {
                       ))}
                     </td>
                     <td className="py-3 text-slate-600">
-                      {dayjs(r.checkInDate).format('MMM D')} - {dayjs(r.checkOutDate).format('MMM D, YYYY')}
+                      <div>{String(r.checkInDate).slice(0, 10)} - {String(r.checkOutDate).slice(0, 10)}</div>
+                      <div className="mt-1 text-[10px] text-slate-500">
+                        Check-in: {formatHotelDateTime(getExpectedCheckInAt(r, hotel), hotel?.timezone)}
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        Check-out: {formatHotelDateTime(getExpectedCheckOutAt(r, hotel), hotel?.timezone)}
+                      </div>
+                      {r.checkedInAt && (
+                        <div className="text-[10px] text-emerald-700">
+                          Actual check-in: {formatHotelDateTime(r.checkedInAt, hotel?.timezone)}
+                        </div>
+                      )}
+                      {r.checkedOutAt && (
+                        <div className="text-[10px] text-emerald-700">
+                          Actual check-out: {formatHotelDateTime(r.checkedOutAt, hotel?.timezone)}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3">
                       <span className={`font-bold ${r.balanceAmount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
@@ -316,7 +346,10 @@ export const FrontDesk = () => {
                           size="sm"
                           variant="success"
                           icon={UserCheck}
-                          onClick={() => handleCheckIn(r._id)}
+                          onClick={() => {
+                            setCheckInError('');
+                            setCheckInBooking(r);
+                          }}
                         >
                           Check In
                         </Button>
@@ -349,6 +382,41 @@ export const FrontDesk = () => {
         onClose={() => setCheckoutBooking(null)}
         onComplete={handleCheckOut}
       />
+
+      <Modal
+        isOpen={Boolean(checkInBooking)}
+        onClose={() => {
+          if (!checkingIn) {
+            setCheckInBooking(null);
+            setCheckInError('');
+          }
+        }}
+        title="Confirm Guest Check-In"
+        subtitle="Check-in is recorded only after you confirm the guest's arrival."
+      >
+        {checkInBooking && (
+          <div className="space-y-4">
+            {checkInError && (
+              <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                {checkInError}
+              </p>
+            )}
+            <dl className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2">
+              <div><dt className="text-xs text-slate-500">Guest</dt><dd className="mt-1 font-semibold text-slate-800">{checkInBooking.guestName}</dd></div>
+              <div><dt className="text-xs text-slate-500">Room</dt><dd className="mt-1 font-semibold text-slate-800">{checkInBooking.rooms?.map((room) => room.roomNumber).join(', ') || 'Not assigned'}</dd></div>
+              <div className="sm:col-span-2"><dt className="text-xs text-slate-500">Expected Check-In</dt><dd className="mt-1 font-semibold text-slate-800">{formatHotelDateTime(getExpectedCheckInAt(checkInBooking, hotel), hotel?.timezone)}</dd></div>
+              <div className="sm:col-span-2"><dt className="text-xs text-slate-500">Expected Check-Out</dt><dd className="mt-1 font-semibold text-slate-800">{formatHotelDateTime(getExpectedCheckOutAt(checkInBooking, hotel), hotel?.timezone)}</dd></div>
+            </dl>
+            <p className="text-sm text-slate-600">
+              Standard hotel times: check-in {formatHotelTime(hotel?.checkInTime || '12:00')} · check-out {formatHotelTime(hotel?.checkOutTime || '11:00')}.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" disabled={checkingIn} onClick={() => setCheckInBooking(null)}>Cancel</Button>
+              <Button type="button" loading={checkingIn} onClick={handleCheckIn}>Confirm Check-In</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal
         isOpen={isWalkInOpen}
@@ -431,7 +499,7 @@ export const FrontDesk = () => {
               Cancel
             </Button>
             <Button variant="primary" type="submit" disabled={!walkInData.roomId}>
-              Confirm & Check-In
+              Create & Continue to Check-In
             </Button>
           </div>
         </form>

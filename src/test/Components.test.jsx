@@ -200,6 +200,13 @@ describe('DatePicker component', () => {
     await userEvent.click(screen.getByRole('button', { name: /29 October 2026|October 29, 2026/i }));
     expect(handleChange).toHaveBeenCalledWith({ target: { name: undefined, value: '2026-10-29' } });
   });
+
+  it('disables dates before the configured minimum', async () => {
+    render(<DatePicker label="Check-In Date" value="2026-10-28" min="2026-10-28" />);
+    await userEvent.click(screen.getByRole('button', { name: /check-in date/i }));
+    expect(screen.getByRole('button', { name: /Tuesday, October 27, 2026/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Wednesday, October 28, 2026/i })).toBeEnabled();
+  });
 });
 
 // ─── Modal ────────────────────────────────────────────────────────────────────

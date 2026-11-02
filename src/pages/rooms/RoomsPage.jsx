@@ -19,15 +19,18 @@ import {
   Sparkles,
   BedDouble,
   DollarSign,
-  Tag
+  Tag,
+  Pencil
 } from 'lucide-react';
 
-const getRoomDisplayStatus = (room) => (
-  room.roomStatus !== 'out_of_service'
+const getRoomDisplayStatus = (room) => {
+  if (room.roomStatus === 'cleaning') return 'cleaning';
+  if (
+    room.roomStatus !== 'out_of_service'
     && (room.housekeepingStatus !== 'clean' || room.maintenanceStatus === 'out_of_order')
-    ? 'not_ready'
-    : room.roomStatus
-);
+  ) return 'cleaning';
+  return room.roomStatus;
+};
 
 const EMPTY_ROOM_TYPE_FORM = {
   name: '',
@@ -53,6 +56,7 @@ export const RoomsPage = () => {
   // Modals
   const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
   const [isAddTypeOpen, setIsAddTypeOpen] = useState(false);
+  const [editingRoomType, setEditingRoomType] = useState(null);
   const [roomFormData, setRoomFormData] = useState({
     roomNumber: '',
     roomTypeId: '',
@@ -125,6 +129,31 @@ export const RoomsPage = () => {
     }
   };
 
+  const handleUpdateType = async (e) => {
+    e.preventDefault();
+    if (!editingRoomType) return;
+    setError('');
+    try {
+      const { maxOccupancy, bedConfiguration, amenities, ...requiredFields } = typeFormData;
+      const res = await api.put(`/room-types/${editingRoomType._id}`, {
+        ...requiredFields,
+        ...(maxOccupancy ? { maxOccupancy: Number(maxOccupancy) } : {}),
+        ...(bedConfiguration.trim() ? { bedConfiguration: bedConfiguration.trim() } : {}),
+        amenities: amenities.split(',').map((item) => item.trim()).filter(Boolean)
+      });
+      if (res.data.success) {
+        setIsAddTypeOpen(false);
+        setEditingRoomType(null);
+        setTypeFormData({ ...EMPTY_ROOM_TYPE_FORM });
+        setMessage(`Category ${res.data.data.name} updated.`);
+        await fetchData();
+        setTimeout(() => setMessage(''), 3000);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update room category.');
+    }
+  };
+
   const handleStatusChange = async (roomId, newStatus) => {
     try {
       await api.patch(`/rooms/${roomId}/status`, { roomStatus: newStatus });
@@ -135,13 +164,29 @@ export const RoomsPage = () => {
   };
 
   const openAddTypeModal = () => {
+    setEditingRoomType(null);
     setTypeFormData({ ...EMPTY_ROOM_TYPE_FORM });
+    setError('');
+    setIsAddTypeOpen(true);
+  };
+
+  const openEditTypeModal = (type) => {
+    setEditingRoomType(type);
+    setTypeFormData({
+      name: type.name || '',
+      code: type.code || '',
+      basePrice: String(type.basePrice ?? ''),
+      maxOccupancy: String(type.maxOccupancy ?? ''),
+      bedConfiguration: type.bedConfiguration || '',
+      amenities: (type.amenities || []).join(', ')
+    });
     setError('');
     setIsAddTypeOpen(true);
   };
 
   const closeAddTypeModal = () => {
     setIsAddTypeOpen(false);
+    setEditingRoomType(null);
     setTypeFormData({ ...EMPTY_ROOM_TYPE_FORM });
     setError('');
   };
@@ -280,9 +325,9 @@ export const RoomsPage = () => {
                     </div>
 
                     <Badge
-                      variant={getRoomDisplayStatus(room) === 'not_ready' ? 'out_of_service' : room.roomStatus}
+                      variant={getRoomDisplayStatus(room)}
                     >
-                      {getRoomDisplayStatus(room) === 'not_ready' ? 'Not Ready' : room.roomStatus}
+                      {getRoomDisplayStatus(room) === 'cleaning' ? 'Cleaning' : room.roomStatus}
                     </Badge>
                   </div>
 
@@ -314,8 +359,8 @@ export const RoomsPage = () => {
                       value={getRoomDisplayStatus(room)}
                       onChange={(e) => handleStatusChange(room._id, e.target.value)}
                       options={[
-                        ...(getRoomDisplayStatus(room) === 'not_ready'
-                          ? [{ value: 'not_ready', label: 'Not Ready', disabled: true }]
+                        ...(getRoomDisplayStatus(room) === 'cleaning'
+                          ? [{ value: 'cleaning', label: 'Cleaning', disabled: true }]
                           : []),
                         {
                           value: 'available',
@@ -397,6 +442,19 @@ export const RoomsPage = () => {
                   </span>
                 ))}
               </div>
+              {canManageRooms && (
+                <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    icon={Pencil}
+                    onClick={() => openEditTypeModal(type)}
+                  >
+                    Edit Category
+                  </Button>
+                </div>
+              )}
             </Card>
           ))}
         </div>
@@ -468,15 +526,15 @@ export const RoomsPage = () => {
       <Modal
         isOpen={isAddTypeOpen}
         onClose={closeAddTypeModal}
-        title="Add Room Category"
-        subtitle="Define room specifications and baseline pricing"
+        title={editingRoomType ? 'Edit Room Category' : 'Add Room Category'}
+        subtitle={editingRoomType ? 'Update category specifications and nightly pricing' : 'Define room specifications and baseline pricing'}
       >
         {error && (
           <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl">
             {error}
           </div>
         )}
-        <form onSubmit={handleCreateType} className="space-y-4">
+        <form onSubmit={editingRoomType ? handleUpdateType : handleCreateType} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Category Name"
@@ -520,6 +578,13 @@ export const RoomsPage = () => {
           />
 
           <Input
+            label="Description"
+            value={typeFormData.description || ''}
+            onChange={(e) => setTypeFormData({ ...typeFormData, description: e.target.value })}
+            placeholder="Describe this room category"
+          />
+
+          <Input
             label="Amenities (comma-separated)"
             value={typeFormData.amenities}
             onChange={(e) => setTypeFormData({ ...typeFormData, amenities: e.target.value })}
@@ -531,7 +596,7 @@ export const RoomsPage = () => {
               Cancel
             </Button>
             <Button variant="primary" type="submit">
-              Save Category
+              {editingRoomType ? 'Save Changes' : 'Save Category'}
             </Button>
           </div>
         </form>
