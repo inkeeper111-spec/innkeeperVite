@@ -17,7 +17,7 @@ export const SubscriptionPaymentStatus = ({ success }) => {
         <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${success ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
           {success ? <CheckCircle2 className="h-8 w-8" /> : <XCircle className="h-8 w-8" />}
         </div>
-        <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Innkeeper subscription checkout</p>
+        <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Nestnn subscription checkout</p>
         <h1 className="mt-2 text-2xl font-black text-slate-900">
           {success ? 'Payment verified' : 'Payment could not be completed'}
         </h1>

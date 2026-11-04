@@ -36,7 +36,7 @@ export const RegistrationStatus = ({ status }) => {
         <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 ${content.color}`}>
           <Icon className="h-7 w-7" />
         </div>
-        <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Innkeeper · hotel onboarding</p>
+        <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Nestnn · hotel onboarding</p>
         <h1 className="mt-2 text-2xl font-black text-slate-900">{content.title}</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">{content.description}</p>
         {status === 'rejected' && hotel?.rejectionReason && (

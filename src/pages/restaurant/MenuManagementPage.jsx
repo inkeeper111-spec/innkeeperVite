@@ -53,7 +53,7 @@ export const MenuManagementPage = () => {
   const fetchMenu = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/restaurant/menu');
+      const res = await api.get('/restaurant/menu?includeUnavailable=true');
       if (res.data.success) {
         setCategories(res.data.data.categories);
         setItems(res.data.data.items);
@@ -159,11 +159,16 @@ export const MenuManagementPage = () => {
 
   const handleToggleAvailability = async (item) => {
     try {
-      await api.patch(`/restaurant/items/${item._id}`, { isAvailable: !item.isAvailable });
-      showSuccess(`"${item.name}" marked as ${!item.isAvailable ? 'available' : 'unavailable'}.`);
-      fetchMenu();
+      const { data } = await api.patch(`/restaurant/items/${item._id}`, {
+        isAvailable: !item.isAvailable
+      });
+      if (data.success) {
+        setItems((current) => current.map((menuItem) => (
+          menuItem._id === item._id ? data.data : menuItem
+        )));
+      }
     } catch (err) {
-      alert('Failed to toggle availability.');
+      setError(err.response?.data?.message || 'Failed to update menu item availability.');
     }
   };
 
@@ -211,6 +216,11 @@ export const MenuManagementPage = () => {
         <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
           {message}
+        </div>
+      )}
+      {error && !isCatModalOpen && !isItemModalOpen && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-semibold text-rose-700">
+          {error}
         </div>
       )}
 
@@ -302,7 +312,11 @@ export const MenuManagementPage = () => {
                         <td className="py-3.5 text-slate-500">{item.preparationTime ?? 15} min</td>
                         <td className="py-3.5">
                           <button
+                            type="button"
+                            aria-label={`${item.isAvailable ? 'Mark unavailable' : 'Make available'}: ${item.name}`}
+                            aria-pressed={Boolean(item.isAvailable)}
                             onClick={() => handleToggleAvailability(item)}
+                            title="Toggle item availability"
                             className={`flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full border transition-colors ${
                               item.isAvailable
                                 ? 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'

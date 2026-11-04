@@ -5,6 +5,7 @@ import api from '../../api/axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { Select } from '../../components/ui/Select';
 
 const loadRazorpay = () => new Promise((resolve) => {
   if (window.Razorpay) {
@@ -125,7 +126,7 @@ export const SubscriptionSelection = () => {
         key: checkout.keyId,
         amount: checkout.order.amount,
         currency: checkout.currency,
-        name: 'Innkeeper',
+        name: 'Nestnn',
         description: `${checkout.billingCycle === 'annual' ? 'Annual' : 'Monthly'} hotel subscription`,
         order_id: checkout.order.id,
         prefill: { name: user?.name || '', email: user?.email || '', contact: user?.phone || '' },
@@ -207,7 +208,7 @@ export const SubscriptionSelection = () => {
   return (
     <main className="mx-auto max-w-6xl space-y-6 pb-12">
       <header className="rounded-3xl bg-slate-900 px-6 py-8 text-white sm:px-10">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300">Innkeeper subscriptions</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300">Nestnn subscriptions</p>
         <h1 className="mt-2 text-3xl font-bold">{expired ? 'Renew your subscription' : currentIsActive ? 'Manage hotel modules' : 'Choose your modules'}</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-300">
           Select the tools your hotel needs. Your bill is the selected module total, subject to the minimum subscription amount.
@@ -231,17 +232,21 @@ export const SubscriptionSelection = () => {
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-bold text-slate-900">Available modules</h2>
-            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-              Billing period
-              <select
-                value={billingCycle}
-                onChange={(event) => setBillingCycle(event.target.value)}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2"
-              >
-                <option value="monthly">Monthly</option>
-                <option value="annual">Annual</option>
-              </select>
-            </label>
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <span>Billing period</span>
+              <div className="w-36 shrink-0">
+                <Select
+                  aria-label="Billing period"
+                  value={billingCycle}
+                  onChange={(event) => setBillingCycle(event.target.value)}
+                  options={[
+                    { value: 'monthly', label: 'Monthly' },
+                    { value: 'annual', label: 'Annual' }
+                  ]}
+                  size="sm"
+                />
+              </div>
+            </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {modules.map((module) => {

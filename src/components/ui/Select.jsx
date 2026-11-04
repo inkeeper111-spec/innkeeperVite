@@ -49,6 +49,8 @@ export const Select = ({
   disabled = false,
   placeholder,
   size = 'md',
+  'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledBy,
   ...props
 }) => {
   const reactId = useId();
@@ -128,7 +130,7 @@ export const Select = ({
 
       <div className="relative">
         <select
-          id={selectId}
+          id={`${selectId}-native`}
           name={name}
           value={value ?? ''}
           required={required}
@@ -150,8 +152,11 @@ export const Select = ({
           ref={buttonRef}
           type="button"
           disabled={disabled}
+          id={selectId}
           aria-haspopup="listbox"
           aria-expanded={open}
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
           onClick={() => !disabled && setOpen((prev) => !prev)}
           className={`premium-select-trigger w-full ${sizeClasses} bg-white border text-left text-orvelle-text flex items-center justify-between gap-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] transition-all ${
             error

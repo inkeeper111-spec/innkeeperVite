@@ -9,6 +9,8 @@ import { Input }          from '../components/ui/Input';
 import { Modal }          from '../components/ui/Modal';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { DatePicker } from '../components/ui/DatePicker';
+import { MonthPicker } from '../components/ui/MonthPicker';
+import { Select } from '../components/ui/Select';
 import { ReservationCheckoutModal } from '../components/ui/ReservationCheckoutModal';
 
 // ─── Button ───────────────────────────────────────────────────────────────────
@@ -199,6 +201,52 @@ describe('DatePicker component', () => {
     await userEvent.click(screen.getByRole('button', { name: /booking date/i }));
     await userEvent.click(screen.getByRole('button', { name: /29 October 2026|October 29, 2026/i }));
     expect(handleChange).toHaveBeenCalledWith({ target: { name: undefined, value: '2026-10-29' } });
+  });
+
+  describe('MonthPicker component', () => {
+    it('renders a branded month picker and emits a selected month', async () => {
+      const handleChange = vi.fn();
+      render(
+        <MonthPicker
+          label="Payroll Month"
+          value="2026-11"
+          onChange={handleChange}
+        />
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: /payroll month/i }));
+      expect(screen.getByRole('dialog', { name: 'Choose month' })).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Jan' }));
+      expect(handleChange).toHaveBeenCalledWith({
+        target: { name: undefined, value: '2026-01' }
+      });
+
+      describe('Select component', () => {
+        it('renders the premium accessible dropdown and emits the chosen option', async () => {
+          const handleChange = vi.fn();
+          render(
+            <Select
+              aria-label="Billing period"
+              value="monthly"
+              onChange={handleChange}
+              options={[
+                { value: 'monthly', label: 'Monthly' },
+                { value: 'annual', label: 'Annual' }
+              ]}
+            />
+          );
+
+          await userEvent.click(screen.getByRole('button', { name: 'Billing period' }));
+          await userEvent.click(screen.getByRole('option', { name: 'Annual' }));
+
+          expect(handleChange).toHaveBeenCalledWith({
+            target: { name: undefined, value: 'annual' },
+            currentTarget: { name: undefined, value: 'annual' }
+          });
+        });
+      });
+    });
   });
 
   it('disables dates before the configured minimum', async () => {

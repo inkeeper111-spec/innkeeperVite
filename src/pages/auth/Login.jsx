@@ -3,7 +3,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Building2, Shield, User, Utensils, Sparkles, Wrench, Eye, EyeOff } from 'lucide-react';
+import { Building2, Shield, User, Utensils, Sparkles, Wrench, Eye, EyeOff, Mail, LockKeyhole } from 'lucide-react';
 import { NestnnLogo } from '../../components/ui/NestnnLogo';
 import { Modal } from '../../components/ui/Modal';
 
@@ -67,9 +67,9 @@ export const Login = () => {
   ];
 
   return (
-    <main className="h-screen h-[100dvh] overflow-hidden bg-[#d8cec1] lg:p-3 xl:p-5">
-      <section className="mx-auto h-full max-w-[1500px] overflow-hidden bg-[#f7f4ef] lg:rounded-[28px] lg:shadow-[0_24px_80px_rgba(41,24,16,0.28)]">
-        <div className="grid h-full lg:grid-cols-[58%_42%]">
+    <main className="min-h-[100dvh] bg-[#fbf8f3] lg:h-screen lg:overflow-hidden lg:bg-[#d8cec1] lg:p-3 xl:p-5">
+      <section className="mx-auto min-h-[100dvh] max-w-[1500px] bg-[#fbf8f3] lg:h-full lg:min-h-0 lg:overflow-hidden lg:rounded-[28px] lg:bg-[#f7f4ef] lg:shadow-[0_24px_80px_rgba(41,24,16,0.28)]">
+        <div className="grid min-h-[100dvh] lg:h-full lg:min-h-0 lg:grid-cols-[58%_42%]">
           <div
             className="relative hidden overflow-hidden bg-cover bg-center lg:block"
             style={{ backgroundImage: "url('/login-landscape.jpg')" }}
@@ -96,22 +96,36 @@ export const Login = () => {
             </div>
           </div>
 
-          <div className="relative flex min-h-0 items-center justify-center px-3 py-3 sm:px-8 sm:py-5 lg:px-10 lg:py-6 xl:px-16">
+          <div className="relative flex min-h-0 items-start justify-center px-5 py-5 sm:px-10 sm:py-8 lg:items-center lg:px-10 lg:py-6 xl:px-16">
+            <div className="login-card relative w-full max-w-[540px] px-0 py-0 lg:max-h-full lg:max-w-[430px] lg:overflow-y-auto">
+              <div className="login-brand mb-4 flex justify-center lg:mb-6 lg:justify-start">
+                <NestnnLogo
+                  size="lg"
+                  className="!h-28 !w-52 sm:!h-32 sm:!w-60 lg:!h-20 lg:!w-[120px]"
+                />
+              </div>
 
-            <div className="absolute inset-0 lg:hidden">
-              <img src="/login-landscape.jpg" alt="" className="h-full w-full object-cover" />
-              <div className="absolute inset-0 bg-[#211711]/75 backdrop-blur-sm" />
-            </div>
-
-            <div className="login-card relative max-h-full w-full max-w-[430px] overflow-y-auto rounded-[20px] bg-white/95 px-4 py-4 shadow-[0_20px_70px_rgba(38,27,19,0.22)] backdrop-blur-xl sm:px-8 sm:py-6 lg:overflow-visible lg:bg-transparent lg:px-0 lg:py-0 lg:shadow-none lg:backdrop-blur-none">
-              <div className="login-brand mb-5 flex justify-center lg:mb-6 lg:justify-start">
-                <NestnnLogo size="lg" />
+              <div className="login-mobile-banner relative mb-6 h-[clamp(150px,30vw,230px)] overflow-hidden rounded-[24px] shadow-[0_12px_30px_rgba(65,40,25,0.18)] lg:hidden">
+                <img
+                  src="/login-landscape.jpg"
+                  alt=""
+                  className="h-full w-full object-cover object-center"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#28180f]/90 via-[#28180f]/10 to-transparent" />
+                <div className="absolute bottom-4 left-5 right-5 sm:bottom-6 sm:left-8">
+                  <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.2em] text-[#f4bd63] sm:text-xs">
+                    Welcome to hospitality
+                  </p>
+                  <p className="font-serif text-2xl italic leading-tight text-white sm:text-3xl">
+                    Every stay, exceptional.
+                  </p>
+                </div>
               </div>
 
               <div className="login-heading mb-5 lg:mb-6">
                 <p className="login-eyebrow mb-1 text-[10px] font-bold uppercase tracking-[0.22em] text-[#b17c35] lg:mb-2">Secure workspace</p>
-                <h2 className="text-2xl font-black tracking-tight text-[#30231d] sm:text-3xl lg:text-[38px]">Welcome back</h2>
-                <p className="mt-1 text-xs text-slate-500 sm:text-sm">Sign in to manage your hotel operations.</p>
+                <h2 className="text-[30px] font-black tracking-tight text-[#452718] sm:text-4xl lg:text-[38px]">Welcome back</h2>
+                <p className="mt-1 text-sm text-[#83796f] sm:text-base">Sign in to manage your hotel operations.</p>
               </div>
 
               {error && (
@@ -126,18 +140,22 @@ export const Login = () => {
                 </div>
               )}
 
-              <form className="login-form space-y-3 sm:space-y-4 lg:space-y-5" onSubmit={handleSubmit}>
-                <Input
-                  label="Work Email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@hotel.com"
-                  className="h-12 rounded-xl"
-                />
+              <form className="login-form space-y-4 sm:space-y-5 lg:space-y-5" onSubmit={handleSubmit}>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute bottom-3.5 left-4 z-10 hidden h-5 w-5 text-[#9b8a78] sm:block" />
+                  <Input
+                    label="Work Email"
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@hotel.com"
+                    className="h-12 rounded-xl border-[#e4d7c7] bg-white sm:pl-12"
+                  />
+                </div>
 
                 <div className="relative">
+                  <LockKeyhole className="pointer-events-none absolute bottom-3.5 left-4 z-10 hidden h-5 w-5 text-[#9b8a78] sm:block" />
                   <Input
                     label="Password"
                     type={showPassword ? 'text' : 'password'}
@@ -145,7 +163,7 @@ export const Login = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password"
-                    className="h-12 rounded-xl pr-12"
+                    className="h-12 rounded-xl border-[#e4d7c7] bg-white pr-12 sm:pl-12"
                   />
                   <button
                     type="button"
@@ -157,9 +175,9 @@ export const Login = () => {
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between text-xs">
-                  <label className="flex items-center gap-2 text-slate-600">
-                    <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-[#b17c35]" defaultChecked />
+                <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
+                  <label className="flex items-center gap-2 text-[#83796f]">
+                    <input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-[#b17c35]" defaultChecked />
                     Remember me
                   </label>
                   <Link to="/forgot-password" className="font-bold text-[#9c6b2c] hover:text-[#704619]">
@@ -167,7 +185,7 @@ export const Login = () => {
                   </Link>
                 </div>
 
-                <Button type="submit" loading={loading} className="h-12 w-full rounded-xl bg-[#30231d] hover:bg-[#241a15]" size="lg">
+                <Button type="submit" loading={loading} className="h-12 w-full rounded-xl bg-[#4b2818] text-base font-bold shadow-[0_8px_18px_rgba(75,40,24,0.16)] hover:bg-[#382015]" size="lg">
                   Sign in
                 </Button>
               </form>

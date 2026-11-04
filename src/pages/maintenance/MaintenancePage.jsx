@@ -32,6 +32,7 @@ export const MaintenancePage = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectionError, setRejectionError] = useState('');
   const [reassignmentSelections, setReassignmentSelections] = useState({});
+  const [actionError, setActionError] = useState('');
 
   // Modals
   const [isNewTicketOpen, setIsNewTicketOpen] = useState(false);
@@ -96,6 +97,7 @@ export const MaintenancePage = () => {
   };
 
   const handleUpdateStatus = async (ticketId, newStatus) => {
+    setActionError('');
     try {
       const res = await api.put(`/maintenance/${ticketId}`, { status: newStatus });
       if (res.data.success) {
@@ -104,7 +106,7 @@ export const MaintenancePage = () => {
         setTimeout(() => setMessage(''), 3000);
       }
     } catch (err) {
-      alert('Failed to update ticket status');
+      setActionError(err.response?.data?.message || 'Failed to update ticket status.');
     }
   };
 
@@ -169,6 +171,11 @@ export const MaintenancePage = () => {
         <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
           <span>{message}</span>
+        </div>
+      )}
+      {actionError && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-semibold text-rose-700">
+          {actionError}
         </div>
       )}
 
@@ -283,22 +290,24 @@ export const MaintenancePage = () => {
                       )}
                       {t.status === 'rejected' && ['hotel_admin', 'receptionist'].includes(user?.role) && (
                         <div className="mt-1 flex w-full flex-col justify-end gap-2 sm:flex-row sm:items-center">
-                          <select
+                          <Select
                             aria-label={`Reassign ticket ${t.ticketNumber}`}
-                            className="w-full rounded-lg border border-slate-300 px-2 py-2 text-[11px] sm:max-w-36"
+                            className="w-full sm:max-w-36"
+                            size="sm"
                             value={reassignmentSelections[t._id] || ''}
                             onChange={(event) => setReassignmentSelections({
                               ...reassignmentSelections,
                               [t._id]: event.target.value
                             })}
-                          >
-                            <option value="">Choose technician</option>
-                            {staff.map((employee) => (
-                              <option key={employee.userId?._id} value={employee.userId?._id}>
-                                {employee.userId?.name}
-                              </option>
-                            ))}
-                          </select>
+                            options={[
+                              { value: '', label: 'Choose technician' },
+                              ...staff.map((employee) => ({
+                                value: employee.userId?._id || '',
+                                label: employee.userId?.name || 'Technician',
+                                disabled: !employee.userId?._id
+                              }))
+                            ]}
+                          />
                           <Button
                             size="sm"
                             variant="primary"

@@ -1,5 +1,6 @@
 import React, { useId } from 'react';
 import { DatePicker } from './DatePicker';
+import { MonthPicker } from './MonthPicker';
 
 export const Input = ({
   label,
@@ -16,6 +17,20 @@ export const Input = ({
   if (props.type === 'date') {
     return (
       <DatePicker
+        {...props}
+        id={inputId}
+        label={label}
+        required={required}
+        error={error}
+        helperText={helperText}
+        className={className}
+      />
+    );
+  }
+
+  if (props.type === 'month') {
+    return (
+      <MonthPicker
         {...props}
         id={inputId}
         label={label}
@@ -47,4 +62,3 @@ export const Input = ({
     </div>
   );
 };
-

@@ -185,7 +185,7 @@ export const StaffPage = () => {
   const handleMarkAttendance = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/staff/attendance', attForm);
+      await api.post('/staff/attendance', attForm, { skipSuccessToast: true });
       setIsAttMarkOpen(false);
       showMsg('Attendance recorded.');
       fetchAttendance(attForm.date);
@@ -195,7 +195,11 @@ export const StaffPage = () => {
   const handleBulkMark = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/staff/attendance/bulk', { date: bulkDate, defaultStatus: bulkStatus });
+      await api.post(
+        '/staff/attendance/bulk',
+        { date: bulkDate, defaultStatus: bulkStatus },
+        { skipSuccessToast: true }
+      );
       setIsBulkOpen(false);
       showMsg(`All staff marked as "${bulkStatus}" for ${dayjs(bulkDate).format('MMM D, YYYY')}.`);
       fetchAttendance(bulkDate);
@@ -206,9 +210,17 @@ export const StaffPage = () => {
   const handleQuickStatusChange = async (record, newStatus) => {
     try {
       if (record._id) {
-        await api.patch(`/staff/attendance/${record._id}`, { status: newStatus });
+        await api.patch(
+          `/staff/attendance/${record._id}`,
+          { status: newStatus },
+          { skipSuccessToast: true }
+        );
       } else {
-        await api.post('/staff/attendance', { ...record, status: newStatus });
+        await api.post(
+          '/staff/attendance',
+          { ...record, status: newStatus },
+          { skipSuccessToast: true }
+        );
       }
       fetchAttendance(attendanceDate);
     } catch (err) { showErr('Status update failed.'); }
@@ -474,9 +486,10 @@ export const StaffPage = () => {
           <div className="flex items-center gap-3 bg-white p-4 rounded-xl border border-slate-200/80">
             <div>
               <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Select Month</label>
-              <input type="month" value={summaryMonth}
+              <Input
+                type="month"
+                value={summaryMonth}
                 onChange={(e) => { setSummaryMonth(e.target.value); fetchSummary(e.target.value); }}
-                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none"
               />
             </div>
             {summary && (
@@ -910,9 +923,11 @@ export const StaffPage = () => {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Payroll Month</label>
-              <input type="month" value={salaryMonth}
+              <Input
+                type="month"
+                value={salaryMonth}
                 onChange={(e) => { setSalaryMonth(e.target.value); fetchSummary(e.target.value); }}
-                className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+              />
             </div>
             <Select label="Payment Method" value={salaryMethod}
               onChange={(e) => setSalaryMethod(e.target.value)}

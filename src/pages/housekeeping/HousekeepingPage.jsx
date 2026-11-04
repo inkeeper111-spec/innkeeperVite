@@ -252,17 +252,22 @@ export const HousekeepingPage = () => {
         <label htmlFor="housekeeping-status-filter" className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400">
           <Filter className="h-3.5 w-3.5" /> Filter Queue
         </label>
-        <select
-          id="housekeeping-status-filter"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value)}
-          className="h-9 max-w-52 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500"
-        >
-          <option value="all">All</option>
-          {STATUS_COLUMNS.map((column) => (
-            <option key={column.id} value={column.id}>{column.label}</option>
-          ))}
-        </select>
+        <div className="w-full max-w-52">
+          <Select
+            id="housekeeping-status-filter"
+            aria-label="Filter housekeeping queue"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            options={[
+              { value: 'all', label: 'All' },
+              ...STATUS_COLUMNS.map((column) => ({
+                value: column.id,
+                label: column.label
+              }))
+            ]}
+            size="sm"
+          />
+        </div>
       </div>
 
       {dataError && (
@@ -403,22 +408,24 @@ export const HousekeepingPage = () => {
                             {task.status === 'rejected'
                               ? ['hotel_admin', 'receptionist'].includes(user?.role) && (
                                 <div className="flex w-full items-center gap-1">
-                                  <select
+                                  <Select
                                     aria-label={`Reassign room ${task.roomId?.roomNumber || ''}`}
-                                    className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1 text-[11px]"
+                                    className="min-w-0 flex-1"
+                                    size="sm"
                                     value={reassignmentSelections[task._id] || ''}
                                     onChange={(event) => setReassignmentSelections({
                                       ...reassignmentSelections,
                                       [task._id]: event.target.value
                                     })}
-                                  >
-                                    <option value="">Choose attendant</option>
-                                    {staff.map((employee) => (
-                                      <option key={employee.userId?._id} value={employee.userId?._id}>
-                                        {employee.userId?.name}
-                                      </option>
-                                    ))}
-                                  </select>
+                                    options={[
+                                      { value: '', label: 'Choose attendant' },
+                                      ...staff.map((employee) => ({
+                                        value: employee.userId?._id || '',
+                                        label: employee.userId?.name || 'Attendant',
+                                        disabled: !employee.userId?._id
+                                      }))
+                                    ]}
+                                  />
                                   <Button
                                     size="sm"
                                     variant="primary"
@@ -464,17 +471,20 @@ export const HousekeepingPage = () => {
                                   {nextStatus && (
                                     <label className="flex items-center gap-1.5 sm:hidden">
                                       <span className="sr-only">Move room {task.roomId?.roomNumber}</span>
-                                      <select
+                                      <Select
                                         value=""
+                                        aria-label={`Move room ${task.roomId?.roomNumber || ''}`}
                                         disabled={!isMovable}
                                         onChange={(event) => {
                                           if (event.target.value) handleUpdateStatus(task._id, event.target.value);
                                         }}
-                                        className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700"
-                                      >
-                                        <option value="">Move to…</option>
-                                        <option value={nextStatus}>{STATUS_LABELS[nextStatus]}</option>
-                                      </select>
+                                        size="sm"
+                                        className="min-w-0"
+                                        options={[
+                                          { value: '', label: 'Move to…' },
+                                          { value: nextStatus, label: STATUS_LABELS[nextStatus] }
+                                        ]}
+                                      />
                                       <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
                                     </label>
                                   )}

@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
+import { acquireModalScrollLock } from './modalScrollLock';
 
 export const Modal = ({
   isOpen,
@@ -21,13 +22,12 @@ export const Modal = ({
     const handleKeyDown = (event) => {
       if (closeOnEscape && event.key === 'Escape') onCloseRef.current?.();
     };
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const releaseScrollLock = acquireModalScrollLock();
     window.addEventListener('keydown', handleKeyDown);
     const frame = window.requestAnimationFrame(() => dialogRef.current?.focus());
     return () => {
       window.cancelAnimationFrame(frame);
-      document.body.style.overflow = previousOverflow;
+      releaseScrollLock();
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen, closeOnEscape]);
@@ -35,7 +35,7 @@ export const Modal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto p-0 sm:items-center sm:p-5">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden overscroll-none p-0 sm:items-center sm:p-5">
       {/* Backdrop */}
       <div
         aria-hidden="true"
@@ -68,7 +68,9 @@ export const Modal = ({
         </div>
 
         {/* Content */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          {children}
+        </div>
 
         {/* Footer */}
         {footer && (

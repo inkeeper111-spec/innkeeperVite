@@ -104,26 +104,14 @@ export const App = () => {
         path="/subscription"
         element={
           <ProtectedRoute allowedRoles={['hotel_admin']} skipStatusGate>
-            <SubscriptionSelection />
+            <DashboardLayout />
           </ProtectedRoute>
         }
-      />
-      <Route
-        path="/subscription/success"
-        element={
-          <ProtectedRoute allowedRoles={['hotel_admin']} skipStatusGate>
-            <SubscriptionPaymentStatus success />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/subscription/failure"
-        element={
-          <ProtectedRoute allowedRoles={['hotel_admin']} skipStatusGate>
-            <SubscriptionPaymentStatus success={false} />
-          </ProtectedRoute>
-        }
-      />
+      >
+        <Route index element={<SubscriptionSelection />} />
+        <Route path="success" element={<SubscriptionPaymentStatus success />} />
+        <Route path="failure" element={<SubscriptionPaymentStatus success={false} />} />
+      </Route>
 
       {/* Protected Hotel Operational Module Routes */}
       <Route
