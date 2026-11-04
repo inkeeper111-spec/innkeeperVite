@@ -159,7 +159,7 @@ export const MyAttendancePage = () => {
       <Card title="Location verification" subtitle="GPS is validated by the server before each attendance punch">
         <div className="space-y-2 text-xs text-slate-600">
           <p>Permission / fix status: <span className="font-semibold">{locationStatus}</span></p>
-          <p>
+          <p className="break-words">
             Registered hotel location:{' '}
             {hotel?.attendanceLocation
               ? `${Number(hotel.attendanceLocation.latitude).toFixed(6)}, ${Number(hotel.attendanceLocation.longitude).toFixed(6)}`
@@ -176,11 +176,11 @@ export const MyAttendancePage = () => {
         </div>
       </Card>
 
-      <div className="flex gap-3">
-        <Button icon={LogIn} onClick={() => handleCheck('check-in')} disabled={checking || Boolean(data?.today?.checkInTime)}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+        <Button className="w-full sm:w-auto" icon={LogIn} onClick={() => handleCheck('check-in')} disabled={checking || Boolean(data?.today?.checkInTime)}>
           {checking ? 'Verifying location...' : 'Check In'}
         </Button>
-        <Button variant="outline" icon={LogOut} onClick={() => handleCheck('check-out')} disabled={checking || !data?.today?.checkInTime || Boolean(data?.today?.checkOutTime)}>
+        <Button className="w-full sm:w-auto" variant="outline" icon={LogOut} onClick={() => handleCheck('check-out')} disabled={checking || !data?.today?.checkInTime || Boolean(data?.today?.checkOutTime)}>
           {checking ? 'Verifying location...' : 'Check Out'}
         </Button>
       </div>
@@ -188,7 +188,7 @@ export const MyAttendancePage = () => {
       <div className="grid grid-cols-1 gap-6">
         <Card title="This month" subtitle="Clock records and approved leave">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[560px] text-left text-xs">
               <thead>
                 <tr className="text-slate-400 uppercase border-b border-slate-100">
                   <th className="pb-2">Date</th>

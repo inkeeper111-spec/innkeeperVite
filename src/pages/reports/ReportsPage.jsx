@@ -91,7 +91,7 @@ export const ReportsPage = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card>
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Invoiced</span>
           <p className="text-2xl font-black text-slate-900 mt-2">{formatCurrency(data?.totalInvoiced)}</p>
@@ -113,13 +113,13 @@ export const ReportsPage = () => {
 
       {/* Payment Methods Breakdown */}
       <Card title="Payment Method Collections" subtitle="Disbursement distribution across merchant channels">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
+        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
           {Object.entries(data?.paymentByMethod || {}).map(([method, amount]) => (
             <div key={method} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 capitalize">
                 {method.replace(/_/g, ' ')}
               </span>
-              <p className="text-xl font-black text-slate-900 mt-1">{formatCurrency(amount)}</p>
+              <p className="mt-1 break-words text-xl font-black text-slate-900">{formatCurrency(amount)}</p>
             </div>
           ))}
         </div>

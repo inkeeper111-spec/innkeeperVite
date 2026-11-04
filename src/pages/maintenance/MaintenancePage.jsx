@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../api/axios';
+import api, { showApiErrorToast } from '../../api/axios';
 import { useCurrency } from '../../hooks/useCurrency';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -55,7 +55,7 @@ export const MaintenancePage = () => {
       const [tRes, rRes, sRes] = await Promise.all([
         api.get('/maintenance'),
         api.get('/rooms'),
-        api.get('/staff')
+        api.get('/staff/assignees?roles=maintenance_staff')
       ]);
       if (tRes.data.success) setTickets(tRes.data.data);
       if (rRes.data.success) setRooms(rRes.data.data);
@@ -92,7 +92,7 @@ export const MaintenancePage = () => {
         setTimeout(() => setMessage(''), 3000);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to create ticket');
+      showApiErrorToast(err, 'Failed to create ticket');
     }
   };
 
@@ -116,7 +116,7 @@ export const MaintenancePage = () => {
       setMessage(res.data.message || 'Ticket assignment accepted.');
       await fetchMaintenance();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to accept ticket.');
+      showApiErrorToast(err, 'Failed to accept ticket.');
     }
   };
 
@@ -147,7 +147,7 @@ export const MaintenancePage = () => {
       setMessage(res.data.message || 'Ticket reassigned.');
       await fetchMaintenance();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to reassign ticket.');
+      showApiErrorToast(err, 'Failed to reassign ticket.');
     }
   };
 
@@ -162,7 +162,7 @@ export const MaintenancePage = () => {
           </p>
         </div>
 
-        <Button variant="primary" icon={PlusCircle} onClick={() => setIsNewTicketOpen(true)}>
+        <Button className="w-full sm:w-auto" variant="primary" icon={PlusCircle} onClick={() => setIsNewTicketOpen(true)}>
           Log Repair Ticket
         </Button>
       </div>
@@ -189,7 +189,7 @@ export const MaintenancePage = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[900px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Ticket #</th>
@@ -432,11 +432,11 @@ export const MaintenancePage = () => {
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-3">
-            <Button variant="secondary" type="button" onClick={() => setIsNewTicketOpen(false)}>
+          <div className="flex flex-col-reverse gap-3 pt-3 sm:flex-row sm:justify-end">
+            <Button className="w-full sm:w-auto" variant="secondary" type="button" onClick={() => setIsNewTicketOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit">
+            <Button className="w-full sm:w-auto" variant="primary" type="submit">
               Log Ticket
             </Button>
           </div>
@@ -461,9 +461,9 @@ export const MaintenancePage = () => {
             placeholder="Explain why you cannot accept this assignment"
           />
           {rejectionError && <p className="text-xs text-rose-600">{rejectionError}</p>}
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="secondary" onClick={() => setIsRejectOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="danger" disabled={!rejectionReason.trim()}>Reject Job</Button>
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <Button className="w-full sm:w-auto" type="button" variant="secondary" onClick={() => setIsRejectOpen(false)}>Cancel</Button>
+            <Button className="w-full sm:w-auto" type="submit" variant="danger" disabled={!rejectionReason.trim()}>Reject Job</Button>
           </div>
         </form>
       </Modal>

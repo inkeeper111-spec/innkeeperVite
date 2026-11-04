@@ -24,11 +24,24 @@ export const ToastProvider = ({ children }) => {
     const dedupeKey = key || `${type}:${normalizedMessage}`;
     const now = Date.now();
     const previous = recentMessages.current.get(dedupeKey);
-    if (previous && now - previous < 1200) return;
+    if (previous && now - previous < 1200) {
+      setToasts((current) => current.map((toast) => (
+        toast.dedupeKey === dedupeKey && toast.message !== normalizedMessage
+          ? { ...toast, message: normalizedMessage }
+          : toast
+      )));
+      return;
+    }
     recentMessages.current.set(dedupeKey, now);
 
     const id = `${dedupeKey}:${now}:${Math.random()}`;
-    setToasts((current) => [...current.slice(-3), { id, type, message: normalizedMessage, leaving: false }]);
+    setToasts((current) => [...current.slice(-3), {
+      id,
+      dedupeKey,
+      type,
+      message: normalizedMessage,
+      leaving: false
+    }]);
     window.setTimeout(() => dismiss(id), TOAST_DURATION_MS);
   }, [dismiss]);
 

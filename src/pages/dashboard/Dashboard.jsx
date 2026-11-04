@@ -80,15 +80,15 @@ export const Dashboard = () => {
   return (
     <div className="space-y-6">
       {/* Welcome & Quick Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-orvelle-primary p-6 rounded-2xl text-white shadow-lg">
-        <div>
+      <div className="flex flex-col gap-4 rounded-2xl bg-orvelle-primary p-4 text-white shadow-lg sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="min-w-0">
           <span className="text-xs font-bold text-amber-400 uppercase tracking-widest block mb-1">
             Operational Command Center
           </span>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight">
+          <h1 className="break-words text-xl font-black tracking-tight sm:text-2xl">
             Welcome back, {user?.name?.split(' ')[0]}
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="mt-0.5 break-words text-xs text-slate-400">
             {hotel?.name} • Live Property Status • {dayjs().format('dddd, MMMM D, YYYY')}
           </p>
         </div>
@@ -126,7 +126,7 @@ export const Dashboard = () => {
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total & Available Rooms */}
-        <Card className="hover:border-slate-300 transition-all">
+        <Card className="min-w-0 transition-all hover:border-slate-300">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Available Rooms
@@ -136,7 +136,7 @@ export const Dashboard = () => {
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black text-slate-900">
+            <span className="break-words text-2xl font-black text-slate-900 sm:text-3xl">
               {data.availableRooms}
             </span>
             <span className="text-xs text-slate-500 font-medium">/ {data.totalRooms} Total</span>
@@ -148,7 +148,7 @@ export const Dashboard = () => {
         </Card>
 
         {/* Occupancy Rate */}
-        <Card className="hover:border-slate-300 transition-all">
+        <Card className="min-w-0 transition-all hover:border-slate-300">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Current Occupancy
@@ -158,7 +158,7 @@ export const Dashboard = () => {
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black text-slate-900">
+            <span className="break-words text-2xl font-black text-slate-900 sm:text-3xl">
               {data.occupancyRate}%
             </span>
             <span className="text-xs text-slate-500 font-medium">({data.occupiedRooms} Occupied)</span>
@@ -172,7 +172,7 @@ export const Dashboard = () => {
         </Card>
 
         {/* Revenue This Month */}
-        <Card className="hover:border-slate-300 transition-all">
+        <Card className="min-w-0 transition-all hover:border-slate-300">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Month Revenue
@@ -182,7 +182,7 @@ export const Dashboard = () => {
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black text-slate-900">
+            <span className="break-words text-2xl font-black text-slate-900 sm:text-3xl">
               {formatCurrency(data.monthlyRevenue)}
             </span>
           </div>
@@ -192,7 +192,7 @@ export const Dashboard = () => {
         </Card>
 
         {/* Pending Payments */}
-        <Card className="hover:border-slate-300 transition-all">
+        <Card className="min-w-0 transition-all hover:border-slate-300">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Pending Folio Balance
@@ -202,7 +202,7 @@ export const Dashboard = () => {
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black text-slate-900">
+            <span className="break-words text-2xl font-black text-slate-900 sm:text-3xl">
               {formatCurrency(data.pendingPayments)}
             </span>
           </div>
@@ -265,7 +265,7 @@ export const Dashboard = () => {
           </Button>
         }
       >
-        <div className="h-72 w-full mt-2">
+        <div className="mt-2 h-64 w-full sm:h-72">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data.revenueTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <defs>
@@ -305,7 +305,7 @@ export const Dashboard = () => {
             }
           >
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[620px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Reference</th>
@@ -365,7 +365,7 @@ export const Dashboard = () => {
                 data.housekeepingAlerts.map((task) => (
                   <div
                     key={task._id}
-                    className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2.5"
                   >
                     <div>
                       <p className="text-xs font-bold text-slate-800">
@@ -400,7 +400,7 @@ export const Dashboard = () => {
                 data.maintenanceAlerts.map((t) => (
                   <div
                     key={t._id}
-                    className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2.5"
                   >
                     <div className="min-w-0 pr-2">
                       <p className="text-xs font-bold text-slate-800 truncate">{t.ticketNumber}</p>

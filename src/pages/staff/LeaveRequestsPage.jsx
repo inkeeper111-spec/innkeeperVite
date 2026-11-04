@@ -204,7 +204,7 @@ const LeaveRequestsPage = ({ management = false }) => {
 
       {!isAdmin && (
         <Card title="Apply for leave" subtitle={`Requested duration: ${totalDays} day${totalDays === 1 ? '' : 's'}`}>
-          <form onSubmit={submitRequest} className="grid gap-4 md:grid-cols-2">
+          <form onSubmit={submitRequest} className="grid min-w-0 gap-4 lg:grid-cols-2">
             <Select
               label="Leave type"
               required
@@ -227,7 +227,7 @@ const LeaveRequestsPage = ({ management = false }) => {
             <Input label="Supporting document references (optional)" value={form.supportingDocuments}
               helperText="Enter document URLs or references separated by commas."
               onChange={(event) => setForm((current) => ({ ...current, supportingDocuments: event.target.value }))} />
-            <div className="md:col-span-2">
+            <div className="lg:col-span-2">
               <Button type="submit" icon={Plus} loading={saving}>Submit request</Button>
             </div>
           </form>
@@ -238,7 +238,7 @@ const LeaveRequestsPage = ({ management = false }) => {
         <Card title="Leave types" subtitle="Hotel-specific leave type options; entitlements are not assumed.">
           <div className="space-y-3">
             {typeDraft.map((item, index) => (
-              <div key={item.key} className="grid items-center gap-3 sm:grid-cols-[1fr_2fr_auto]">
+              <div key={item.key} className="grid min-w-0 items-center gap-3 md:grid-cols-[1fr_2fr_auto]">
                 <Input label={index === 0 ? 'Type key' : undefined} value={item.key} disabled />
                 <Input label={index === 0 ? 'Display name' : undefined} value={item.label}
                   onChange={(event) => setTypeDraft((current) => current.map((type, i) => i === index ? { ...type, label: event.target.value } : type))} />
@@ -249,7 +249,7 @@ const LeaveRequestsPage = ({ management = false }) => {
                 </label>
               </div>
             ))}
-            <div className="grid gap-3 sm:grid-cols-[1fr_2fr_auto]">
+            <div className="grid min-w-0 gap-3 md:grid-cols-[1fr_2fr_auto]">
               <Input label="New type key" value={newType.key} placeholder="bereavement"
                 onChange={(event) => setNewType((current) => ({ ...current, key: event.target.value }))} />
               <Input label="New display name" value={newType.label} placeholder="Bereavement Leave"
@@ -299,7 +299,7 @@ const LeaveRequestsPage = ({ management = false }) => {
               ))}
             </div>
             <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[850px] text-left text-xs">
+            <table className="w-full min-w-[900px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase">
                   {isAdmin && <th className="pb-3">Employee / ID</th>}

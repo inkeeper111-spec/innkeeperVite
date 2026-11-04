@@ -22,6 +22,7 @@ import { InventoryPage } from './pages/inventory/InventoryPage';
 import { ExpensesPage } from './pages/expenses/ExpensesPage';
 import { MaintenancePage } from './pages/maintenance/MaintenancePage';
 import { StaffPage } from './pages/staff/StaffPage';
+import { RolesResponsibilitiesPage } from './pages/staff/RolesResponsibilitiesPage';
 import { MyAttendancePage } from './pages/staff/MyAttendancePage';
 import LeaveRequestsPage from './pages/staff/LeaveRequestsPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
@@ -59,15 +60,66 @@ const getHotelGatePath = (hotel) => {
   return '/subscription';
 };
 
-const ProtectedRoute = ({ children, allowedRoles = STAFF_ROLES, skipStatusGate = false }) => {
+const getPermissionFallbackPath = (user, currentPath) => {
+  const candidates = {
+    hotel_admin: [['/dashboard', 'dashboard.view']],
+    receptionist: [['/frontdesk', 'frontdesk.view'], ['/reservations', 'reservations.view'], ['/notifications', 'notifications.view']],
+    restaurant_staff: [['/restaurant', 'restaurant.view'], ['/notifications', 'notifications.view']],
+    housekeeping_staff: [['/housekeeping', 'housekeeping.view'], ['/notifications', 'notifications.view']],
+    maintenance_staff: [['/maintenance', 'maintenance.view'], ['/notifications', 'notifications.view']],
+    super_admin: [['/superadmin', null]]
+  }[user.role] || [];
+
+  return candidates.find(([path, permission]) => (
+    path !== currentPath && (!permission || user.permissions?.[permission] !== false)
+  ))?.[0] || '/login';
+};
+
+const ProtectedRoute = ({
+  children,
+  allowedRoles = STAFF_ROLES,
+  skipStatusGate = false,
+  strictRoleGate = false,
+  deniedPath
+}) => {
   const { user, hotel, loading } = useAuth();
   const location = useLocation();
 
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
 
-  if (!allowedRoles.includes(user.role) && user.role !== 'super_admin') {
-    return <Navigate to="/dashboard" replace />;
+  const permissionForPath = {
+    '/dashboard': 'dashboard.view',
+    '/frontdesk': 'frontdesk.view',
+    '/reservations': 'reservations.view',
+    '/rooms': 'rooms.view',
+    '/guests': 'guests.view',
+    '/billing': 'billing.view',
+    '/housekeeping': 'housekeeping.view',
+    '/restaurant': 'restaurant.view',
+    '/menu-management': 'menu_management.view',
+    '/inventory': 'inventory.view',
+    '/maintenance': 'maintenance.view',
+    '/expenses': 'expenses.view',
+    '/staff': 'staff_directory.view',
+    '/roles-responsibilities': 'roles_responsibilities.view',
+    '/leave-management': 'leave.view',
+    '/my-leave': 'leave.view',
+    '/attendance': 'staff_self.view',
+    '/reports': 'reports.view',
+    '/ai-assistant': 'ai_assistant.view',
+    '/notifications': 'notifications.view',
+    '/settings': 'settings.view'
+  }[location.pathname];
+  const overrides = user.permissionOverrides || {};
+  const hasPermissionOverride = permissionForPath && Object.hasOwn(overrides, permissionForPath);
+  const hasRouteAccess = permissionForPath && user.permissions
+    ? user.permissions[permissionForPath] === true
+    : hasPermissionOverride
+      ? overrides[permissionForPath]
+    : allowedRoles.includes(user.role);
+  if (!hasRouteAccess && (strictRoleGate || user.role !== 'super_admin')) {
+    return <Navigate to={deniedPath || getPermissionFallbackPath(user, location.pathname)} replace />;
   }
   if (!skipStatusGate && user.role !== 'super_admin') {
     const gatePath = getHotelGatePath(hotel);
@@ -103,7 +155,12 @@ export const App = () => {
       <Route
         path="/subscription"
         element={
-          <ProtectedRoute allowedRoles={['hotel_admin']} skipStatusGate>
+          <ProtectedRoute
+            allowedRoles={['hotel_admin']}
+            skipStatusGate
+            strictRoleGate
+            deniedPath="/superadmin/modules"
+          >
             <DashboardLayout />
           </ProtectedRoute>
         }
@@ -134,6 +191,14 @@ export const App = () => {
         <Route path="/expenses" element={<ExpensesPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />
         <Route path="/staff" element={<StaffPage />} />
+        <Route
+          path="/roles-responsibilities"
+          element={
+            <ProtectedRoute allowedRoles={['hotel_admin']}>
+              <RolesResponsibilitiesPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/attendance" element={<MyAttendancePage />} />
         <Route
           path="/leave-management"
@@ -162,6 +227,14 @@ export const App = () => {
           element={
             <ProtectedRoute allowedRoles={['super_admin']}>
               <SuperAdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/superadmin/modules"
+          element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
+              <SuperAdminDashboard initialTab="modules" />
             </ProtectedRoute>
           }
         />

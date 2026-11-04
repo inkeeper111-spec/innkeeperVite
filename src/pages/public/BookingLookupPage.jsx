@@ -47,10 +47,10 @@ export const BookingLookupPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 py-10 px-4 sm:px-6">
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div className="flex items-center justify-between gap-4">
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <NestnnLogo size="sm" />
-          <Link to="/" className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-800">
+          <Link to="/" className="inline-flex min-w-0 items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-800">
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Hotel Portal</span>
           </Link>
@@ -92,12 +92,12 @@ export const BookingLookupPage = () => {
         {/* Reservation & Invoice Display */}
         {data && (
           <Card className="space-y-6">
-            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
-              <div>
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
                   Reservation Status
                 </span>
-                <h2 className="text-xl font-black text-slate-900 font-mono mt-1">
+                <h2 className="mt-1 break-all font-mono text-xl font-black text-slate-900">
                   {data.reservation.bookingReference}
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -105,7 +105,7 @@ export const BookingLookupPage = () => {
                 </p>
               </div>
 
-              <Badge variant={data.reservation.status} size="md">
+              <Badge className="max-w-full self-start sm:self-auto" variant={data.reservation.status} size="md">
                 {data.reservation.status}
               </Badge>
             </div>
@@ -153,7 +153,7 @@ export const BookingLookupPage = () => {
                 <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
                   Itemized Charges ({data.invoice.invoiceNumber})
                 </h4>
-                <div className="table-scroll border border-slate-200 rounded-xl text-xs">
+                <div className="table-scroll overflow-x-auto rounded-xl border border-slate-200 text-xs">
                   <table className="w-full min-w-[420px] text-left">
                     <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px]">
                       <tr>
@@ -197,8 +197,8 @@ export const BookingLookupPage = () => {
               </div>
             )}
 
-            <div className="flex justify-end pt-4 border-t border-slate-100">
-              <Button variant="outline" icon={Printer} onClick={() => window.print()}>
+            <div className="flex justify-end border-t border-slate-100 pt-4">
+            <Button className="w-full sm:w-auto" variant="outline" icon={Printer} onClick={() => window.print()}>
                 Print Voucher
               </Button>
             </div>

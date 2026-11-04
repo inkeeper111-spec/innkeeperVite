@@ -32,24 +32,24 @@ export const ForgotPassword = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="text-center text-2xl font-black text-white">Reset Password</h2>
+    <div className="flex min-h-screen flex-col justify-center bg-slate-900 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <div className="mx-auto w-full min-w-0 sm:max-w-md">
+        <h2 className="break-words text-center text-2xl font-black text-white">Reset Password</h2>
         <p className="mt-1 text-center text-xs text-slate-400">
           Enter your email address to receive password reset instructions.
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-6 shadow-xl rounded-2xl sm:px-10 border border-slate-100">
+      <div className="mx-auto mt-8 w-full min-w-0 sm:max-w-md">
+        <div className="min-w-0 rounded-2xl border border-slate-100 bg-white px-4 py-6 shadow-xl sm:px-10 sm:py-8">
           {message && (
-            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-start gap-2">
+            <div className="mb-4 flex min-w-0 items-start gap-2 break-words rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
               <div>
                 <p>{message}</p>
                 {devToken && (
-                  <p className="mt-2 text-[11px] font-mono text-emerald-900 bg-emerald-100/60 p-2 rounded">
-                    Dev Token: <Link to={`/reset-password?token=${devToken}`} className="underline font-bold">{devToken}</Link>
+                  <p className="mt-2 break-all rounded bg-emerald-100/60 p-2 font-mono text-[11px] text-emerald-900">
+                    Dev Token: <Link to={`/reset-password?token=${devToken}`} className="font-bold underline">{devToken}</Link>
                   </p>
                 )}
               </div>
@@ -87,4 +87,3 @@ export const ForgotPassword = () => {
     </div>
   );
 };
-

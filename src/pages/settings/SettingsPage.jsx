@@ -146,7 +146,7 @@ export const SettingsPage = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="w-full max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-black text-slate-900 tracking-tight">Organization & Profile Settings</h1>
         <p className="text-xs text-slate-500 mt-1">
@@ -202,7 +202,7 @@ export const SettingsPage = () => {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <Input
                 label="State / Province"
                 value={hotelForm.state}
@@ -220,7 +220,7 @@ export const SettingsPage = () => {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+            <div className="grid grid-cols-1 gap-4 pt-2 md:grid-cols-3">
               <Input
                 label="Tax Registration Number"
                 value={hotelForm.taxNumber}
@@ -336,7 +336,7 @@ export const SettingsPage = () => {
             </div>
 
             <div className="flex justify-end pt-3">
-              <Button type="submit" variant="primary" loading={loading}>
+              <Button className="w-full sm:w-auto" type="submit" variant="primary" loading={loading}>
                 Save Hotel Settings
               </Button>
             </div>
@@ -383,7 +383,7 @@ export const SettingsPage = () => {
           </div>
 
           <div className="flex justify-end pt-3">
-            <Button type="submit" variant="secondary" loading={loading}>
+            <Button className="w-full sm:w-auto" type="submit" variant="secondary" loading={loading}>
               Update User Profile
             </Button>
           </div>

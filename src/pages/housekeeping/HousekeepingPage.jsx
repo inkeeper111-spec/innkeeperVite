@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../api/axios';
+import api, { showApiErrorToast } from '../../api/axios';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -72,6 +72,9 @@ export const HousekeepingPage = () => {
   });
 
   const [message, setMessage] = useState('');
+  const housekeepingStaff = staff.filter((employee) => (
+    employee.userId?.role === 'housekeeping_staff' && employee.userId?.isActive
+  ));
 
   const fetchHousekeepingData = async () => {
     try {
@@ -80,7 +83,7 @@ export const HousekeepingPage = () => {
       const [tasksRes, roomsRes, staffRes] = await Promise.all([
         api.get('/housekeeping/tasks'),
         api.get('/rooms'),
-        api.get('/staff')
+        api.get('/staff/assignees?roles=housekeeping_staff')
       ]);
       if (tasksRes.data.success) setTasks(tasksRes.data.data);
       if (roomsRes.data.success) setRooms(roomsRes.data.data);
@@ -140,7 +143,7 @@ export const HousekeepingPage = () => {
       setMessage(res.data.message || 'Task assignment accepted.');
       await fetchHousekeepingData();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to accept task.');
+      showApiErrorToast(err, 'Failed to accept task.');
     }
   };
 
@@ -171,7 +174,7 @@ export const HousekeepingPage = () => {
       setMessage(res.data.message || 'Task reassigned.');
       await fetchHousekeepingData();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to reassign task.');
+      showApiErrorToast(err, 'Failed to reassign task.');
     }
   };
 
@@ -187,7 +190,7 @@ export const HousekeepingPage = () => {
         setTimeout(() => setMessage(''), 3000);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to create task.');
+      showApiErrorToast(err, 'Failed to create task.');
     }
   };
 
@@ -202,7 +205,7 @@ export const HousekeepingPage = () => {
         setTimeout(() => setMessage(''), 3000);
       }
     } catch (err) {
-      alert('Failed to report damage.');
+      showApiErrorToast(err, 'Failed to report damage.');
     }
   };
 
@@ -248,7 +251,7 @@ export const HousekeepingPage = () => {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white p-3">
+      <div className="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
         <label htmlFor="housekeeping-status-filter" className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400">
           <Filter className="h-3.5 w-3.5" /> Filter Queue
         </label>
@@ -393,7 +396,7 @@ export const HousekeepingPage = () => {
                             <p className="mt-3 text-[11px] font-semibold text-brand-600">Saving status…</p>
                           )}
 
-                          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                          <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                             <button
                               type="button"
                               onClick={() => {
@@ -406,7 +409,7 @@ export const HousekeepingPage = () => {
                             </button>
 
                             {task.status === 'rejected'
-                              ? ['hotel_admin', 'receptionist'].includes(user?.role) && (
+                              ? ['hotel_admin', 'receptionist', 'housekeeping_staff'].includes(user?.role) && (
                                 <div className="flex w-full items-center gap-1">
                                   <Select
                                     aria-label={`Reassign room ${task.roomId?.roomNumber || ''}`}
@@ -419,7 +422,7 @@ export const HousekeepingPage = () => {
                                     })}
                                     options={[
                                       { value: '', label: 'Choose attendant' },
-                                      ...staff.map((employee) => ({
+                                      ...housekeepingStaff.map((employee) => ({
                                         value: employee.userId?._id || '',
                                         label: employee.userId?.name || 'Attendant',
                                         disabled: !employee.userId?._id
@@ -533,14 +536,17 @@ export const HousekeepingPage = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Assigned Attendant"
+              required={user?.role === 'housekeeping_staff'}
               value={taskForm.assignedTo}
               onChange={(e) => setTaskForm({ ...taskForm, assignedTo: e.target.value })}
             >
+            {user?.role !== 'housekeeping_staff' && (
               <option value="">-- Unassigned (General Queue) --</option>
-              {staff.map((s) => (
-                <option key={s.userId?._id} value={s.userId?._id}>
-                  {s.userId?.name} ({s.department})
-                </option>
+            )}
+            {housekeepingStaff.map((s) => (
+              <option key={s.userId?._id} value={s.userId?._id}>
+                {s.userId?.name} ({s.department})
+              </option>
               ))}
             </Select>
 
@@ -576,11 +582,16 @@ export const HousekeepingPage = () => {
             placeholder="Extra towels, refill espresso pods"
           />
 
-          <div className="flex justify-end gap-3 pt-3">
-            <Button variant="secondary" type="button" onClick={() => setIsNewTaskOpen(false)}>
+          <div className="flex flex-col-reverse gap-3 pt-3 sm:flex-row sm:justify-end">
+            <Button className="w-full sm:w-auto" variant="secondary" type="button" onClick={() => setIsNewTaskOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit" disabled={!taskForm.roomId}>
+            <Button
+              className="w-full sm:w-auto"
+              variant="primary"
+              type="submit"
+              disabled={!taskForm.roomId || (user?.role === 'housekeeping_staff' && !taskForm.assignedTo)}
+            >
               Schedule Task
             </Button>
           </div>
@@ -605,9 +616,9 @@ export const HousekeepingPage = () => {
             placeholder="Explain why you cannot accept this assignment"
           />
           {rejectionError && <p className="text-xs text-rose-600">{rejectionError}</p>}
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="secondary" onClick={() => setIsRejectOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="danger" disabled={!rejectionReason.trim()}>Reject Job</Button>
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <Button className="w-full sm:w-auto" type="button" variant="secondary" onClick={() => setIsRejectOpen(false)}>Cancel</Button>
+            <Button className="w-full sm:w-auto" type="submit" variant="danger" disabled={!rejectionReason.trim()}>Reject Job</Button>
           </div>
         </form>
       </Modal>
@@ -639,7 +650,7 @@ export const HousekeepingPage = () => {
             ]}
           />
 
-          <div className="flex items-center gap-2 pt-2">
+          <div className="flex items-start gap-2 pt-2 sm:items-center">
             <input
               type="checkbox"
               id="ticketCheck"
@@ -652,11 +663,11 @@ export const HousekeepingPage = () => {
             </label>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
-            <Button variant="secondary" type="button" onClick={() => setIsDamageOpen(false)}>
+          <div className="flex flex-col-reverse gap-3 pt-4 sm:flex-row sm:justify-end">
+            <Button className="w-full sm:w-auto" variant="secondary" type="button" onClick={() => setIsDamageOpen(false)}>
               Cancel
             </Button>
-            <Button variant="danger" type="submit">
+            <Button className="w-full sm:w-auto" variant="danger" type="submit">
               Submit Damage Report
             </Button>
           </div>

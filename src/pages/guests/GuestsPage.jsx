@@ -133,8 +133,8 @@ export const GuestsPage = () => {
       )}
 
       {/* Search Bar */}
-      <div className="flex items-center gap-3 bg-white p-4 rounded-xl border border-slate-200/80">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-3 sm:flex-row sm:items-center sm:p-4">
+        <div className="relative w-full min-w-0 flex-1 sm:max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -156,7 +156,7 @@ export const GuestsPage = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[720px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Guest Name</th>
@@ -281,7 +281,7 @@ export const GuestsPage = () => {
             placeholder="Prefers high floor, allergy to goose feathers"
           />
 
-          <div className="flex justify-end gap-3 pt-3">
+          <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end sm:gap-3">
             <Button variant="secondary" type="button" onClick={closeAddGuestModal}>
               Cancel
             </Button>
@@ -333,8 +333,8 @@ export const GuestsPage = () => {
               ) : (
                 <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
                   {guestHistory.reservations.map((r) => (
-                    <div key={r._id} className="p-3 flex items-center justify-between hover:bg-slate-50">
-                      <div>
+                    <div key={r._id} className="flex flex-wrap items-center justify-between gap-3 p-3 hover:bg-slate-50">
+                      <div className="min-w-0">
                         <p className="font-bold text-slate-900">{r.bookingReference}</p>
                         <p className="text-slate-500">
                           {dayjs(r.checkInDate).format('YYYY-MM-DD')} to {dayjs(r.checkOutDate).format('YYYY-MM-DD')}

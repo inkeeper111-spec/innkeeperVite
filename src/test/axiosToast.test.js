@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import api from '../api/axios';
+import api, { showApiErrorToast } from '../api/axios';
 
 describe('API success toast controls', () => {
   const originalAdapter = api.defaults.adapter;
@@ -27,6 +27,27 @@ describe('API success toast controls', () => {
       await api.patch('/other-resource', {});
       expect(toasts).toHaveLength(1);
       expect(toasts[0]).toMatchObject({ type: 'success', message: 'Data saved successfully.' });
+    } finally {
+      window.removeEventListener('innkeeper:toast', listener);
+    }
+  });
+
+  it('shows page-specific error messages through the shared toast event', () => {
+    const toasts = [];
+    const listener = (event) => toasts.push(event.detail);
+    window.addEventListener('innkeeper:toast', listener);
+
+    try {
+      showApiErrorToast({
+        config: { method: 'post', url: '/orders' },
+        response: { status: 500, data: {} }
+      }, 'Order placement failed.');
+
+      expect(toasts).toEqual([{
+        type: 'error',
+        message: 'Order placement failed.',
+        key: '500:POST:/orders:'
+      }]);
     } finally {
       window.removeEventListener('innkeeper:toast', listener);
     }

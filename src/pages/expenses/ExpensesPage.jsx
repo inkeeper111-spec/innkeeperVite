@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../api/axios';
+import api, { showApiErrorToast } from '../../api/axios';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -10,9 +10,12 @@ import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { DollarSign, PlusCircle, Filter, CheckCircle2, TrendingDown } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useCurrency } from '../../hooks/useCurrency';
+import { useAuth } from '../../contexts/AuthContext';
 
 export const ExpensesPage = () => {
+  const { user } = useAuth();
   const { currencySymbol, formatCurrency } = useCurrency();
+  const isPlatformAdmin = user?.role === 'super_admin';
   const [expenses, setExpenses] = useState([]);
   const [categorySummary, setCategorySummary] = useState([]);
   const [monthlyTotal, setMonthlyTotal] = useState(0);
@@ -74,7 +77,7 @@ export const ExpensesPage = () => {
         setTimeout(() => setMessage(''), 3000);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to record expense');
+      showApiErrorToast(err, 'Failed to record expense');
     }
   };
 
@@ -89,15 +92,21 @@ export const ExpensesPage = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Operating Expenses</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+            {isPlatformAdmin ? 'Platform Expenses' : 'Operating Expenses'}
+          </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Track overhead costs, vendor payments, utility bills, supplies, and departmental expenditures
+            {isPlatformAdmin
+              ? 'View the expense ledger across all properties.'
+              : 'Track overhead costs, vendor payments, utility bills, supplies, and departmental expenditures'}
           </p>
         </div>
 
-        <Button variant="primary" icon={PlusCircle} onClick={() => setIsRecordOpen(true)}>
-          Record Expense
-        </Button>
+        {!isPlatformAdmin && (
+          <Button variant="primary" icon={PlusCircle} onClick={() => setIsRecordOpen(true)}>
+            Record Expense
+          </Button>
+        )}
       </div>
 
       {message && (
@@ -108,7 +117,7 @@ export const ExpensesPage = () => {
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Operating Outflow</span>
@@ -146,10 +155,11 @@ export const ExpensesPage = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[860px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Voucher #</th>
+                  {isPlatformAdmin && <th className="pb-3">Property</th>}
                   <th className="pb-3">Category</th>
                   <th className="pb-3">Description</th>
                   <th className="pb-3">Amount</th>
@@ -162,6 +172,9 @@ export const ExpensesPage = () => {
                 {filteredExpenses.map((exp) => (
                   <tr key={exp._id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3 font-mono font-bold text-slate-900">{exp.expenseNumber}</td>
+                    {isPlatformAdmin && (
+                      <td className="py-3 font-medium text-slate-700">{exp.hotelId?.name || 'Unknown property'}</td>
+                    )}
                     <td className="py-3 capitalize font-semibold text-brand-700">
                       {exp.category.replace(/_/g, ' ')}
                     </td>
@@ -181,7 +194,7 @@ export const ExpensesPage = () => {
       </Card>
 
       {/* Record Expense Modal */}
-      <Modal
+      {!isPlatformAdmin && <Modal
         isOpen={isRecordOpen}
         onClose={() => setIsRecordOpen(false)}
         title="Record Operating Expense"
@@ -245,7 +258,7 @@ export const ExpensesPage = () => {
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3">
+          <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end sm:gap-3">
             <Button variant="secondary" type="button" onClick={() => setIsRecordOpen(false)}>
               Cancel
             </Button>
@@ -254,7 +267,7 @@ export const ExpensesPage = () => {
             </Button>
           </div>
         </form>
-      </Modal>
+      </Modal>}
     </div>
   );
 };

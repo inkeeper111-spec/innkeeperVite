@@ -32,12 +32,12 @@ export const RegistrationStatus = ({ status }) => {
   const Icon = content.icon;
   return (
     <main className="flex min-h-[70vh] items-center justify-center px-4 py-12">
-      <Card className="w-full max-w-xl p-8 text-center sm:p-10">
+      <Card className="w-full max-w-xl p-5 text-center sm:p-10">
         <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 ${content.color}`}>
           <Icon className="h-7 w-7" />
         </div>
-        <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Nestnn · hotel onboarding</p>
-        <h1 className="mt-2 text-2xl font-black text-slate-900">{content.title}</h1>
+        <p className="mt-5 break-words text-xs font-bold uppercase tracking-[0.12em] text-slate-500 sm:tracking-[0.18em]">Nestnn · hotel onboarding</p>
+        <h1 className="mt-2 break-words text-xl font-black text-slate-900 sm:text-2xl">{content.title}</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">{content.description}</p>
         {status === 'rejected' && hotel?.rejectionReason && (
           <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-left text-sm text-rose-900">
@@ -51,7 +51,7 @@ export const RegistrationStatus = ({ status }) => {
             await logout();
             navigate('/login', { replace: true });
           }}
-          className="mt-7 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          className="mt-7 w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:w-auto"
         >
           Sign out
         </button>

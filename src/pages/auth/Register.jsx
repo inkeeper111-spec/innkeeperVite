@@ -54,23 +54,23 @@ export const Register = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden flex flex-col justify-center">
+    <div className="relative flex min-h-screen flex-col justify-center overflow-hidden bg-slate-900 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
       <div className="absolute top-0 right-0 w-96 h-96 bg-brand-600/20 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-xl z-10">
+      <div className="z-10 mx-auto w-full min-w-0 sm:max-w-xl">
         <div className="text-center mb-6">
           <div className="flex justify-center mb-4">
             <NestnnLogo size="lg" dark />
           </div>
-          <h2 className="text-2xl font-black text-white tracking-tight">Register Your Hotel</h2>
+          <h2 className="break-words text-2xl font-black text-white tracking-tight">Register Your Hotel</h2>
           <p className="text-sm text-slate-400 mt-1">
             Submit your hotel details for Super Admin approval.
           </p>
         </div>
 
-        <div className="bg-white py-8 px-6 shadow-2xl rounded-2xl sm:px-10 border border-slate-100">
+        <div className="min-w-0 rounded-2xl border border-slate-100 bg-white px-4 py-6 shadow-2xl sm:px-10 sm:py-8">
           {error && (
-            <div className="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+            <div className="mb-5 break-words rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700">
               {error}
             </div>
           )}
@@ -89,7 +89,7 @@ export const Register = () => {
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Hotel Property Information</h3>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
                 label="Hotel or Resort Name"
                 name="hotelName"
@@ -114,7 +114,7 @@ export const Register = () => {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
                 label="Street Address"
                 name="address"
@@ -133,7 +133,7 @@ export const Register = () => {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Input
                 label="State / Province"
                 name="state"
@@ -164,7 +164,7 @@ export const Register = () => {
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Owner & Administrator Account</h3>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
                 label="Your Full Name"
                 name="name"
@@ -182,7 +182,7 @@ export const Register = () => {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
                 label="Account Email"
                 type="email"

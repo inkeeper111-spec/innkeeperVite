@@ -25,6 +25,16 @@ const operationKey = (config, status) => {
   return `${status}:${method}:${url}:${config?.toastKey || ''}`;
 };
 
+export const showApiErrorToast = (error, fallbackMessage) => {
+  const apiMessage = error?.response?.data?.message;
+  const message = typeof apiMessage === 'string' && apiMessage.trim()
+    ? apiMessage
+    : fallbackMessage;
+  const status = error?.response?.status || error?.code || 'NETWORK';
+  const key = error?.config ? operationKey(error.config, status) : undefined;
+  dispatchToast('error', message, key);
+};
+
 const getSuccessMessage = (response) => {
   const apiMessage = response?.data?.message;
   if (typeof apiMessage === 'string' && apiMessage.trim()) return apiMessage;

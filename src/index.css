@@ -32,11 +32,28 @@ body,
   overflow-x: clip;
 }
 
+html {
+  scroll-padding-top: 5rem;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-width: 320px;
+}
+
 button,
 input,
 select,
 textarea {
   touch-action: manipulation;
+}
+
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 button,
@@ -56,6 +73,7 @@ canvas {
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table-scroll table {
@@ -170,7 +188,12 @@ canvas {
   body * {
     visibility: hidden;
   }
-  #printable-invoice, #printable-invoice * {
+  #printable-invoice,
+  #printable-invoice *,
+  #printable-restaurant-receipt,
+  #printable-restaurant-receipt *,
+  #printable-restaurant-receipt-print,
+  #printable-restaurant-receipt-print * {
     visibility: visible;
   }
   #printable-invoice {
@@ -181,5 +204,45 @@ canvas {
     margin: 0;
     padding: 20px;
     background: white;
+  }
+  #printable-restaurant-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 72mm;
+    max-width: 72mm;
+    margin: 0;
+    padding: 2mm;
+    background: white;
+    color: black;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    line-height: 1.4;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  #printable-restaurant-receipt-print {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    line-height: 1.4;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  #printable-restaurant-receipt header,
+  #printable-restaurant-receipt footer,
+  #printable-restaurant-receipt > div,
+  #printable-restaurant-receipt-print header,
+  #printable-restaurant-receipt-print footer,
+  #printable-restaurant-receipt-print > div {
+    break-inside: avoid;
+  }
+  #printable-restaurant-receipt .border-dashed {
+    border-color: #777;
+  }
+  #printable-restaurant-receipt .text-\[11px\],
+  #printable-restaurant-receipt .text-\[10px\],
+  #printable-restaurant-receipt-print .text-\[11px\],
+  #printable-restaurant-receipt-print .text-\[10px\] {
+    font-size: 9pt;
   }
 }

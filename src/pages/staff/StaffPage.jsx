@@ -272,7 +272,7 @@ export const StaffPage = () => {
             Employee directory, daily attendance tracking, monthly payroll processing, and salary expense integration
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           {activeTab === 'attendance' && (
             <>
               <Button variant="outline" size="sm" icon={Layers} onClick={() => setIsBulkOpen(true)}>
@@ -331,10 +331,11 @@ export const StaffPage = () => {
       )}
 
       {/* Tabs */}
-      <div className="flex flex-wrap border-b border-slate-200">
+      <div className="overflow-x-auto border-b border-slate-200">
+        <div className="flex min-w-max">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setActiveTab(key)}
-            className={`py-3 px-5 font-semibold text-sm border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`shrink-0 whitespace-nowrap px-3 py-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-1.5 sm:px-5 ${
               activeTab === key
                 ? 'border-brand-600 text-brand-600'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -342,6 +343,7 @@ export const StaffPage = () => {
             <Icon className="w-4 h-4" />{label}
           </button>
         ))}
+        </div>
       </div>
 
       {/* ── DIRECTORY TAB ── */}
@@ -349,7 +351,7 @@ export const StaffPage = () => {
         <Card>
           {loading ? <LoadingSpinner text="Loading staff records..." /> : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[850px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Employee</th>
@@ -398,21 +400,21 @@ export const StaffPage = () => {
       {/* ── ATTENDANCE TAB ── */}
       {activeTab === 'attendance' && (
         <>
-          <div className="flex items-center gap-3 bg-white p-4 rounded-xl border border-slate-200/80">
+          <div className="flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-3 sm:flex-row sm:items-center sm:p-4">
             <DatePicker
               label="Select Date"
               value={attendanceDate}
               onChange={(e) => { setAttendanceDate(e.target.value); fetchAttendance(e.target.value); }}
               className="w-56"
             />
-            <div className="ml-auto text-xs text-slate-500 font-medium">
+            <div className="text-xs font-medium text-slate-500 sm:ml-auto">
               {dayjs(attendanceDate).format('dddd, MMMM D, YYYY')}
             </div>
           </div>
 
           <Card>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[780px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Employee</th>
@@ -483,7 +485,7 @@ export const StaffPage = () => {
       {/* ── MONTHLY SUMMARY TAB ── */}
       {activeTab === 'summary' && (
         <>
-          <div className="flex items-center gap-3 bg-white p-4 rounded-xl border border-slate-200/80">
+          <div className="flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-3 sm:flex-row sm:items-center sm:p-4">
             <div>
               <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Select Month</label>
               <Input
@@ -493,7 +495,7 @@ export const StaffPage = () => {
               />
             </div>
             {summary && (
-              <div className="ml-auto flex gap-4 text-xs">
+              <div className="flex flex-wrap gap-4 text-xs sm:ml-auto">
                 <div className="text-center">
                   <p className="text-slate-400 font-semibold uppercase text-[10px]">Working Days</p>
                   <p className="font-black text-slate-900 text-lg">{summary.workingDays}</p>
@@ -511,7 +513,7 @@ export const StaffPage = () => {
           ) : (
             <Card>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="w-full min-w-[1000px] text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                       <th className="pb-3">Employee</th>
@@ -596,7 +598,7 @@ export const StaffPage = () => {
               <div className="py-12 text-center text-slate-400 text-xs">No salary records yet. Process your first payroll run.</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="w-full min-w-[1000px] text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                       <th className="pb-3">Employee</th>
@@ -652,7 +654,7 @@ export const StaffPage = () => {
       {activeTab === 'advances' && (
         <Card title="Salary advances" subtitle="Deducted automatically in payroll for the selected month">
           <form
-            className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-4"
+            className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"
             onSubmit={async (e) => {
               e.preventDefault();
               try {
@@ -683,7 +685,8 @@ export const StaffPage = () => {
               <Button type="submit" size="sm">Add</Button>
             </div>
           </form>
-          <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px] text-left text-xs">
             <thead>
               <tr className="text-slate-400 uppercase border-b border-slate-100">
                 <th className="pb-2">Employee</th>
@@ -703,6 +706,7 @@ export const StaffPage = () => {
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
 
@@ -713,7 +717,7 @@ export const StaffPage = () => {
             <div className="py-12 text-center text-slate-400 text-xs">No shifts scheduled yet.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[650px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Staff Member</th>

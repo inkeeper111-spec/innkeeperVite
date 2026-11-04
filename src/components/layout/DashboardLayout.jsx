@@ -9,7 +9,7 @@ export const DashboardLayout = () => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-[100dvh] bg-orvelle-ivory flex">
       {/* Sidebar */}
       <Sidebar
         isCollapsed={isCollapsed}
@@ -23,13 +23,13 @@ export const DashboardLayout = () => {
         aria-hidden={!isMobileOpen}
         tabIndex={isMobileOpen ? 0 : -1}
         onClick={() => setIsMobileOpen(false)}
-        className={`fixed inset-0 z-30 bg-orvelle-dark/50 backdrop-blur-[1px] md:hidden ${isMobileOpen ? 'block' : 'hidden'}`}
+        className={`fixed inset-0 z-30 bg-orvelle-dark/50 backdrop-blur-[2px] min-[1100px]:hidden ${isMobileOpen ? 'block' : 'hidden'}`}
       />
 
       {/* Main Container */}
       <div
         className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${
-          isCollapsed ? 'md:ml-20 lg:ml-28' : 'md:ml-64 lg:ml-72'
+          isCollapsed ? 'min-[1100px]:ml-20' : 'min-[1100px]:ml-64'
         }`}
       >
         <Header
@@ -38,7 +38,7 @@ export const DashboardLayout = () => {
           setIsMobileOpen={setIsMobileOpen}
         />
 
-        <main className="flex-1 min-w-0 w-full max-w-[1600px] mx-auto px-3 py-4 sm:px-5 sm:py-6 lg:px-8 lg:py-8">
+        <main className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 px-3 py-4 sm:px-5 sm:py-5 xl:px-8 xl:py-7">
           <Outlet />
         </main>
         <AppFooter />

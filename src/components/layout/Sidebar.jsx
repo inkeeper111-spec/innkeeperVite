@@ -22,7 +22,8 @@ import {
   ChevronRight,
   LogOut,
   Building2,
-  Bell
+  Bell,
+  KeyRound
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { NestnnLogo } from '../ui/NestnnLogo';
@@ -84,10 +85,10 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
       roles: ['hotel_admin', 'receptionist', 'super_admin']
     },
     {
-      to: '/subscription',
-      label: 'Subscription',
+      to: user?.role === 'super_admin' ? '/superadmin/modules' : '/subscription',
+      label: user?.role === 'super_admin' ? 'Module Pricing' : 'Subscription',
       icon: Receipt,
-      roles: ['hotel_admin']
+      roles: ['hotel_admin', 'super_admin']
     },
     {
       to: '/housekeeping',
@@ -172,12 +173,17 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
       label: 'Hotel Settings',
       icon: Settings,
       roles: ['hotel_admin']
+    },
+    {
+      to: '/roles-responsibilities',
+      label: 'Roles & Responsibilities',
+      icon: KeyRound,
+      roles: ['hotel_admin']
     }
   ];
 
   const filteredItems = navItems.filter((item) => {
     if (!user) return false;
-    if (!item.roles.includes(user.role)) return false;
     if (user.role === 'super_admin') return true;
     const moduleByPath = {
       '/frontdesk': 'frontdesk',
@@ -197,9 +203,44 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
       '/reports': 'reports',
       '/ai-assistant': 'ai_assistant'
     };
+    const permissionByPath = {
+      '/dashboard': 'dashboard.view',
+      '/frontdesk': 'frontdesk.view',
+      '/reservations': 'reservations.view',
+      '/rooms': 'rooms.view',
+      '/guests': 'guests.view',
+      '/billing': 'billing.view',
+      '/housekeeping': 'housekeeping.view',
+      '/restaurant': 'restaurant.view',
+      '/menu-management': 'menu_management.view',
+      '/inventory': 'inventory.view',
+      '/maintenance': 'maintenance.view',
+      '/expenses': 'expenses.view',
+      '/staff': 'staff_directory.view',
+      '/leave-management': 'leave.view',
+      '/my-leave': 'leave.view',
+      '/attendance': 'staff_self.view',
+      '/reports': 'reports.view',
+      '/ai-assistant': 'ai_assistant.view',
+      '/notifications': 'notifications.view',
+      '/settings': 'settings.view',
+      '/roles-responsibilities': 'roles_responsibilities.view'
+    };
     const moduleKey = moduleByPath[item.to];
+    const permissionKey = permissionByPath[item.to];
+    const overrides = user.permissionOverrides || {};
+    const hasOverride = permissionKey && Object.hasOwn(overrides, permissionKey);
+    const hasPermission = permissionKey && user.permissions
+      ? user.permissions[permissionKey] === true
+      : hasOverride
+        ? overrides[permissionKey]
+        : item.roles.includes(user.role);
+    if (!hasPermission) return false;
     const selectedModules = hotel?.currentSubscription?.selectedModules || [];
-    return !moduleKey || !selectedModules.length || selectedModules.includes(moduleKey);
+    return user.role === 'super_admin'
+      || !moduleKey
+      || !selectedModules.length
+      || selectedModules.includes(moduleKey);
   });
 
   return (
@@ -207,24 +248,24 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
       role="dialog"
       aria-modal={isMobileOpen ? 'true' : undefined}
       aria-label="Application navigation"
-      className={`fixed top-0 left-0 z-40 h-screen bg-orvelle-sidebar text-slate-300 transition-all duration-300 flex flex-col border-r border-orvelle-dark transform lg:top-4 lg:left-4 lg:h-[calc(100dvh-2rem)] lg:overflow-hidden lg:rounded-[1.75rem] lg:border lg:border-white/10 lg:shadow-[0_24px_70px_rgba(29,16,11,0.28)] ${
-        isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-      } ${isCollapsed ? 'md:w-20' : 'w-72 md:w-64'}`}
+      className={`fixed inset-y-0 left-0 z-40 flex h-[100dvh] w-72 transform flex-col border-r border-white/[0.08] bg-gradient-to-b from-[#352219] via-orvelle-sidebar to-[#291810] text-slate-300 shadow-[8px_0_24px_rgba(29,16,11,0.12)] transition-all duration-300 ${
+        isMobileOpen ? 'translate-x-0' : '-translate-x-full min-[1100px]:translate-x-0'
+      } ${isCollapsed ? 'min-[1100px]:w-20' : 'min-[1100px]:w-64'}`}
     >
       {/* Brand Header */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-white/10 bg-black/30">
-        <NestnnLogo size="md" dark className="overflow-hidden md:hidden" />
+      <div className="h-[4.5rem] flex flex-shrink-0 items-center justify-between px-4 border-b border-white/[0.08] bg-black/20">
+        <NestnnLogo size="md" dark className="overflow-hidden min-[1100px]:hidden" />
         {!isCollapsed && (
-          <NestnnLogo size="md" dark className="hidden overflow-hidden md:block" />
+          <NestnnLogo size="md" dark className="hidden overflow-hidden min-[1100px]:block" />
         )}
         {isCollapsed && (
-          <NestnnLogo size="md" variant="icon" dark className="hidden mx-auto md:block" />
+          <NestnnLogo size="md" variant="icon" dark className="hidden mx-auto min-[1100px]:block" />
         )}
 
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className={`hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors md:block ${
-            isCollapsed ? 'md:hidden' : ''
+          className={`hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors min-[1100px]:block ${
+            isCollapsed ? 'min-[1100px]:hidden' : ''
           }`}
           title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
         >
@@ -232,7 +273,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
         </button>
           <button
             onClick={() => setIsMobileOpen(false)}
-            className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="min-[1100px]:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
             title="Close navigation"
           >
             <ChevronLeft className="w-5 h-5" />
@@ -241,14 +282,14 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
 
       {/* Hotel Context Badge (if logged into tenant) */}
       {!isCollapsed && hotel && (
-        <div className="px-4 py-3 border-b border-slate-800/60 bg-slate-800/30">
-          <p className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Property</p>
-          <p className="text-xs font-semibold text-slate-100 truncate mt-0.5">{hotel.name}</p>
+        <div className="border-b border-white/[0.07] bg-white/[0.03] px-4 py-3.5">
+          <p className="text-[10px] uppercase font-semibold tracking-[0.16em] text-slate-400">Property</p>
+          <p className="mt-1 truncate text-xs font-semibold text-white/90">{hotel.name}</p>
         </div>
       )}
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {filteredItems.map((item) => {
           const Icon = item.icon;
           const isNotifications = item.to === '/notifications';
@@ -256,13 +297,14 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.to === '/superadmin'}
               onClick={() => setIsMobileOpen(false)}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition-all group ${
+                `group flex items-center gap-3 border-l-2 px-3 py-2.5 font-medium text-sm transition-all ${
                   isActive
-                    ? 'bg-amber-700/30 text-amber-300 border border-amber-600/40 shadow-sm font-semibold'
-                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
-                } ${isCollapsed ? 'md:justify-center md:px-0' : ''}`
+                    ? 'border-l-amber-300 bg-amber-400/[0.09] font-semibold text-amber-200'
+                    : 'border-l-transparent text-slate-400 hover:border-l-white/30 hover:bg-white/[0.05] hover:text-white'
+                } ${isCollapsed ? 'min-[1100px]:justify-center min-[1100px]:px-0' : ''}`
               }
               title={isCollapsed ? item.label : undefined}
             >
@@ -274,9 +316,9 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
                   </span>
                 )}
               </span>
-              <span className={`truncate ${isCollapsed ? 'md:hidden' : ''}`}>{item.label}</span>
+              <span className={`truncate ${isCollapsed ? 'min-[1100px]:hidden' : ''}`}>{item.label}</span>
               {(isNotifications && unreadCount > 0) && (
-                <span className={`ml-auto text-[10px] font-extrabold bg-rose-500 text-white px-1.5 py-0.5 rounded-full leading-none ${isCollapsed ? 'md:hidden' : ''}`}>
+                <span className={`ml-auto text-[10px] font-extrabold bg-rose-500 text-white px-1.5 py-0.5 rounded-full leading-none ${isCollapsed ? 'min-[1100px]:hidden' : ''}`}>
                   {unreadCount}
                 </span>
               )}
@@ -286,12 +328,12 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
       </nav>
 
       {/* Footer Profile & Logout */}
-      <div className="p-3 border-t border-slate-800/80 bg-slate-950/30">
-        <div className={`flex items-center gap-3 ${isCollapsed ? 'md:justify-center' : 'px-2 py-1.5'}`}>
-          <div className="w-8 h-8 rounded-full bg-brand-700/60 text-brand-200 border border-brand-500/30 flex items-center justify-center font-bold text-xs uppercase flex-shrink-0">
+      <div className="border-t border-white/[0.08] bg-black/15 p-3">
+        <div className={`flex items-center gap-3 ${isCollapsed ? 'min-[1100px]:justify-center' : 'px-2 py-1.5'}`}>
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-amber-300/30 bg-amber-400/10 text-xs font-bold uppercase text-amber-200">
             {user?.name?.charAt(0) || 'U'}
           </div>
-          <div className={`flex-1 min-w-0 ${isCollapsed ? 'md:hidden' : ''}`}>
+          <div className={`flex-1 min-w-0 ${isCollapsed ? 'min-[1100px]:hidden' : ''}`}>
               <p className="text-xs font-semibold text-white truncate">{user?.name}</p>
               <p className="text-[10px] text-slate-400 uppercase font-medium truncate">
                 {user?.role?.replace(/_/g, ' ')}
@@ -299,7 +341,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
           </div>
           <button
             onClick={handleLogout}
-            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/[0.07] hover:text-rose-300"
             title="Sign Out"
           >
             <LogOut className="w-4 h-4" />

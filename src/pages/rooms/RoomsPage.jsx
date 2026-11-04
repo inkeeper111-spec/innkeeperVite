@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../api/axios';
+import api, { showApiErrorToast } from '../../api/axios';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -159,7 +159,7 @@ export const RoomsPage = () => {
       await api.patch(`/rooms/${roomId}/status`, { roomStatus: newStatus });
       fetchData();
     } catch (err) {
-      alert('Failed to update room status.');
+      showApiErrorToast(err, 'Failed to update room status.');
     }
   };
 
@@ -212,7 +212,7 @@ export const RoomsPage = () => {
         </div>
 
         {canManageRooms && (
-          <div className="flex items-center gap-2.5">
+          <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row">
             <Button variant="outline" size="sm" icon={Tag} onClick={openAddTypeModal}>
               New Category
             </Button>
@@ -261,8 +261,8 @@ export const RoomsPage = () => {
       {activeTab === 'rooms' && (
         <>
           {/* Filters Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200/80">
-            <div className="relative flex-1 max-w-sm">
+          <div className="flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-3 lg:flex-row lg:items-center lg:justify-between sm:p-4">
+            <div className="relative w-full min-w-0 flex-1 sm:max-w-sm">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -273,7 +273,7 @@ export const RoomsPage = () => {
               />
             </div>
 
-            <div className="flex w-full flex-col gap-2 sm:flex-row">
+            <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:w-auto">
               <Select
                 size="sm"
                 value={statusFilter}
@@ -426,7 +426,7 @@ export const RoomsPage = () => {
 
               <p className="text-xs text-slate-600 mt-2 line-clamp-2">{type.description}</p>
 
-              <div className="mt-3 flex items-center gap-3 text-xs text-slate-500 font-medium">
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 sm:gap-3">
                 <span>Max: {type.maxOccupancy} Guests</span>
                 <span>•</span>
                 <span>{type.bedConfiguration}</span>
@@ -511,7 +511,7 @@ export const RoomsPage = () => {
             placeholder="Corner unit, city view, adjoining door"
           />
 
-          <div className="flex justify-end gap-3 pt-3">
+          <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end sm:gap-3">
             <Button variant="secondary" type="button" onClick={() => setIsAddRoomOpen(false)}>
               Cancel
             </Button>
@@ -591,7 +591,7 @@ export const RoomsPage = () => {
             placeholder="High-Speed Wi-Fi, Smart TV, Balcony, Minibar"
           />
 
-          <div className="flex justify-end gap-3 pt-3">
+          <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end sm:gap-3">
             <Button variant="secondary" type="button" onClick={closeAddTypeModal}>
               Cancel
             </Button>

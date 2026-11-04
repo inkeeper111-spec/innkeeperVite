@@ -97,7 +97,7 @@ export const Login = () => {
           </div>
 
           <div className="relative flex min-h-0 items-start justify-center px-5 py-5 sm:px-10 sm:py-8 lg:items-center lg:px-10 lg:py-6 xl:px-16">
-            <div className="login-card relative w-full max-w-[540px] px-0 py-0 lg:max-h-full lg:max-w-[430px] lg:overflow-y-auto">
+            <div className="login-card relative w-full min-w-0 max-w-[540px] px-0 py-0 lg:max-h-full lg:max-w-[430px] lg:overflow-y-auto">
               <div className="login-brand mb-4 flex justify-center lg:mb-6 lg:justify-start">
                 <NestnnLogo
                   size="lg"
@@ -124,7 +124,7 @@ export const Login = () => {
 
               <div className="login-heading mb-5 lg:mb-6">
                 <p className="login-eyebrow mb-1 text-[10px] font-bold uppercase tracking-[0.22em] text-[#b17c35] lg:mb-2">Secure workspace</p>
-                <h2 className="text-[30px] font-black tracking-tight text-[#452718] sm:text-4xl lg:text-[38px]">Welcome back</h2>
+                <h2 className="break-words text-[30px] font-black tracking-tight text-[#452718] sm:text-4xl lg:text-[38px]">Welcome back</h2>
                 <p className="mt-1 text-sm text-[#83796f] sm:text-base">Sign in to manage your hotel operations.</p>
               </div>
 

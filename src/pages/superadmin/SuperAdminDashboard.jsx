@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../api/axios';
+import api, { showApiErrorToast } from '../../api/axios';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -18,7 +18,7 @@ import {
 } from 'recharts';
 import dayjs from 'dayjs';
 
-export const SuperAdminDashboard = () => {
+export const SuperAdminDashboard = ({ initialTab = 'approvals' }) => {
   const [stats,        setStats]        = useState(null);
   const [hotels,       setHotels]       = useState([]);
   const [plans,        setPlans]        = useState([]);
@@ -27,7 +27,7 @@ export const SuperAdminDashboard = () => {
   const [minimumMonthlyAmount, setMinimumMonthlyAmount] = useState('999');
   const [auditLogs,    setAuditLogs]    = useState([]);
   const [loading,      setLoading]      = useState(true);
-  const [activeTab,    setActiveTab]    = useState('approvals');
+  const [activeTab,    setActiveTab]    = useState(initialTab);
   const [search,       setSearch]       = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [message,      setMessage]      = useState('');
@@ -91,7 +91,7 @@ export const SuperAdminDashboard = () => {
         fetchAll();
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Status update failed.');
+      showApiErrorToast(err, 'Status update failed.');
     }
   };
 
@@ -117,7 +117,7 @@ export const SuperAdminDashboard = () => {
         fetchAll();
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Plan assignment failed.');
+      showApiErrorToast(err, 'Plan assignment failed.');
     }
   };
 
@@ -132,7 +132,7 @@ export const SuperAdminDashboard = () => {
         fetchAll();
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to create plan.');
+      showApiErrorToast(err, 'Failed to create plan.');
     }
   };
 
@@ -143,7 +143,7 @@ export const SuperAdminDashboard = () => {
       setMinimumMonthlyAmount(String(res.data.data.minimumMonthlyAmount));
       showMessage(res.data.message);
     } catch (err) {
-      alert(err.response?.data?.message || 'Unable to update the minimum subscription amount.');
+      showApiErrorToast(err, 'Unable to update the minimum subscription amount.');
     }
   };
 
@@ -159,7 +159,7 @@ export const SuperAdminDashboard = () => {
       setModuleConfigs((previous) => previous.map((item) => item.key === module.key ? res.data.data : item));
       showMessage(`${module.name} pricing updated.`);
     } catch (err) {
-      alert(err.response?.data?.message || 'Unable to update module configuration.');
+      showApiErrorToast(err, 'Unable to update module configuration.');
     }
   };
 
@@ -168,7 +168,7 @@ export const SuperAdminDashboard = () => {
       const res = await api.get(`/superadmin/modules/${module.key}/hotels`);
       setModuleSubscribers(res.data.data);
     } catch (err) {
-      alert(err.response?.data?.message || 'Unable to load hotels subscribed to this module.');
+      showApiErrorToast(err, 'Unable to load hotels subscribed to this module.');
     }
   };
 
@@ -180,7 +180,7 @@ export const SuperAdminDashboard = () => {
       showMessage(res.data.message);
       fetchAll();
     } catch (err) {
-      alert(err.response?.data?.message || `Unable to ${action} subscription.`);
+      showApiErrorToast(err, `Unable to ${action} subscription.`);
     }
   };
 
@@ -298,16 +298,17 @@ export const SuperAdminDashboard = () => {
       )}
 
       {/* Tabs */}
-      <div className="flex flex-wrap border-b border-slate-200 gap-0">
+      <div className="overflow-x-auto border-b border-slate-200">
+        <div className="flex min-w-max gap-0">
         {[
           { key: 'approvals',     label: `Hotels (${hotels.length})`,          icon: Building2 },
-          { key: 'modules',       label: `Modules (${moduleConfigs.length})`,   icon: CreditCard },
+          { key: 'modules',       label: `Module Pricing (${moduleConfigs.length})`, icon: CreditCard },
           { key: 'plans',         label: `Plans (${plans.length})`,             icon: CreditCard },
           { key: 'subscriptions', label: `Subscriptions (${subscriptions.length})`, icon: TrendingUp },
           { key: 'audit',         label: 'Audit Trail',                         icon: FileText }
         ].map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setActiveTab(key)}
-            className={`py-3 px-5 font-semibold text-sm border-b-2 transition-all flex items-center gap-2 ${
+            className={`shrink-0 whitespace-nowrap px-3 py-3 text-sm font-semibold transition-all border-b-2 flex items-center gap-2 sm:px-5 ${
               activeTab === key
                 ? 'border-brand-600 text-brand-600'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -316,6 +317,7 @@ export const SuperAdminDashboard = () => {
             <Icon className="w-4 h-4" />{label}
           </button>
         ))}
+        </div>
       </div>
 
       {/* ── HOTELS TAB ── */}
@@ -331,7 +333,7 @@ export const SuperAdminDashboard = () => {
             </div>
             <Select
               size="sm"
-              className="max-w-xs"
+              className="w-full sm:max-w-xs"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               options={[
@@ -345,7 +347,7 @@ export const SuperAdminDashboard = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[900px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Hotel</th>
@@ -400,15 +402,19 @@ export const SuperAdminDashboard = () => {
       {/* ── MODULE PRICING TAB ── */}
       {activeTab === 'modules' && (
         <div className="space-y-5">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Module subscription pricing</h2>
+            <p className="mt-1 text-sm text-slate-500">Set the monthly and annual price charged for each available hotel module.</p>
+          </div>
           <Card>
-            <form onSubmit={saveMinimumAmount} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="max-w-xs flex-1">
+            <form onSubmit={saveMinimumAmount} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                <div className="w-full flex-1 sm:max-w-xs">
                 <Input label="Minimum monthly subscription (₹)" type="number" min="999" step="0.01"
                   value={minimumMonthlyAmount}
                   onChange={(event) => setMinimumMonthlyAmount(event.target.value)} />
               </div>
               <Button type="submit">Save minimum</Button>
-              <p className="text-xs text-slate-500">The final amount is the greater of this minimum (×12 for annual) and the selected module total.</p>
+              <p className="w-full text-xs text-slate-500">The final amount is the greater of this minimum (×12 for annual) and the selected module total.</p>
             </form>
           </Card>
           <div className="grid gap-4 lg:grid-cols-2">
@@ -480,7 +486,7 @@ export const SuperAdminDashboard = () => {
         <Card>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-slate-500">Review payment history, upcoming renewals, and expired hotel subscriptions.</p>
-            <Select size="sm" className="max-w-xs" value={subscriptionFilter}
+            <Select size="sm" className="w-full sm:max-w-xs" value={subscriptionFilter}
               onChange={(event) => setSubscriptionFilter(event.target.value)}
               options={[
                 { value: 'all', label: 'All subscriptions' },
@@ -491,7 +497,7 @@ export const SuperAdminDashboard = () => {
               ]} />
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[850px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Hotel</th>
@@ -550,7 +556,7 @@ export const SuperAdminDashboard = () => {
       {activeTab === 'audit' && (
         <Card>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[700px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Timestamp</th>
@@ -602,7 +608,7 @@ export const SuperAdminDashboard = () => {
               { label: 'Monthly', value: 'monthly' },
               { label: 'Annual (Save ~17%)', value: 'annual' }
             ]} />
-          <div className="flex justify-end gap-3 pt-3">
+          <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end sm:gap-3">
             <Button variant="secondary" type="button" onClick={() => setIsPlanModalOpen(false)}>Cancel</Button>
             <Button variant="primary" type="submit" disabled={!planAssignForm.planId}>Assign Plan</Button>
           </div>
@@ -631,7 +637,7 @@ export const SuperAdminDashboard = () => {
               onChange={(e) => setNewPlanForm({ ...newPlanForm, annualPrice: e.target.value })}
               placeholder="10× monthly" />
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Input label="Max Rooms" type="number" value={newPlanForm.maxRooms}
               onChange={(e) => setNewPlanForm({ ...newPlanForm, maxRooms: e.target.value })} />
             <Input label="Max Users" type="number" value={newPlanForm.maxUsers}
@@ -641,7 +647,7 @@ export const SuperAdminDashboard = () => {
           </div>
           <Input label="Enabled Modules (comma-separated)" value={newPlanForm.enabledModules}
             onChange={(e) => setNewPlanForm({ ...newPlanForm, enabledModules: e.target.value })} />
-          <div className="flex justify-end gap-3 pt-3">
+          <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end sm:gap-3">
             <Button variant="secondary" type="button" onClick={() => setIsNewPlanOpen(false)}>Cancel</Button>
             <Button variant="primary" type="submit">Create Plan</Button>
           </div>

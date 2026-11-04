@@ -401,7 +401,7 @@ export const ReservationsPage = () => {
       {canReviewRequests && (
         <Card>
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-base font-bold text-slate-900">Reservation Requests</h2>
                 <p className="text-xs text-slate-500 mt-1">Review pending requests for this hotel.</p>
@@ -421,7 +421,7 @@ export const ReservationsPage = () => {
               <div className="py-6 text-center text-slate-400 text-xs">No pending reservation requests.</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="w-full min-w-[900px] text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                       <th className="pb-3">Reference</th>
@@ -521,7 +521,7 @@ export const ReservationsPage = () => {
 
         <Select
           size="sm"
-          className="max-w-xs"
+          className="w-full sm:max-w-xs"
           value={statusFilter}
           onChange={(e) => {
             setStatusFilter(e.target.value);
@@ -547,7 +547,7 @@ export const ReservationsPage = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[1040px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Reference</th>
@@ -853,11 +853,12 @@ export const ReservationsPage = () => {
             placeholder="Early check-in, high floor, quiet room"
           />
 
-          <div className="flex justify-end gap-3 pt-3">
-            <Button variant="secondary" type="button" onClick={closeNewReservationModal}>
+          <div className="flex flex-col-reverse gap-3 pt-3 sm:flex-row sm:justify-end">
+            <Button className="w-full sm:w-auto" variant="secondary" type="button" onClick={closeNewReservationModal}>
               Cancel
             </Button>
             <Button
+              className="w-full sm:w-auto"
               variant="primary"
               type="submit"
               disabled={!bookingForm.roomId || searchingRooms || Boolean(dateValidationMessage) || !availableRooms.some((room) => room._id === bookingForm.roomId)}
@@ -892,8 +893,9 @@ export const ReservationsPage = () => {
               className="mt-1.5 w-full rounded-lg border border-slate-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20"
             />
           </label>
-          <div className="flex justify-end gap-3">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button
+              className="w-full sm:w-auto"
               variant="secondary"
               type="button"
               onClick={closeCancellationModal}
@@ -902,6 +904,7 @@ export const ReservationsPage = () => {
               Go Back
             </Button>
             <Button
+              className="w-full sm:w-auto"
               variant="danger"
               type="submit"
               loading={cancellingReservation}
@@ -939,8 +942,9 @@ export const ReservationsPage = () => {
               placeholder="Explain why this reservation request is being rejected."
             />
           </label>
-          <div className="flex justify-end gap-3">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button
+              className="w-full sm:w-auto"
               variant="secondary"
               type="button"
               onClick={() => {
@@ -951,6 +955,7 @@ export const ReservationsPage = () => {
               Cancel
             </Button>
             <Button
+              className="w-full sm:w-auto"
               variant="danger"
               type="submit"
               loading={processingRequestId === rejectingBooking?._id}
@@ -971,7 +976,7 @@ export const ReservationsPage = () => {
         {selectedBooking && (
           <div className="space-y-4 text-xs">
             <div className="p-4 bg-slate-50 rounded-xl space-y-2">
-              <div className="flex justify-between">
+              <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
                 <span className="text-slate-500">Guest Name:</span>
                 <span className="font-bold text-slate-800">{selectedBooking.guestName}</span>
               </div>
@@ -983,7 +988,7 @@ export const ReservationsPage = () => {
                 <span className="shrink-0 text-slate-500">Email:</span>
                 <span className="break-all text-right font-semibold text-slate-700">{selectedBooking.guestEmail || 'Not provided'}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
                 <span className="text-slate-500">Stay Duration:</span>
                 <span className="font-semibold text-slate-700">
                   {dayjs(selectedBooking.checkInDate).format('YYYY-MM-DD')} to {dayjs(selectedBooking.checkOutDate).format('YYYY-MM-DD')}
@@ -1025,7 +1030,7 @@ export const ReservationsPage = () => {
                   </div>
                 </>
               )}
-              <div className="flex justify-between">
+              <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
                 <span className="text-slate-500">Room Type:</span>
                 <span className="font-semibold text-slate-700">
                   {selectedBooking.rooms?.map((room) => room.roomTypeId?.name || 'Room').join(', ')}
@@ -1073,7 +1078,7 @@ export const ReservationsPage = () => {
                 <p className="mt-1 text-rose-700">{selectedBooking.cancellationReason}</p>
               </div>
             )}
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:flex-wrap sm:justify-end">
               {selectedBooking.status === 'confirmed' && (
                 <Button
                   variant="danger"

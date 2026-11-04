@@ -71,7 +71,7 @@ const NotificationListItem = ({ notification, onVisible, onOpen }) => {
       </div>
       <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onOpen(notification)}>
         <span className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <span className={`text-sm font-semibold ${notification.isRead ? 'text-slate-600' : 'text-slate-900'}`}>{notification.title}</span>
+          <span className={`break-words text-sm font-semibold ${notification.isRead ? 'text-slate-600' : 'text-slate-900'}`}>{notification.title}</span>
           <span className="whitespace-nowrap text-[11px] text-slate-400">{dayjs(notification.createdAt).fromNow()}</span>
         </span>
         <span className="mt-0.5 block text-xs leading-relaxed text-slate-500">{notification.message}</span>
@@ -161,7 +161,7 @@ export const NotificationsPage = () => {
     <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-black tracking-tight text-slate-900">
+          <h1 className="flex flex-wrap items-center gap-2 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
             <Bell className="h-6 w-6 text-brand-600" />
             Notifications
             {unreadCount > 0 && <span className="rounded-full bg-rose-500 px-2 py-0.5 text-xs text-white">{unreadCount}</span>}
@@ -217,9 +217,9 @@ export const NotificationsPage = () => {
           </ul>
         )}
         {pagination.pages > 1 && (
-          <div className="flex items-center justify-between border-t border-slate-100 pt-4 text-xs text-slate-500">
-            <span>{pagination.total} notifications · Page {pagination.page} of {pagination.pages}</span>
-            <div className="flex gap-2">
+          <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+            <span className="break-words">{pagination.total} notifications · Page {pagination.page} of {pagination.pages}</span>
+            <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" disabled={pagination.page <= 1 || loading} onClick={() => loadNotifications(pagination.page - 1)}>Previous</Button>
               <Button size="sm" variant="outline" disabled={pagination.page >= pagination.pages || loading} onClick={() => loadNotifications(pagination.page + 1)}>Next</Button>
             </div>

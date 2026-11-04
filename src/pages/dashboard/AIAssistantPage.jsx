@@ -91,12 +91,12 @@ export const AIAssistantPage = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3 bg-gradient-to-r from-brand-900 to-indigo-950 p-6 rounded-2xl text-white shadow-xl">
-        <div className="w-12 h-12 rounded-2xl bg-brand-500/30 border border-brand-400/40 flex items-center justify-center text-amber-400">
+      <div className="flex min-w-0 items-start gap-3 rounded-2xl bg-gradient-to-r from-brand-900 to-indigo-950 p-4 text-white shadow-xl sm:items-center sm:p-6">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-brand-400/40 bg-brand-500/30 text-amber-400 sm:h-12 sm:w-12">
           <Bot className="w-7 h-7" />
         </div>
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight">AI Revenue & Operations Assistant</h1>
+        <div className="min-w-0">
+          <h1 className="break-words text-lg font-black tracking-tight sm:text-2xl">AI Revenue & Operations Assistant</h1>
           <p className="text-xs text-brand-200 mt-0.5">
             Real-time hospitality business intelligence powered by verified database telemetry
           </p>
@@ -144,7 +144,7 @@ export const AIAssistantPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Chat Interface (2 cols) */}
         <div className="lg:col-span-2">
-          <Card className="flex flex-col h-[520px]">
+          <Card className="flex h-[420px] min-w-0 flex-col sm:h-[520px]">
             {/* Quick Prompt Chips */}
             <div className="pb-3 border-b border-slate-100 flex flex-wrap gap-1.5">
               <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 mr-1">
@@ -185,7 +185,7 @@ export const AIAssistantPage = () => {
                       </div>
                     )}
                     <div
-                      className={`max-w-[85%] p-3.5 rounded-2xl text-xs leading-relaxed ${
+                      className={`max-w-[85%] break-words rounded-2xl p-3.5 text-xs leading-relaxed ${
                         msg.sender === 'user'
                           ? 'bg-brand-600 text-white rounded-tr-none shadow-sm'
                           : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200/60'
@@ -212,7 +212,7 @@ export const AIAssistantPage = () => {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
-                className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:px-4"
               />
               <Button
                 variant="primary"
@@ -239,9 +239,9 @@ export const AIAssistantPage = () => {
                       : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 font-bold mb-1">
+                  <div className="mb-1 flex min-w-0 items-center gap-1.5 font-bold">
                     <Lightbulb className="w-4 h-4 flex-shrink-0" />
-                    <span>{ins.title}</span>
+                    <span className="break-words">{ins.title}</span>
                   </div>
                   <p className="leading-relaxed opacity-90">{ins.text}</p>
                 </div>

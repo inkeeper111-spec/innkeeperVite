@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../api/axios';
+import api, { showApiErrorToast } from '../../api/axios';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -155,7 +155,7 @@ export const FrontDesk = () => {
         await fetchFrontDeskData();
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Walk-in booking failed');
+      showApiErrorToast(err, 'Walk-in booking failed');
     }
   };
 
@@ -197,6 +197,7 @@ export const FrontDesk = () => {
           variant="primary"
           icon={PlusCircle}
           onClick={() => setIsWalkInOpen(true)}
+          className="w-full sm:w-auto"
         >
           Express Walk-In Check-In
         </Button>
@@ -283,7 +284,7 @@ export const FrontDesk = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[820px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Reference</th>
@@ -410,9 +411,9 @@ export const FrontDesk = () => {
             <p className="text-sm text-slate-600">
               Standard hotel times: check-in {formatHotelTime(hotel?.checkInTime || '12:00')} · check-out {formatHotelTime(hotel?.checkOutTime || '11:00')}.
             </p>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" disabled={checkingIn} onClick={() => setCheckInBooking(null)}>Cancel</Button>
-              <Button type="button" loading={checkingIn} onClick={handleCheckIn}>Confirm Check-In</Button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button className="w-full sm:w-auto" type="button" variant="outline" disabled={checkingIn} onClick={() => setCheckInBooking(null)}>Cancel</Button>
+              <Button className="w-full sm:w-auto" type="button" loading={checkingIn} onClick={handleCheckIn}>Confirm Check-In</Button>
             </div>
           </div>
         )}
@@ -494,11 +495,11 @@ export const FrontDesk = () => {
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-3">
-            <Button variant="secondary" type="button" onClick={() => setIsWalkInOpen(false)}>
+          <div className="flex flex-col-reverse gap-3 pt-3 sm:flex-row sm:justify-end">
+            <Button className="w-full sm:w-auto" variant="secondary" type="button" onClick={() => setIsWalkInOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit" disabled={!walkInData.roomId}>
+            <Button className="w-full sm:w-auto" variant="primary" type="submit" disabled={!walkInData.roomId}>
               Create & Continue to Check-In
             </Button>
           </div>

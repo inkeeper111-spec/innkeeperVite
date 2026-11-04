@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../api/axios';
+import api, { showApiErrorToast } from '../../api/axios';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -102,7 +102,7 @@ export const InventoryPage = () => {
         setTimeout(() => setMessage(''), 3000);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to create item');
+      showApiErrorToast(err, 'Failed to create item');
     }
   };
 
@@ -122,7 +122,7 @@ export const InventoryPage = () => {
         setTimeout(() => setMessage(''), 3000);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Movement record failed');
+      showApiErrorToast(err, 'Movement record failed');
     }
   };
 
@@ -135,7 +135,7 @@ export const InventoryPage = () => {
         setTimeout(() => setMessage(''), 3000);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Receive failed');
+      showApiErrorToast(err, 'Receive failed');
     }
   };
 
@@ -150,7 +150,7 @@ export const InventoryPage = () => {
         setTimeout(() => setMessage(''), 3000);
       }
     } catch (err) {
-      alert('Failed to add vendor');
+      showApiErrorToast(err, 'Failed to add vendor');
     }
   };
 
@@ -165,11 +165,11 @@ export const InventoryPage = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" icon={Truck} onClick={() => setIsAddVendorOpen(true)}>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={Truck} onClick={() => setIsAddVendorOpen(true)}>
             Add Vendor
           </Button>
-          <Button variant="primary" size="sm" icon={PlusCircle} onClick={() => setIsAddItemOpen(true)}>
+          <Button className="w-full sm:w-auto" variant="primary" size="sm" icon={PlusCircle} onClick={() => setIsAddItemOpen(true)}>
             Add Stock Item
           </Button>
         </div>
@@ -233,7 +233,7 @@ export const InventoryPage = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[820px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Item Name</th>
@@ -298,11 +298,11 @@ export const InventoryPage = () => {
           {vendors.map((v) => (
             <Card key={v._id}>
               <h3 className="font-bold text-slate-900 text-sm">{v.name}</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Contact: {v.contactPerson || 'Representative'}</p>
+              <p className="mt-0.5 break-words text-xs text-slate-500">Contact: {v.contactPerson || 'Representative'}</p>
               <div className="mt-3 pt-3 border-t border-slate-100 space-y-1 text-xs text-slate-600">
-                <p>Phone: {v.phone}</p>
-                <p>Email: {v.email || 'N/A'}</p>
-                <p>Address: {v.address || 'N/A'}</p>
+                <p className="break-words">Phone: {v.phone}</p>
+                <p className="break-words">Email: {v.email || 'N/A'}</p>
+                <p className="break-words">Address: {v.address || 'N/A'}</p>
               </div>
             </Card>
           ))}
@@ -317,7 +317,7 @@ export const InventoryPage = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[680px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">PO Number</th>
@@ -394,11 +394,11 @@ export const InventoryPage = () => {
             placeholder="Restock shipment from distributor"
           />
 
-          <div className="flex justify-end gap-3 pt-3">
-            <Button variant="secondary" type="button" onClick={() => setIsMovementOpen(false)}>
+          <div className="flex flex-col-reverse gap-3 pt-3 sm:flex-row sm:justify-end">
+            <Button className="w-full sm:w-auto" variant="secondary" type="button" onClick={() => setIsMovementOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit">
+            <Button className="w-full sm:w-auto" variant="primary" type="submit">
               Record Movement
             </Button>
           </div>
@@ -469,11 +469,11 @@ export const InventoryPage = () => {
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3">
-            <Button variant="secondary" type="button" onClick={() => setIsAddItemOpen(false)}>
+          <div className="flex flex-col-reverse gap-3 pt-3 sm:flex-row sm:justify-end">
+            <Button className="w-full sm:w-auto" variant="secondary" type="button" onClick={() => setIsAddItemOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit">
+            <Button className="w-full sm:w-auto" variant="primary" type="submit">
               Save Item
             </Button>
           </div>
@@ -507,11 +507,11 @@ export const InventoryPage = () => {
             defaultCountry={hotel?.country}
             onChange={(phone) => setVendorForm({ ...vendorForm, phone })}
           />
-          <div className="flex justify-end gap-3 pt-3">
-            <Button variant="secondary" type="button" onClick={() => setIsAddVendorOpen(false)}>
+          <div className="flex flex-col-reverse gap-3 pt-3 sm:flex-row sm:justify-end">
+            <Button className="w-full sm:w-auto" variant="secondary" type="button" onClick={() => setIsAddVendorOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit">
+            <Button className="w-full sm:w-auto" variant="primary" type="submit">
               Register Vendor
             </Button>
           </div>

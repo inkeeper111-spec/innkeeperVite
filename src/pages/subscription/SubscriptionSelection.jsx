@@ -191,8 +191,8 @@ export const SubscriptionSelection = () => {
       suspended: 'Your hotel account is suspended. Contact platform support for assistance.'
     };
     return (
-      <div className="mx-auto max-w-2xl py-16">
-        <Card className="p-8 text-center">
+      <div className="mx-auto max-w-2xl px-3 py-12 sm:px-0 sm:py-16">
+        <Card className="p-5 text-center sm:p-8">
           <LockKeyhole className="mx-auto mb-4 h-10 w-10 text-amber-700" />
           <h1 className="text-2xl font-bold text-slate-900">Registration {registrationStatus}</h1>
           <p className="mt-3 text-slate-600">{messages[registrationStatus]}</p>
@@ -206,10 +206,10 @@ export const SubscriptionSelection = () => {
   const expired = currentSubscription && new Date(currentSubscription.endDate) <= new Date();
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 pb-12">
-      <header className="rounded-3xl bg-slate-900 px-6 py-8 text-white sm:px-10">
+    <main className="mx-auto w-full min-w-0 max-w-6xl space-y-6 px-3 pb-12 sm:px-0">
+      <header className="rounded-3xl bg-slate-900 px-5 py-6 text-white sm:px-10 sm:py-8">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300">Nestnn subscriptions</p>
-        <h1 className="mt-2 text-3xl font-bold">{expired ? 'Renew your subscription' : currentIsActive ? 'Manage hotel modules' : 'Choose your modules'}</h1>
+        <h1 className="mt-2 break-words text-2xl font-bold sm:text-3xl">{expired ? 'Renew your subscription' : currentIsActive ? 'Manage hotel modules' : 'Choose your modules'}</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-300">
           Select the tools your hotel needs. Your bill is the selected module total, subject to the minimum subscription amount.
         </p>
@@ -228,11 +228,11 @@ export const SubscriptionSelection = () => {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-        <section className="space-y-4">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[1fr_340px]">
+        <section className="min-w-0 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-bold text-slate-900">Available modules</h2>
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-medium text-slate-700">
               <span>Billing period</span>
               <div className="w-36 shrink-0">
                 <Select
@@ -263,7 +263,7 @@ export const SubscriptionSelection = () => {
                   }`}
                 >
                   <span className="flex items-start justify-between gap-3">
-                    <span>
+                    <span className="min-w-0 break-words">
                       <span className="block font-semibold text-slate-900">{module.name}</span>
                       {module.description && <span className="mt-1 block text-xs text-slate-500">{module.description}</span>}
                     </span>
@@ -278,17 +278,17 @@ export const SubscriptionSelection = () => {
           </div>
         </section>
 
-        <aside className="lg:sticky lg:top-6 lg:self-start">
+        <aside className="min-w-0 lg:sticky lg:top-6 lg:self-start">
           <Card className="space-y-5 p-5">
             <div>
               <p className="text-sm font-semibold text-slate-500">Selected modules</p>
               <p className="mt-1 text-3xl font-black text-slate-900">{selected.length}</p>
             </div>
             <div className="space-y-2 border-t border-slate-100 pt-4 text-sm">
-              <div className="flex justify-between gap-4 text-slate-600"><span>Selected module total</span><strong>{money(pricing.moduleTotal)}</strong></div>
-              <div className="flex justify-between gap-4 text-slate-600"><span>Minimum {billingCycle} amount</span><strong>{money(pricing.minimum)}</strong></div>
+              <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 text-slate-600"><span>Selected module total</span><strong>{money(pricing.moduleTotal)}</strong></div>
+              <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 text-slate-600"><span>Minimum {billingCycle} amount</span><strong>{money(pricing.minimum)}</strong></div>
               {pricing.minimumApplied && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">The minimum subscription amount applies; it is not added to your module total.</p>}
-              <div className="flex justify-between gap-4 border-t border-slate-100 pt-3 text-base font-bold text-slate-900"><span>Final payable</span><span>{money(pricing.finalAmount)}</span></div>
+              <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-base font-bold text-slate-900"><span>Final payable</span><span>{money(pricing.finalAmount)}</span></div>
             </div>
             {currentIsActive && currentSubscription?.scheduledModuleRemovals?.length > 0 && (
               <p className="text-xs text-slate-500">Scheduled removals: {currentSubscription.scheduledModuleRemovals.join(', ')} at {new Date(currentSubscription.scheduledChangesAt || currentSubscription.endDate).toLocaleDateString()}.</p>

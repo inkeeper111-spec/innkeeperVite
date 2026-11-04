@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../api/axios';
+import api, { showApiErrorToast } from '../../api/axios';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -81,7 +81,7 @@ export const BillingPage = () => {
         setIsInvoiceModalOpen(true);
       }
     } catch (e) {
-      alert('Failed to load invoice details.');
+      showApiErrorToast(e, 'Failed to load invoice details.');
     }
   };
 
@@ -215,8 +215,8 @@ export const BillingPage = () => {
       {activeTab === 'invoices' && (
         <>
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200/80">
-            <div className="relative flex-1 max-w-sm">
+          <div className="flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-3 md:flex-row md:items-center md:justify-between sm:p-4">
+            <div className="relative w-full min-w-0 flex-1 md:max-w-sm">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -229,7 +229,7 @@ export const BillingPage = () => {
 
             <Select
               size="sm"
-              className="max-w-xs"
+              className="w-full md:max-w-xs"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               options={[
@@ -251,7 +251,7 @@ export const BillingPage = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="w-full min-w-[900px] text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                       <th className="pb-3">Invoice #</th>
@@ -326,7 +326,7 @@ export const BillingPage = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[850px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Transaction Ref</th>
@@ -404,9 +404,9 @@ export const BillingPage = () => {
         }
       >
         {selectedInvoice && (
-          <div id="printable-invoice" className="p-4 bg-white text-slate-800 space-y-6 text-xs">
+          <div id="printable-invoice" className="space-y-6 bg-white p-2 text-xs text-slate-800 sm:p-4">
             {/* Invoice Header */}
-            <div className="flex justify-between items-start border-b border-slate-200 pb-5">
+            <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-xl font-black text-brand-950 uppercase tracking-tight">
                   {selectedInvoice.hotelId?.name || 'Nestnn'}
@@ -418,7 +418,7 @@ export const BillingPage = () => {
                 <p className="text-slate-500 mt-0.5">Tax Registration: {selectedInvoice.hotelId?.taxNumber || 'US-TAX-893201'}</p>
               </div>
 
-              <div className="text-right">
+              <div className="text-left sm:text-right">
                 <span className="text-xs font-black bg-brand-600 text-white px-3 py-1 rounded-full uppercase tracking-wider">
                   Tax Invoice
                 </span>
@@ -445,7 +445,7 @@ export const BillingPage = () => {
               </div>
 
               {selectedInvoice.reservationId && (
-                <div className="text-right">
+                <div className="text-left sm:text-right">
                   <span className="font-bold uppercase text-[10px] text-slate-400 tracking-wider">
                     Reservation Details
                   </span>
@@ -460,8 +460,8 @@ export const BillingPage = () => {
             </div>
 
             {/* Line Items Table */}
-            <div className="border border-slate-200 rounded-xl overflow-hidden">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[560px] text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px]">
                   <tr>
                     <th className="py-2.5 px-3">Description</th>
@@ -487,7 +487,7 @@ export const BillingPage = () => {
 
             {/* Calculations Breakdown */}
             <div className="flex justify-end pt-2">
-              <div className="w-64 space-y-2 border-t border-slate-200 pt-3">
+              <div className="w-full max-w-64 space-y-2 border-t border-slate-200 pt-3">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal:</span>
                   <span className="font-mono font-semibold">{formatCurrency(selectedInvoice.subtotal)}</span>
@@ -573,7 +573,7 @@ export const BillingPage = () => {
             placeholder="Collected at checkout"
           />
 
-          <div className="flex justify-end gap-3 pt-3">
+          <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end sm:gap-3">
             <Button variant="secondary" type="button" onClick={() => setIsPaymentModalOpen(false)}>
               Cancel
             </Button>
@@ -629,7 +629,7 @@ export const BillingPage = () => {
                 className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-orvelle-text placeholder:text-orvelle-muted focus:border-orvelle-champagne focus:outline-none focus:ring-2 focus:ring-orvelle-champagne/30"
               />
             </div>
-            <div className="flex justify-end gap-3 pt-3">
+            <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end sm:gap-3">
               <Button variant="secondary" type="button" onClick={handleCloseRefund}>
                 Cancel
               </Button>

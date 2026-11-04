@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../../api/axios';
+import api, { showApiErrorToast } from '../../api/axios';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
@@ -97,7 +97,7 @@ export const LandingPage = () => {
         setIsSearched(true);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Search failed');
+      showApiErrorToast(err, 'Search failed');
     } finally {
       setSearching(false);
     }
@@ -127,7 +127,7 @@ export const LandingPage = () => {
         setBookingSuccess(res.data.data);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Reservation booking failed');
+      showApiErrorToast(err, 'Reservation booking failed');
     }
   };
 
@@ -137,11 +137,11 @@ export const LandingPage = () => {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
       {/* Top Navigation */}
-      <header className="min-h-16 bg-slate-900 text-white sticky top-0 z-30 px-3 sm:px-8 flex flex-wrap items-center justify-between gap-2 py-2 sm:min-h-20 sm:flex-nowrap border-b border-slate-800">
-        <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-3 py-2 text-white sm:min-h-20 sm:flex-nowrap sm:px-8">
+        <div className="flex min-w-0 items-center gap-3">
           <NestnnLogo size="sm" dark />
-          <div>
-            <span className="font-bold text-lg tracking-tight block">
+          <div className="min-w-0">
+            <span className="block break-words text-lg font-bold tracking-tight">
               {hotel?.name || 'Nestnn Hotel & Spa'}
             </span>
             <span className="text-[10px] uppercase font-bold text-amber-400 tracking-widest">
@@ -167,7 +167,7 @@ export const LandingPage = () => {
       </header>
 
       {/* Hero Section */}
-      <section className="relative bg-slate-900 text-white py-20 px-4 sm:px-8 overflow-hidden">
+      <section className="relative overflow-hidden bg-slate-900 px-4 py-14 text-white sm:px-8 sm:py-20">
         <div className="absolute inset-0 opacity-20 pointer-events-none">
           <img
             src="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=2000&q=80"
@@ -179,7 +179,7 @@ export const LandingPage = () => {
           <span className="inline-flex items-center gap-1.5 text-xs uppercase font-extrabold tracking-widest text-amber-400 bg-amber-400/10 px-3 py-1 rounded-full border border-amber-400/20">
             <Star className="w-3.5 h-3.5 fill-current" /> Five-Star Oceanfront Retreat
           </span>
-          <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-tight">
+          <h1 className="break-words text-3xl font-black leading-tight tracking-tight sm:text-6xl">
             An Unparalleled Hospitality Experience
           </h1>
           <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed">
@@ -245,9 +245,9 @@ export const LandingPage = () => {
       {/* Real-Time Available Rooms Section */}
       {isSearched && (
         <section className="py-12 px-4 sm:px-8 max-w-6xl mx-auto w-full">
-          <div className="border-b border-slate-200 pb-4 mb-6 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-black text-slate-900">Available Suites for Selected Dates</h2>
+          <div className="mb-6 flex flex-col gap-2 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="break-words text-xl font-black text-slate-900">Available Suites for Selected Dates</h2>
               <p className="text-xs text-slate-500 mt-0.5">
                 {dayjs(searchDates.checkInDate).format('MMM D, YYYY')} to {dayjs(searchDates.checkOutDate).format('MMM D, YYYY')} ({nights} Night{nights > 1 ? 's' : ''})
               </p>
@@ -300,7 +300,7 @@ export const LandingPage = () => {
                       </div>
                     </div>
 
-                    <div className="p-5 pt-0 border-t border-slate-50 mt-4 flex items-center justify-between">
+                    <div className="mt-4 flex flex-col gap-3 border-t border-slate-50 p-5 pt-4 sm:flex-row sm:items-center sm:justify-between sm:pt-0">
                       <div>
                         <span className="text-lg font-black text-slate-900">{formatHotelCurrency(rt.basePrice)}</span>
                         <span className="text-[11px] text-slate-400"> / night</span>
@@ -312,6 +312,7 @@ export const LandingPage = () => {
                       <Button
                         size="sm"
                         variant="primary"
+                        className="w-full sm:w-auto"
                         onClick={() => handleOpenBooking(rt)}
                       >
                         Book Now
@@ -363,7 +364,7 @@ export const LandingPage = () => {
                   </div>
                 </div>
 
-                <div className="p-5 pt-0 border-t border-slate-50 flex items-center justify-between">
+                <div className="flex flex-col gap-3 border-t border-slate-50 p-5 pt-4 sm:flex-row sm:items-center sm:justify-between sm:pt-0">
                   <div>
                     <span className="text-lg font-black text-slate-900">{formatHotelCurrency(rt.basePrice)}</span>
                     <span className="text-[11px] text-slate-400"> / night</span>
@@ -372,6 +373,7 @@ export const LandingPage = () => {
                   <Button
                     size="sm"
                     variant="outline"
+                    className="w-full sm:w-auto"
                     onClick={() => {
                       setSelectedType(rt);
                       setIsBookModalOpen(true);
@@ -446,25 +448,25 @@ export const LandingPage = () => {
             </div>
 
             <div className="p-4 bg-slate-50 rounded-xl space-y-1.5">
-              <div className="flex justify-between">
+              <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
                 <span className="text-slate-500">Suite Type:</span>
                 <span className="font-bold text-slate-800">{selectedType?.name}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
                 <span className="text-slate-500">Stay Duration:</span>
                 <span className="font-semibold text-slate-700">
                   {searchDates.checkInDate} to {searchDates.checkOutDate} ({nights} nights)
                 </span>
               </div>
-              <div className="flex justify-between font-bold text-sm text-slate-900 border-t border-slate-200 pt-2">
+              <div className="flex flex-col gap-1 border-t border-slate-200 pt-2 text-sm font-bold text-slate-900 sm:flex-row sm:justify-between">
                 <span>Total Folio Amount:</span>
                 <span>{formatHotelCurrency(bookingSuccess.reservation?.totalAmount)}</span>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Link to={`/lookup?reference=${bookingSuccess.bookingReference}&email=${guestForm.email}`}>
-                <Button variant="primary">
+            <div className="flex flex-col-reverse justify-end gap-2 pt-2 sm:flex-row">
+              <Link className="w-full sm:w-auto" to={`/lookup?reference=${bookingSuccess.bookingReference}&email=${guestForm.email}`}>
+                <Button className="w-full sm:w-auto" variant="primary">
                   View Reservation Status and Folio
                 </Button>
               </Link>
@@ -499,15 +501,15 @@ export const LandingPage = () => {
             </div>
 
             <div className="p-3 bg-slate-50 rounded-xl space-y-1 text-xs">
-              <div className="flex justify-between text-slate-600">
+              <div className="flex flex-col gap-1 text-slate-600 sm:flex-row sm:justify-between">
                 <span>Rate ({nights} Nights @ {formatHotelCurrency(selectedType?.basePrice)}):</span>
                 <span className="font-mono font-semibold">{formatHotelCurrency((selectedType?.basePrice || 0) * nights)}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
+              <div className="flex flex-col gap-1 text-slate-600 sm:flex-row sm:justify-between">
                 <span>Applicable Hospitality Tax (10%):</span>
                 <span className="font-mono font-semibold">{formatHotelCurrency(Math.round((selectedType?.basePrice || 0) * nights * 0.10))}</span>
               </div>
-              <div className="flex justify-between text-sm font-bold text-slate-900 border-t border-slate-200 pt-1.5">
+              <div className="flex flex-col gap-1 border-t border-slate-200 pt-1.5 text-sm font-bold text-slate-900 sm:flex-row sm:justify-between">
                 <span>Estimated Total:</span>
                 <span className="font-mono">{formatHotelCurrency(Math.round((selectedType?.basePrice || 0) * nights * 1.10))}</span>
               </div>
@@ -520,11 +522,11 @@ export const LandingPage = () => {
               placeholder="High floor room, quiet wing"
             />
 
-            <div className="flex justify-end gap-3 pt-3">
-              <Button variant="secondary" type="button" onClick={() => setIsBookModalOpen(false)}>
+            <div className="flex flex-col-reverse justify-end gap-3 pt-3 sm:flex-row">
+              <Button className="w-full sm:w-auto" variant="secondary" type="button" onClick={() => setIsBookModalOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="primary" type="submit">
+              <Button className="w-full sm:w-auto" variant="primary" type="submit">
                 Confirm & Guarantee Reservation
               </Button>
             </div>
