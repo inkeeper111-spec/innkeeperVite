@@ -10,6 +10,7 @@ import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../hooks/useCurrency';
+import { INVENTORY_UNITS, formatInventoryQuantity, unitChoicesForItem } from './inventoryUnits';
 import {
   Boxes,
   AlertTriangle,
@@ -24,8 +25,10 @@ import {
   BarChart3,
   Download,
   Search,
-  Clock3
+  Clock3,
+  Tag
 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer,
@@ -34,10 +37,30 @@ import {
 
 export const InventoryPage = () => {
   const { hotel, user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const canManageInventory = ['hotel_admin', 'super_admin'].includes(user?.role);
   const { currencySymbol, formatCurrency } = useCurrency();
+  const defaultConversionFactor = (baseUnit, purchaseUnit) => {
+    const units = INVENTORY_UNITS.flatMap((group) =>
+      group.units.map((entry) => ({ ...entry, category: group.category }))
+    );
+    const base = units.find((entry) => entry.unit === baseUnit);
+    const purchase = units.find((entry) => entry.unit === purchaseUnit);
+    return base?.factor && purchase?.factor && base.category === purchase.category
+      ? purchase.factor / base.factor
+      : '';
+  };
+  const conversionFactorForItem = (item, unit) => {
+    if (!item || !unit) return 1;
+    if (unit === (item.baseUnit || item.unit)) return 1;
+    const configured = item.unitConversions?.[unit]
+      ?? item.packagingOptions?.find((option) => option.unit === unit)?.conversionFactor;
+    return Number(configured) > 0 ? Number(configured) : defaultConversionFactor(item.baseUnit || item.unit, unit);
+  };
   const [activeTab, setActiveTab] = useState('dashboard');
   const [items, setItems] = useState([]);
+  const [units, setUnits] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [vendorPurchases, setVendorPurchases] = useState([]);
   const [selectedVendor, setSelectedVendor] = useState(null);
@@ -50,15 +73,27 @@ export const InventoryPage = () => {
   const [recipes, setRecipes] = useState([]);
   const [reorderSuggestions, setReorderSuggestions] = useState([]);
   const [report, setReport] = useState([]);
+  const [verifications, setVerifications] = useState([]);
+  const [verificationIntervalDays, setVerificationIntervalDays] = useState(1);
   const [reportType, setReportType] = useState('stock');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [inventoryPage, setInventoryPage] = useState(1);
   const [inventoryPages, setInventoryPages] = useState(1);
+  const [isUnitFormOpen, setIsUnitFormOpen] = useState(false);
+  const [unitForm, setUnitForm] = useState({
+    name: '',
+    symbol: '',
+    category: 'weight',
+    description: '',
+    isActive: true
+  });
 
   // Modals
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [itemEditForm, setItemEditForm] = useState({});
   const [isMovementOpen, setIsMovementOpen] = useState(false);
   const [isAddVendorOpen, setIsAddVendorOpen] = useState(false);
   const [isPurchaseOrderOpen, setIsPurchaseOrderOpen] = useState(false);
@@ -67,6 +102,7 @@ export const InventoryPage = () => {
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isReceivingOpen, setIsReceivingOpen] = useState(false);
   const [isAdjustmentOpen, setIsAdjustmentOpen] = useState(false);
+  const [isVerificationOpen, setIsVerificationOpen] = useState(false);
   const [isVendorHistoryOpen, setIsVendorHistoryOpen] = useState(false);
   const [isSupplierPaymentOpen, setIsSupplierPaymentOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState(null);
@@ -76,14 +112,22 @@ export const InventoryPage = () => {
     name: '',
     code: '',
     category: 'food_ingredients',
-    unit: 'pcs',
+    unit: '',
+    baseUnit: '',
+    baseUnitId: '',
+    purchaseUnit: '',
+    purchaseUnitId: '',
+    purchaseConversionFactor: '',
+    conversionFactor: '',
+    packagingOptions: [],
     currentStock: 10,
     minStockThreshold: 15,
     maxStockLevel: '',
     reorderQuantity: 0,
-    unitCost: 5,
+    purchasePrice: 5,
     trackExpiry: false,
     trackBatchNumber: false,
+    stockVerificationIntervalDays: '',
     openingBatchNumber: '',
     openingExpiryDate: ''
   });
@@ -91,6 +135,7 @@ export const InventoryPage = () => {
   const [moveForm, setMoveForm] = useState({
     movementType: 'receipt',
     quantity: 10,
+    unit: 'pcs',
     department: '',
     location: 'Main Store',
     notes: ''
@@ -112,12 +157,12 @@ export const InventoryPage = () => {
     taxAmount: 0,
     discountAmount: 0,
     notes: '',
-    items: [{ itemId: '', quantity: 1, unitCost: 0 }]
+    items: [{ itemId: '', quantity: 1, unit: '', unitCost: 0 }]
   });
   const [departmentForm, setDepartmentForm] = useState({
     department: 'Housekeeping',
     notes: '',
-    lines: [{ itemId: '', quantity: 1 }]
+    lines: [{ itemId: '', quantity: 1, unit: '' }]
   });
   const [recipeForm, setRecipeForm] = useState({
     menuItemId: '',
@@ -126,6 +171,7 @@ export const InventoryPage = () => {
   const [transferForm, setTransferForm] = useState({
     itemId: '',
     quantity: 1,
+    unit: '',
     fromLocation: 'Main Store',
     toLocation: 'Kitchen Store',
     department: ''
@@ -133,6 +179,7 @@ export const InventoryPage = () => {
   const [adjustmentForm, setAdjustmentForm] = useState({
     itemId: '',
     quantity: 1,
+    unit: '',
     reason: 'food_wastage',
     department: '',
     location: 'Main Store',
@@ -146,16 +193,30 @@ export const InventoryPage = () => {
   const [minibarData, setMinibarData] = useState(null);
   const [minibarCounts, setMinibarCounts] = useState({});
   const [isMinibarAssignOpen, setIsMinibarAssignOpen] = useState(false);
-  const [minibarAssignForm, setMinibarAssignForm] = useState({ itemId: '', quantity: 1, fromLocation: 'Main Store' });
-  const [reportFilters, setReportFilters] = useState({ from: '', to: '' });
+  const [minibarAssignForm, setMinibarAssignForm] = useState({ itemId: '', quantity: 1, unit: '', fromLocation: 'Main Store' });
+  const [reportFilters, setReportFilters] = useState({
+    from: '', to: '', category: 'all', itemId: ''
+  });
+  const [purchaseDate, setPurchaseDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [verificationForm, setVerificationForm] = useState({
+    itemId: '',
+    actualStock: '',
+    unit: '',
+    periodStart: dayjs().format('YYYY-MM-DD'),
+    periodEnd: dayjs().format('YYYY-MM-DD'),
+    consumptionQuantity: 0,
+    wastageQuantity: 0,
+    discrepancyReason: '',
+    remarks: ''
+  });
 
   const [message, setMessage] = useState('');
 
   const fetchInventory = async () => {
     try {
       setLoading(true);
-      const [itemsRes, vendorsRes, posRes, dashboardRes, ledgerRes, requestsRes, recipesRes, adjustmentsRes, suggestionsRes] = await Promise.all([
-        api.get('/inventory/items', { params: { page: inventoryPage, limit: 100 } }),
+      const [itemsRes, vendorsRes, posRes, dashboardRes, ledgerRes, requestsRes, recipesRes, adjustmentsRes, suggestionsRes, unitsRes, verificationsRes, settingsRes] = await Promise.all([
+        api.get('/inventory/items', { params: { page: inventoryPage, limit: 100, includeInactive: canManageInventory ? 'true' : undefined } }),
         api.get('/inventory/vendors'),
         api.get('/inventory/purchase-orders'),
         api.get('/inventory/dashboard'),
@@ -163,10 +224,14 @@ export const InventoryPage = () => {
         api.get('/inventory/department-requests'),
         api.get('/inventory/recipes'),
         api.get('/inventory/adjustments'),
-        api.get('/inventory/reorder-suggestions')
+        api.get('/inventory/reorder-suggestions'),
+        api.get('/inventory/units', { params: canManageInventory ? { includeInactive: true } : {} }),
+        api.get('/inventory/verifications'),
+        api.get('/inventory/settings')
       ]);
 
       if (itemsRes.data.success) setItems(itemsRes.data.data);
+      if (unitsRes.data.success) setUnits(unitsRes.data.data || []);
       setInventoryPages(itemsRes.data.pagination?.pages || 1);
       if (vendorsRes.data.success) setVendors(vendorsRes.data.data);
       if (posRes.data.success) setPurchaseOrders(posRes.data.data);
@@ -176,6 +241,8 @@ export const InventoryPage = () => {
       if (recipesRes.data.success) setRecipes(recipesRes.data.data);
       if (adjustmentsRes.data.success) setAdjustments(adjustmentsRes.data.data);
       if (suggestionsRes.data.success) setReorderSuggestions(suggestionsRes.data.data);
+      if (verificationsRes.data.success) setVerifications(verificationsRes.data.data || []);
+      if (settingsRes.data.success) setVerificationIntervalDays(settingsRes.data.data.verificationIntervalDays || 1);
     } catch (err) {
       showApiErrorToast(err, 'Could not load inventory data');
     } finally {
@@ -185,7 +252,47 @@ export const InventoryPage = () => {
 
   useEffect(() => {
     fetchInventory();
-  }, [inventoryPage]);
+  }, [inventoryPage, canManageInventory]);
+
+  useEffect(() => {
+    const tabByPath = {
+      '/inventory/dashboard': 'dashboard',
+      '/inventory/categories': 'categories',
+      '/inventory/items': 'items',
+      '/inventory/stock': 'ledger'
+    };
+    if (location.pathname === '/inventory/units') {
+      navigate('/inventory/items', { replace: true });
+    } else if (location.pathname === '/inventory') {
+      setActiveTab(location.search.startsWith('?tab=') ? location.search.slice(5) : 'dashboard');
+    } else if (tabByPath[location.pathname]) {
+      setActiveTab(tabByPath[location.pathname]);
+    }
+  }, [location.pathname, location.search, navigate]);
+
+  const selectInventoryTab = (tab) => {
+    const pathByTab = {
+      dashboard: '/inventory/dashboard',
+      categories: '/inventory/categories',
+      items: '/inventory/items',
+      ledger: '/inventory/stock'
+    };
+    if (pathByTab[tab]) {
+      navigate(pathByTab[tab]);
+    } else {
+      navigate(`/inventory?tab=${encodeURIComponent(tab)}`);
+    }
+  };
+
+  const unitChoices = (category) => units
+    .filter((unit) => unit.isActive && (!category || unit.category === category))
+    .sort((left, right) => left.category.localeCompare(right.category) || left.name.localeCompare(right.name))
+    .map((unit) => ({
+      group: unit.category.charAt(0).toUpperCase() + unit.category.slice(1),
+      label: `${unit.name} (${unit.symbol})`,
+      value: unit._id
+    }));
+  const getUnit = (id) => units.find((unit) => unit._id === id);
 
   useEffect(() => {
     if (activeTab !== 'recipes' || !canManageInventory) return;
@@ -206,11 +313,22 @@ export const InventoryPage = () => {
     try {
       const res = await api.post('/inventory/items', {
         ...itemForm,
+        unit: getUnit(itemForm.baseUnitId)?.symbol || '',
+        baseUnit: getUnit(itemForm.baseUnitId)?.symbol || '',
+        baseUnitId: itemForm.baseUnitId,
+        purchaseUnitId: itemForm.purchaseUnitId,
+        conversionFactor: Number(itemForm.purchaseConversionFactor),
         currentStock: Number(itemForm.currentStock),
         minStockThreshold: Number(itemForm.minStockThreshold),
         maxStockLevel: itemForm.maxStockLevel ? Number(itemForm.maxStockLevel) : null,
         reorderQuantity: Number(itemForm.reorderQuantity),
-        unitCost: Number(itemForm.unitCost)
+        purchasePrice: Number(itemForm.purchasePrice),
+        stockVerificationIntervalDays: itemForm.stockVerificationIntervalDays
+          ? Number(itemForm.stockVerificationIntervalDays)
+          : null,
+        purchaseConversionFactor: Number(itemForm.purchaseConversionFactor),
+        additionalPackagingOptions: itemForm.packagingOptions
+          .map((option) => ({ unitId: option.unitId, conversionFactor: Number(option.conversionFactor) }))
       });
       if (res.data.success) {
         setIsAddItemOpen(false);
@@ -223,6 +341,111 @@ export const InventoryPage = () => {
     }
   };
 
+  const handleUpdateItem = async (event) => {
+    event.preventDefault();
+    if (!editingItem) return;
+    try {
+      await api.patch(`/inventory/items/${editingItem._id}`, {
+        ...itemEditForm,
+        minStockThreshold: Number(itemEditForm.minStockThreshold),
+        maxStockLevel: itemEditForm.maxStockLevel === '' ? null : Number(itemEditForm.maxStockLevel),
+        reorderQuantity: Number(itemEditForm.reorderQuantity),
+        stockVerificationIntervalDays: itemEditForm.stockVerificationIntervalDays === ''
+          ? null
+          : Number(itemEditForm.stockVerificationIntervalDays)
+      });
+      setEditingItem(null);
+      setMessage(`Raw material ${itemEditForm.name} updated.`);
+      fetchInventory();
+    } catch (err) {
+      showApiErrorToast(err, 'Could not update raw material');
+    }
+  };
+
+  const toggleItemStatus = async (item) => {
+    try {
+      await api.patch(`/inventory/items/${item._id}`, { isActive: !item.isActive });
+      setMessage(`${item.name} ${item.isActive ? 'deactivated' : 'activated'}.`);
+      fetchInventory();
+    } catch (err) {
+      showApiErrorToast(err, 'Could not change raw material status');
+    }
+  };
+
+  const handleSaveUnit = async (event) => {
+    event?.preventDefault?.();
+    try {
+      const { data } = await api.post('/inventory/units', unitForm);
+      setUnits((current) => [...current.filter((unit) => unit._id !== data.data._id), data.data]);
+      setMessage(`Unit ${unitForm.name} is ready to use for this raw material.`);
+      setIsUnitFormOpen(false);
+      setUnitForm({ name: '', symbol: '', category: 'weight', description: '', isActive: true });
+    } catch (error) {
+      showApiErrorToast(error, 'Could not add unit');
+    }
+  };
+
+  const openStockVerification = (item) => {
+    const now = dayjs().format('YYYY-MM-DD');
+    setVerificationForm({
+      itemId: item?._id || items[0]?._id || '',
+      actualStock: item?.currentStock ?? '',
+      unit: item?.baseUnit || item?.unit || '',
+      periodStart: dayjs(item?.lastVerifiedAt || item?.createdAt || now).format('YYYY-MM-DD'),
+      periodEnd: now,
+      consumptionQuantity: 0,
+      wastageQuantity: 0,
+      discrepancyReason: '',
+      remarks: ''
+    });
+    setIsVerificationOpen(true);
+  };
+
+  const handleStockVerification = async (event) => {
+    event.preventDefault();
+    const item = items.find((entry) => entry._id === verificationForm.itemId);
+    if (!item) return;
+    if (!window.confirm('Finalize this physical count and post the classified stock changes?')) return;
+    try {
+      await api.post('/inventory/verifications', {
+        ...verificationForm,
+        actualStock: Number(verificationForm.actualStock),
+        consumptionQuantity: Number(verificationForm.consumptionQuantity || 0),
+        wastageQuantity: Number(verificationForm.wastageQuantity || 0)
+      });
+      setIsVerificationOpen(false);
+      setMessage(`Physical stock verification saved for ${item.name}.`);
+      await fetchInventory();
+    } catch (err) {
+      showApiErrorToast(err, 'Could not save stock verification');
+    }
+  };
+
+  const handleVerificationIntervalChange = async (event) => {
+    const value = Number(event.target.value);
+    if (!Number.isInteger(value) || value < 1 || value > 365) {
+      showApiErrorToast(null, 'Enter a whole number from 1 to 365 days.');
+      return;
+    }
+    try {
+      await api.patch('/inventory/settings', { verificationIntervalDays: value });
+      setVerificationIntervalDays(value);
+      await fetchInventory();
+    } catch (err) {
+      showApiErrorToast(err, 'Could not update verification frequency');
+    }
+  };
+
+  const handleCreateDefaultUnits = async () => {
+    try {
+      const { data } = await api.post('/inventory/units/defaults');
+      setUnits(data.data || []);
+      setMessage(`${data.addedCount} standard units added.`);
+    } catch (error) {
+      showApiErrorToast(error, 'Could not add standard units');
+    }
+  };
+
   const handleRecordMovement = async (e) => {
     e.preventDefault();
     try {
@@ -230,6 +453,7 @@ export const InventoryPage = () => {
         itemId: selectedItemForMove._id,
         movementType: moveForm.movementType,
         quantity: Number(moveForm.quantity),
+        unit: moveForm.unit,
         department: moveForm.department,
         location: moveForm.location,
         notes: moveForm.notes
@@ -299,6 +523,7 @@ export const InventoryPage = () => {
         items: poForm.items.map((line) => ({
           ...line,
           quantity: Number(line.quantity),
+          unit: line.unit,
           unitCost: Number(line.unitCost)
         }))
       });
@@ -318,7 +543,12 @@ export const InventoryPage = () => {
       taxAmount: 0,
       discountAmount: 0,
       notes: `Suggested reorder for ${item.code}`,
-      items: [{ itemId: item._id, quantity: item.suggestedQuantity, unitCost: item.unitCost }]
+      items: [{
+        itemId: item._id,
+        quantity: item.suggestedQuantity,
+        unit: item.suggestedUnit || item.purchaseUnit || item.baseUnit || item.unit,
+        unitCost: item.purchasePrice ?? item.unitCost * (item.purchaseConversionFactor || 1)
+      }]
     });
     setIsPurchaseOrderOpen(true);
   };
@@ -329,6 +559,7 @@ export const InventoryPage = () => {
     try {
       await api.patch(`/inventory/purchase-orders/${selectedPO._id}/receive`, {
         items: receivingLines.filter((line) => Number(line.receivedQuantity) > 0),
+        purchaseDate,
         invoiceNumber: event.currentTarget.invoiceNumber.value,
         invoiceAttachment: event.currentTarget.invoiceAttachment.value,
         location: receivingLocation,
@@ -359,7 +590,7 @@ export const InventoryPage = () => {
     try {
       await api.post('/inventory/department-requests', {
         ...departmentForm,
-        lines: departmentForm.lines.map((line) => ({ ...line, quantity: Number(line.quantity) }))
+        lines: departmentForm.lines.map((line) => ({ ...line, quantity: Number(line.quantity), unit: line.unit }))
       });
       setIsDepartmentRequestOpen(false);
       setMessage('Department stock request submitted.');
@@ -456,7 +687,8 @@ export const InventoryPage = () => {
         consumedQuantity: 0,
         complimentaryQuantity: 0,
         damagedQuantity: 0,
-        missingQuantity: 0
+        missingQuantity: 0,
+        unit: entry.itemId.baseUnit || entry.itemId.unit
       }])));
     } catch (err) {
       showApiErrorToast(err, 'Could not load room minibar stock');
@@ -522,17 +754,126 @@ export const InventoryPage = () => {
     }
   };
 
+  const exportExcelReport = async () => {
+    if (!report.length) return;
+    try {
+      const XLSX = await import('@e965/xlsx');
+      const workbook = XLSX.utils.book_new();
+      if (reportType === 'financial') {
+        const summary = report[0];
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet([
+          { Metric: 'Total purchase value', Value: summary.totalPurchaseValue },
+          { Metric: 'Total consumption cost', Value: summary.totalConsumptionCost },
+          { Metric: 'Total wastage loss', Value: summary.totalWastageLoss },
+          { Metric: 'Closing inventory value', Value: summary.closingInventoryValue },
+          { Metric: 'Stock adjustment value', Value: summary.stockAdjustmentValue },
+          { Metric: 'Total raw material cost', Value: summary.totalRawMaterialCost }
+        ]), 'Summary');
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summary.vendorBreakdown || []), 'Vendor Purchases');
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summary.itemBreakdown || []), 'Raw Materials');
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summary.monthlyTrend || []), 'Monthly Trend');
+      } else {
+        const rows = report.map((row) => Object.fromEntries(
+          Object.entries(row).map(([key, value]) => [
+            key,
+            value && typeof value === 'object' && !(value instanceof Date)
+              ? JSON.stringify(value)
+              : value
+          ])
+        ));
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'Inventory Report');
+      }
+      XLSX.writeFile(workbook, `inventory-${reportType}-${dayjs().format('YYYY-MM-DD')}.xlsx`);
+    } catch (err) {
+      showApiErrorToast(err, 'Could not export Excel report');
+    }
+  };
+
+  const exportPdfReport = async () => {
+    if (!report.length) return;
+    try {
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable')
+    ]);
+    const document = new jsPDF({ orientation: 'landscape' });
+    document.setFontSize(16);
+    document.text(`Inventory ${reportType.replace(/-/g, ' ')} report`, 14, 16);
+    document.setFontSize(9);
+    document.text(`Generated ${dayjs().format('YYYY-MM-DD HH:mm')}`, 14, 22);
+    if (reportType === 'financial') {
+      const summary = report[0];
+      autoTable(document, {
+        startY: 28,
+        head: [['Metric', 'Value']],
+        body: [
+          ['Total purchase value', formatCurrency(summary.totalPurchaseValue || 0)],
+          ['Total consumption cost', formatCurrency(summary.totalConsumptionCost || 0)],
+          ['Total wastage loss', formatCurrency(summary.totalWastageLoss || 0)],
+          ['Closing inventory value', formatCurrency(summary.closingInventoryValue || 0)],
+          ['Stock adjustment value', formatCurrency(summary.stockAdjustmentValue || 0)],
+          ['Total raw material cost', formatCurrency(summary.totalRawMaterialCost || 0)]
+        ]
+      });
+      autoTable(document, {
+        startY: document.lastAutoTable.finalY + 8,
+        head: [['Vendor', 'Receipts', 'Purchase value']],
+        body: (summary.vendorBreakdown || []).map((vendor) => [
+          vendor.vendorName,
+          vendor.receiptCount,
+          formatCurrency(vendor.totalPurchaseValue)
+        ])
+      });
+      autoTable(document, {
+        startY: document.lastAutoTable.finalY + 8,
+        head: [['Raw material', 'Purchased', 'Consumed', 'Wasted', 'Purchase value', 'Consumption cost', 'Wastage cost']],
+        body: (summary.itemBreakdown || []).map((item) => [
+          `${item.name} (${item.code})`,
+          `${item.purchasedQuantity} ${item.unit}`,
+          `${item.consumedQuantity} ${item.unit}`,
+          `${item.wastedQuantity} ${item.unit}`,
+          formatCurrency(item.purchaseValue),
+          formatCurrency(item.consumptionCost),
+          formatCurrency(item.wastageCost)
+        ])
+      });
+    } else {
+      const rows = report.map((row) => [
+        row.transactionDate || row.receivedAt || row.verifiedAt || row.createdAt || '',
+        row.name || row.poNumber || row.itemId?.name || row.itemName || '',
+        row.movementType || row.status || '',
+        row.quantity !== undefined ? `${row.quantity} ${row.unit || row.itemId?.unit || ''}` : '',
+        row.vendorId?.name || row.department || '',
+        formatCurrency(row.stockValue ?? row.totalAmount ?? row.totalCost ?? row.totalValue ?? 0)
+      ]);
+      autoTable(document, {
+        startY: 28,
+        head: [['Date', 'Item / Reference', 'Type / Status', 'Quantity', 'Vendor / Department', 'Value']],
+        body: rows
+      });
+    }
+    document.save(`inventory-${reportType}-${dayjs().format('YYYY-MM-DD')}.pdf`);
+    } catch (err) {
+      showApiErrorToast(err, 'Could not export PDF report');
+    }
+  };
+
   const visibleItems = items.filter((item) => {
     const matchesSearch = `${item.name} ${item.code} ${item.barcode || ''}`.toLowerCase().includes(search.toLowerCase());
     return matchesSearch && (categoryFilter === 'all' || item.category === categoryFilter);
   });
+  const inventoryCategories = [...new Set(items.map((item) => item.category).filter(Boolean))]
+    .map((category) => ({
+      category,
+      count: items.filter((item) => item.category === category).length
+    }));
 
   return (
     <div className="inventory-page w-full min-w-0 space-y-6">
       {/* Header */}
       <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Inventory & Procurement</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Inventory Management</h1>
           <p className="text-xs text-slate-500 mt-1">
             Consumables, linen stock, purchase orders, vendor directory, and movement audit logs
           </p>
@@ -544,6 +885,9 @@ export const InventoryPage = () => {
           </Button>
           <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={AlertTriangle} onClick={() => setIsAdjustmentOpen(true)}>
             Report Wastage
+          </Button>
+          <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={ClipboardList} onClick={() => openStockVerification()}>
+            Verify Stock
           </Button>
           {canManageInventory && (
             <>
@@ -575,11 +919,13 @@ export const InventoryPage = () => {
       <nav className="rounded-2xl border border-[#eadfce] bg-white/80 p-2 shadow-sm shadow-[#3b241a]/5" aria-label="Inventory sections">
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-5">
           {[
-            { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
-            { id: 'items', label: `Stock Items (${items.length})`, icon: Boxes },
+            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { id: 'categories', label: 'Categories', icon: Tag },
+            { id: 'items', label: `Inventory Items (${items.length})`, icon: Boxes },
+            { id: 'ledger', label: 'Stock Management', icon: ArrowLeftRight },
+            { id: 'verifications', label: `Stock Verification (${dashboard?.pendingStockVerifications || 0} pending)`, icon: ClipboardList },
             { id: 'vendors', label: `Suppliers (${vendors.length})`, icon: Truck },
             { id: 'pos', label: `Purchase Orders (${purchaseOrders.length})`, icon: PackageCheck },
-            { id: 'ledger', label: 'Stock Ledger', icon: ArrowLeftRight },
             { id: 'requests', label: `Department Requests (${departmentRequests.length})`, icon: ClipboardList },
             { id: 'adjustments', label: `Adjustments (${adjustments.length})`, icon: AlertTriangle },
             { id: 'recipes', label: `Recipes (${recipes.filter((recipe) => recipe.isActive).length})`, icon: Utensils },
@@ -588,7 +934,7 @@ export const InventoryPage = () => {
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setActiveTab(id)}
+              onClick={() => selectInventoryTab(id)}
               className={`flex min-w-0 items-center gap-2 rounded-xl px-2.5 py-3 text-left text-xs font-semibold transition-all sm:px-3 sm:text-sm ${
                 activeTab === id
                   ? 'bg-[#f6efe3] text-[#3b241a] shadow-sm ring-1 ring-[#e8d2a6]'
@@ -614,8 +960,11 @@ export const InventoryPage = () => {
               { label: 'Low / Out of Stock', value: `${dashboard?.lowStockItems ?? 0} / ${dashboard?.outOfStockItems ?? 0}`, icon: AlertTriangle, tone: 'text-rose-600 bg-rose-50' },
               { label: 'Pending Purchase Orders', value: dashboard?.pendingPurchaseOrders ?? 0, icon: ClipboardList, tone: 'text-amber-600 bg-amber-50' },
               { label: 'Purchases This Month', value: formatCurrency(dashboard?.purchasesThisMonth || 0), icon: Truck, tone: 'text-violet-600 bg-violet-50' },
+              { label: 'Consumption Cost This Month', value: formatCurrency(dashboard?.consumptionCostThisMonth || 0), icon: Utensils, tone: 'text-indigo-600 bg-indigo-50' },
+              { label: 'Wastage This Month', value: formatCurrency(dashboard?.wastageCostThisMonth || 0), icon: AlertTriangle, tone: 'text-rose-600 bg-rose-50' },
               { label: 'Expiring Soon', value: dashboard?.expiringProducts?.length || 0, icon: Clock3, tone: 'text-orange-600 bg-orange-50' },
-              { label: 'Open Requests', value: departmentRequests.filter((request) => request.status === 'pending').length, icon: ClipboardList, tone: 'text-cyan-600 bg-cyan-50' }
+              { label: 'Open Requests', value: departmentRequests.filter((request) => request.status === 'pending').length, icon: ClipboardList, tone: 'text-cyan-600 bg-cyan-50' },
+              { label: 'Pending Verification', value: dashboard?.pendingStockVerifications ?? 0, icon: ClipboardList, tone: 'text-orange-600 bg-orange-50' }
             ].map(({ label, value, icon: Icon, tone }) => (
               <Card key={label} className="!p-4 sm:!p-5">
                 <div className="flex items-center justify-between gap-3">
@@ -628,6 +977,38 @@ export const InventoryPage = () => {
               </Card>
             ))}
           </div>
+          {canManageInventory && (
+            <Card title="Stock Verification Frequency" subtitle="Set how often staff should physically verify inventory">
+              <div className="max-w-xs">
+                <Select
+                  label="Verify every"
+                  value={verificationIntervalDays}
+                  onChange={handleVerificationIntervalChange}
+                  options={[
+                    { label: 'Daily', value: 1 },
+                    { label: 'Every 2 days', value: 2 },
+                    { label: 'Every 3 days', value: 3 },
+                    { label: 'Weekly', value: 7 },
+                    { label: 'Monthly', value: 30 },
+                    ...(![1, 2, 3, 7, 30].includes(Number(verificationIntervalDays))
+                      ? [{ label: `Custom (${verificationIntervalDays} days)`, value: Number(verificationIntervalDays) }]
+                      : [])
+                  ]}
+                />
+                <div className="mt-3 flex items-end gap-2">
+                  <Input
+                    label="Custom interval in days"
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={verificationIntervalDays}
+                    onChange={(event) => setVerificationIntervalDays(event.target.value)}
+                  />
+                  <Button size="sm" onClick={() => handleVerificationIntervalChange({ target: { value: verificationIntervalDays } })}>Save</Button>
+                </div>
+              </div>
+            </Card>
+          )}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <Card title="Monthly Purchases" subtitle="Value of accepted stock receipts">
               <div className="h-64">
@@ -717,7 +1098,38 @@ export const InventoryPage = () => {
         </div>
       )}
 
+      {activeTab === 'categories' && (
+        <Card title="Inventory Categories" subtitle="Browse categories used by your saved inventory items">
+          {inventoryCategories.length ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {inventoryCategories.map(({ category, count }) => (
+                <button
+                  type="button"
+                  key={category}
+                  onClick={() => {
+                    setCategoryFilter(category);
+                    selectInventoryTab('items');
+                  }}
+                  className="rounded-2xl border border-[#eadfce] bg-white p-4 text-left transition hover:border-[#d9bd87] hover:bg-[#faf7f0]"
+                >
+                  <p className="font-semibold capitalize text-slate-800">{category.replace(/_/g, ' ')}</p>
+                  <p className="mt-1 text-xs text-slate-500">{count} item{count === 1 ? '' : 's'}</p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="py-10 text-center text-sm text-slate-500">Categories will appear here as inventory items are added.</p>
+          )}
+        </Card>
+      )}
+
       {activeTab === 'items' && (
+        <>
+        {!units.some((unit) => unit.isActive) && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            No active units are available yet. Add standard units while creating your first raw material.
+          </div>
+        )}
         <Card>
           <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Search inventory" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, SKU, barcode" />
@@ -727,6 +1139,12 @@ export const InventoryPage = () => {
               onChange={(e) => setCategoryFilter(e.target.value)}
               options={[
                 { label: 'All categories', value: 'all' },
+                { label: 'Vegetables', value: 'vegetables' },
+                { label: 'Fruits', value: 'fruits' },
+                { label: 'Groceries', value: 'groceries' },
+                { label: 'Dairy Products', value: 'dairy_products' },
+                { label: 'Meat', value: 'meat' },
+                { label: 'Seafood', value: 'seafood' },
                 { label: 'Food & Ingredients', value: 'food_ingredients' },
                 { label: 'Beverages', value: 'beverages' },
                 { label: 'Toiletries', value: 'toiletries' },
@@ -767,20 +1185,23 @@ export const InventoryPage = () => {
                     const isLow = availableStock <= it.minStockThreshold;
                     return (
                       <tr key={it._id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3.5 font-bold text-slate-900">{it.name}</td>
+                        <td className="py-3.5 font-bold text-slate-900">
+                          {it.name}
+                          {!it.isActive && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Inactive</span>}
+                        </td>
                         <td className="py-3.5 font-mono text-slate-500">{it.code}</td>
                         <td className="py-3.5 capitalize text-slate-600">
                           {it.category.replace(/_/g, ' ')}
                         </td>
                         <td className="py-3.5 font-bold text-slate-900">
-                          {availableStock} {it.unit}
+                          {formatInventoryQuantity(availableStock, it)}
                         </td>
-                        <td className="py-3.5 text-slate-700 font-mono">{formatCurrency(it.unitCost)}</td>
+                        <td className="py-3.5 text-slate-700 font-mono">{formatCurrency(it.unitCost)}<span className="ml-1 text-[10px] text-slate-400">/ {it.baseUnit || it.unit}</span></td>
                         <td className="py-3.5">
                           {isLow ? (
                             <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
                               <AlertTriangle className="w-3 h-3 text-rose-600" />
-                              Low Stock (&le; {it.minStockThreshold})
+                              Low Stock (&le; {it.minStockThreshold} {it.baseUnit || it.unit})
                             </span>
                           ) : (
                             <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -790,16 +1211,39 @@ export const InventoryPage = () => {
                         </td>
                         <td className="py-3.5 text-right">
                           {canManageInventory && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => {
-                              setSelectedItemForMove(it);
-                              setIsMovementOpen(true);
-                            }}
-                          >
-                            Adjust Stock
-                          </Button>
+                            <div className="flex flex-wrap justify-end gap-1">
+                              <Button size="sm" variant="outline" onClick={() => {
+                                setEditingItem(it);
+                                setItemEditForm({
+                                  name: it.name || '',
+                                  code: it.code || '',
+                                  category: it.category || 'other',
+                                  description: it.description || '',
+                                  minStockThreshold: it.minStockThreshold ?? 0,
+                                  maxStockLevel: it.maxStockLevel ?? '',
+                                  reorderQuantity: it.reorderQuantity ?? 0,
+                                  stockVerificationIntervalDays: it.stockVerificationIntervalDays ?? '',
+                                  location: it.location || 'Main Store',
+                                  trackExpiry: Boolean(it.trackExpiry),
+                                  trackBatchNumber: Boolean(it.trackBatchNumber),
+                                  isActive: Boolean(it.isActive)
+                                });
+                              }}>Edit</Button>
+                              <Button size="sm" variant={it.isActive ? 'danger' : 'success'} onClick={() => toggleItemStatus(it)}>
+                                {it.isActive ? 'Deactivate' : 'Activate'}
+                              </Button>
+                              {it.isActive && <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setSelectedItemForMove(it);
+                                  setMoveForm({ ...moveForm, unit: it.baseUnit || it.unit });
+                                  setIsMovementOpen(true);
+                                }}
+                              >
+                                Adjust Stock
+                              </Button>}
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -819,6 +1263,7 @@ export const InventoryPage = () => {
             </div>
           )}
         </Card>
+        </>
       )}
 
       {activeTab === 'vendors' && (
@@ -893,10 +1338,12 @@ export const InventoryPage = () => {
                               icon={PackageCheck}
                               onClick={() => {
                                 setSelectedPO(po);
+                                setPurchaseDate(dayjs().format('YYYY-MM-DD'));
                                 setReceivingLines(po.items.map((line) => ({
                                   itemId: line.itemId?._id || line.itemId,
                                   name: line.itemName,
                                   unit: line.unit || line.itemId?.unit || '',
+                                  conversionFactor: line.conversionFactor || 1,
                                   remaining: Math.max(0, line.quantity - (line.receivedQuantity || 0)),
                                   receivedQuantity: Math.max(0, line.quantity - (line.receivedQuantity || 0)),
                                   acceptedQuantity: Math.max(0, line.quantity - (line.receivedQuantity || 0)),
@@ -933,7 +1380,7 @@ export const InventoryPage = () => {
                     <td className="py-3">{dayjs(movement.createdAt).format('YYYY-MM-DD HH:mm')}</td>
                     <td className="font-semibold">{movement.itemId?.name || 'Item'}</td>
                     <td className="capitalize">{movement.movementType.replace(/_/g, ' ')}</td>
-                    <td>{movement.quantity} {movement.itemId?.unit}</td>
+                    <td>{movement.enteredQuantity ?? movement.quantity} {movement.enteredUnit || movement.baseUnit || movement.itemId?.baseUnit || movement.itemId?.unit}</td>
                     <td>{movement.location}{movement.destinationLocation ? ` → ${movement.destinationLocation}` : ''}</td>
                     <td>{movement.department || '—'}</td>
                     <td>{movement.referenceNumber || '—'}</td>
@@ -944,6 +1391,48 @@ export const InventoryPage = () => {
               </tbody>
             </table>
           </div>
+        </Card>
+      )}
+
+      {activeTab === 'verifications' && (
+        <Card
+          title="Physical Stock Verification"
+          subtitle="Compare usable physical stock with expected stock and classify use, wastage, and discrepancies"
+          action={<Button size="sm" icon={ClipboardList} onClick={() => openStockVerification()}>Record Verification</Button>}
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
+              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Material</th><th className="pb-3">Expected</th><th className="pb-3">Actual usable</th><th className="pb-3">Used</th><th className="pb-3">Wasted</th><th className="pb-3">Discrepancy / Gain</th><th className="pb-3">Period</th><th className="pb-3">Verified by</th><th className="pb-3">Status</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {verifications.map((verification) => (
+                  <tr key={verification._id}>
+                    <td className="py-3 font-semibold">{verification.itemId?.name || 'Material'}</td>
+                    <td>{formatInventoryQuantity(verification.expectedStock, verification.itemId || { unit: verification.unit })}</td>
+                    <td>{formatInventoryQuantity(verification.actualStock, verification.itemId || { unit: verification.unit })}</td>
+                    <td>{formatInventoryQuantity(verification.consumptionQuantity, verification.itemId || { unit: verification.unit })}</td>
+                    <td>{formatInventoryQuantity(verification.wastageQuantity, verification.itemId || { unit: verification.unit })}</td>
+                    <td>{verification.stockGain > 0 ? `Gain ${verification.stockGain}` : verification.discrepancyQuantity || 0}</td>
+                    <td>{dayjs(verification.periodStart).format('MMM D')} – {dayjs(verification.periodEnd).format('MMM D, YYYY')}</td>
+                    <td>{verification.verifiedBy?.name || 'Staff'}</td>
+                    <td><Badge variant={verification.status}>{verification.status}</Badge></td>
+                  </tr>
+                ))}
+                {!verifications.length && <tr><td colSpan="9" className="py-10 text-center text-slate-400">No physical stock verifications recorded yet.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          {!!dashboard?.pendingVerificationItems?.length && (
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <h3 className="mb-3 text-sm font-bold text-slate-800">Due for verification</h3>
+              <div className="flex flex-wrap gap-2">
+                {dashboard.pendingVerificationItems.map((item) => (
+                  <Button key={item._id} size="sm" variant="outline" onClick={() => openStockVerification(item)}>
+                    Verify {item.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
@@ -987,7 +1476,7 @@ export const InventoryPage = () => {
                   <tr key={adjustment._id}>
                     <td className="py-3">{dayjs(adjustment.createdAt).format('YYYY-MM-DD')}</td>
                     <td className="font-semibold">{adjustment.itemId?.name || 'Item'}</td>
-                    <td>{adjustment.quantity} {adjustment.itemId?.unit}</td>
+                    <td>{adjustment.quantity} {adjustment.unit || adjustment.itemId?.baseUnit || adjustment.itemId?.unit}</td>
                     <td className="capitalize">{adjustment.reason.replace(/_/g, ' ')}</td>
                     <td>{adjustment.department || '—'}</td>
                     <td>{adjustment.reportedBy?.name || '—'}</td>
@@ -1057,15 +1546,27 @@ export const InventoryPage = () => {
               <form onSubmit={handleMinibarReconciliation} className="space-y-4">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
-                    <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Product</th><th className="pb-3">Available</th><th className="pb-3">Consumed</th><th className="pb-3">Complimentary</th><th className="pb-3">Damaged</th><th className="pb-3">Missing</th></tr></thead>
+                    <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Product</th><th className="pb-3">Available</th><th className="pb-3">Unit</th><th className="pb-3">Consumed</th><th className="pb-3">Complimentary</th><th className="pb-3">Damaged</th><th className="pb-3">Missing</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                       {minibarData.stock.map((entry) => (
                         <tr key={entry._id}>
                           <td className="py-3 font-semibold">{entry.itemId.name}</td>
-                          <td>{entry.quantity} {entry.itemId.unit}</td>
+                          <td>{formatInventoryQuantity(entry.quantity, entry.itemId)}</td>
+                          <td className="w-28 py-2">
+                            <Select
+                              value={minibarCounts[entry.itemId._id]?.unit || entry.itemId.baseUnit || entry.itemId.unit}
+                              searchable
+                              searchPlaceholder="Search supported units..."
+                              onChange={(e) => setMinibarCounts({
+                                ...minibarCounts,
+                                [entry.itemId._id]: { ...minibarCounts[entry.itemId._id], unit: e.target.value }
+                              })}
+                              options={unitChoicesForItem(entry.itemId, units)}
+                            />
+                          </td>
                           {['consumedQuantity', 'complimentaryQuantity', 'damagedQuantity', 'missingQuantity'].map((field) => (
                             <td key={field} className="w-28 py-2">
-                              <Input type="number" min="0" max={entry.quantity} step="0.001" value={minibarCounts[entry.itemId._id]?.[field] || 0} onChange={(e) => setMinibarCounts({
+                              <Input type="number" min="0" max={entry.quantity / Number(conversionFactorForItem(entry.itemId, minibarCounts[entry.itemId._id]?.unit || entry.itemId.baseUnit || entry.itemId.unit) || 1)} step="any" value={minibarCounts[entry.itemId._id]?.[field] || 0} onChange={(e) => setMinibarCounts({
                                 ...minibarCounts,
                                 [entry.itemId._id]: { ...minibarCounts[entry.itemId._id], [field]: e.target.value }
                               })} />
@@ -1073,7 +1574,7 @@ export const InventoryPage = () => {
                           ))}
                         </tr>
                       ))}
-                      {!minibarData.stock.length && <tr><td colSpan="6" className="py-8 text-center text-slate-400">No minibar products are assigned to this room.</td></tr>}
+                      {!minibarData.stock.length && <tr><td colSpan="7" className="py-8 text-center text-slate-400">No minibar products are assigned to this room.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -1086,7 +1587,7 @@ export const InventoryPage = () => {
               <div className="divide-y divide-slate-100">
                 {minibarData.transactions.map((transaction) => (
                   <div key={transaction._id} className="flex items-center justify-between gap-3 py-3 text-sm">
-                    <span>{transaction.itemId?.name} · {transaction.quantity} · {transaction.type}</span>
+                    <span>{transaction.itemId?.name} · {transaction.enteredQuantity ?? transaction.quantity} {transaction.unit || transaction.itemId?.unit} · {transaction.type}</span>
                     <span className="text-xs text-slate-500">{transaction.chargeAmount ? formatCurrency(transaction.chargeAmount) : 'No charge'} · {dayjs(transaction.createdAt).format('MMM D, YYYY')}</span>
                   </div>
                 ))}
@@ -1098,7 +1599,7 @@ export const InventoryPage = () => {
 
       {activeTab === 'reports' && (
         <Card title="Inventory Reports" subtitle="Filter and export stock, valuation, purchase, consumption, wastage, expiry and ledger records">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
             <Select
               label="Report"
               value={reportType}
@@ -1107,6 +1608,8 @@ export const InventoryPage = () => {
                 { label: 'Current Stock', value: 'stock' },
                 { label: 'Stock Valuation', value: 'valuation' },
                 { label: 'Purchase History', value: 'purchases' },
+                { label: 'Inventory Financial Summary', value: 'financial' },
+                { label: 'Physical Stock Verifications', value: 'verifications' },
                 { label: 'Department Consumption', value: 'department-consumption' },
                 { label: 'Recipe Consumption / Food Cost', value: 'recipe-consumption' },
                 { label: 'Wastage', value: 'wastage' },
@@ -1118,12 +1621,130 @@ export const InventoryPage = () => {
             />
             <Input label="From" type="date" value={reportFilters.from} onChange={(e) => setReportFilters({ ...reportFilters, from: e.target.value })} />
             <Input label="To" type="date" value={reportFilters.to} onChange={(e) => setReportFilters({ ...reportFilters, to: e.target.value })} />
+            <Select
+              label="Category"
+              value={reportFilters.category}
+              onChange={(e) => setReportFilters({ ...reportFilters, category: e.target.value })}
+              options={[
+                { label: 'All categories', value: 'all' },
+                ...[...new Set(items.map((item) => item.category).filter(Boolean))]
+                  .sort()
+                  .map((category) => ({ label: category.replace(/_/g, ' '), value: category }))
+              ]}
+            />
+            <Select
+              label="Raw material"
+              value={reportFilters.itemId}
+              onChange={(e) => setReportFilters({ ...reportFilters, itemId: e.target.value })}
+              options={[
+                { label: 'All raw materials', value: '' },
+                ...items.map((item) => ({ label: `${item.name} (${item.code})`, value: item._id }))
+              ]}
+            />
             <div className="flex items-end gap-2">
               <Button className="flex-1" size="sm" onClick={loadReport}>Run Report</Button>
-              <Button variant="outline" size="sm" icon={Download} onClick={exportReport}>Export CSV</Button>
+              <Button variant="outline" size="sm" icon={Download} onClick={exportReport}>CSV</Button>
+              <Button variant="outline" size="sm" disabled={!report.length} onClick={exportExcelReport}>Excel</Button>
+              <Button variant="outline" size="sm" disabled={!report.length} onClick={exportPdfReport}>PDF</Button>
             </div>
           </div>
-          <div className="mt-5 overflow-x-auto">
+          {reportType === 'financial' && report[0] && (
+            <>
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {[
+                ['Purchases received', report[0].totalPurchaseValue],
+                ['Consumption cost', report[0].totalConsumptionCost],
+                ['Wastage loss', report[0].totalWastageLoss],
+                ['Closing stock value', report[0].closingInventoryValue],
+                ['Stock adjustments', report[0].stockAdjustmentValue],
+                ['Total raw material cost', report[0].totalRawMaterialCost]
+              ].map(([label, amount]) => (
+                <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-xs font-medium text-slate-500">{label}</p>
+                  <p className="mt-2 text-lg font-black text-slate-900">{formatCurrency(amount || 0)}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <Card title="Monthly Inventory Expenses">
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={report[0].monthlyTrend || []}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                      <Bar dataKey="purchaseValue" name="Purchases" fill="#C58A32" />
+                      <Bar dataKey="consumptionCost" name="Consumption" fill="#4B8F72" />
+                      <Bar dataKey="wastageCost" name="Wastage" fill="#D75C5C" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+              <Card title="Vendor-wise Purchase Cost">
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={report[0].vendorBreakdown || []}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="vendorName" hide />
+                      <YAxis />
+                      <Tooltip labelFormatter={(label) => label} formatter={(value) => formatCurrency(value)} />
+                      <Bar dataKey="totalPurchaseValue" name="Purchase value" fill="#6784C2" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+              <Card title="Raw Material Wastage">
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={(report[0].itemBreakdown || []).filter((entry) => entry.wastageCost > 0)}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="code" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                      <Bar dataKey="wastageCost" name="Wastage cost" fill="#D75C5C" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            </div>
+            <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <Card title="Vendor-wise Purchase Expenses">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-2">Vendor</th><th className="pb-2">Receipts</th><th className="pb-2 text-right">Purchase value</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(report[0].vendorBreakdown || []).map((vendor) => (
+                        <tr key={vendor.vendorId || 'unassigned'}><td className="py-2 font-semibold">{vendor.vendorName}</td><td>{vendor.receiptCount}</td><td className="text-right">{formatCurrency(vendor.totalPurchaseValue)}</td></tr>
+                      ))}
+                      {!report[0].vendorBreakdown?.length && <tr><td colSpan="3" className="py-5 text-center text-slate-400">No purchases in this period.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+              <Card title="Raw Material Expenses">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-2">Material</th><th className="pb-2">Purchased</th><th className="pb-2">Consumed</th><th className="pb-2">Wasted</th><th className="pb-2 text-right">Purchase value</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(report[0].itemBreakdown || []).map((entry) => (
+                        <tr key={entry.itemId}>
+                          <td className="py-2 font-semibold">{entry.name} <span className="text-slate-400">({entry.code})</span></td>
+                          <td>{entry.purchasedQuantity} {entry.unit}</td>
+                          <td>{entry.consumedQuantity} {entry.unit}</td>
+                          <td>{entry.wastedQuantity} {entry.unit}</td>
+                          <td className="text-right">{formatCurrency(entry.purchaseValue)}</td>
+                        </tr>
+                      ))}
+                      {!report[0].itemBreakdown?.length && <tr><td colSpan="5" className="py-5 text-center text-slate-400">No raw material transactions in this period.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </div>
+            </>
+          )}
+          {reportType !== 'financial' && <div className="mt-5 overflow-x-auto">
             <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
               <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Date / Name</th><th className="pb-3">Item / Reference</th><th className="pb-3">Type / Quantity</th><th className="pb-3">Department / Supplier</th><th className="pb-3 text-right">Value</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
@@ -1139,7 +1760,7 @@ export const InventoryPage = () => {
                 {!report.length && <tr><td colSpan="5" className="py-8 text-center text-slate-400">Choose filters and run a report.</td></tr>}
               </tbody>
             </table>
-          </div>
+          </div>}
         </Card>
       )}
 
@@ -1148,7 +1769,7 @@ export const InventoryPage = () => {
         isOpen={isMovementOpen}
         onClose={() => setIsMovementOpen(false)}
         title={`Adjust Stock: ${selectedItemForMove?.name}`}
-        subtitle={`Current Stock: ${selectedItemForMove?.currentStock} ${selectedItemForMove?.unit}`}
+        subtitle={`Current Stock: ${selectedItemForMove ? formatInventoryQuantity(selectedItemForMove.currentStock, selectedItemForMove) : ''}`}
       >
         <form onSubmit={handleRecordMovement} className="space-y-4">
           <Select
@@ -1166,9 +1787,19 @@ export const InventoryPage = () => {
           <Input
             label="Quantity to Move / Set"
             type="number"
+            min="0"
+            step="any"
             required
             value={moveForm.quantity}
             onChange={(e) => setMoveForm({ ...moveForm, quantity: e.target.value })}
+          />
+          <Select
+            label="Quantity unit"
+            searchable
+            searchPlaceholder="Search supported units..."
+            value={moveForm.unit || selectedItemForMove?.baseUnit || selectedItemForMove?.unit}
+            onChange={(e) => setMoveForm({ ...moveForm, unit: e.target.value })}
+            options={unitChoicesForItem(selectedItemForMove, units)}
           />
 
           <Input
@@ -1204,6 +1835,70 @@ export const InventoryPage = () => {
         </form>
       </Modal>
 
+      <Modal
+        isOpen={Boolean(editingItem)}
+        onClose={() => setEditingItem(null)}
+        title="Edit Raw Material"
+        subtitle="Update catalogue details and stock controls without changing historical units or movements"
+      >
+        <form onSubmit={handleUpdateItem} className="space-y-4">
+          <Input label="Raw material name" required value={itemEditForm.name || ''} onChange={(event) => setItemEditForm({ ...itemEditForm, name: event.target.value })} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="SKU / Code" required value={itemEditForm.code || ''} onChange={(event) => setItemEditForm({ ...itemEditForm, code: event.target.value })} />
+            <Select
+              label="Category"
+              value={itemEditForm.category || 'other'}
+              onChange={(event) => setItemEditForm({ ...itemEditForm, category: event.target.value })}
+              options={[
+                { label: 'Vegetables', value: 'vegetables' },
+                { label: 'Fruits', value: 'fruits' },
+                { label: 'Groceries', value: 'groceries' },
+                { label: 'Dairy Products', value: 'dairy_products' },
+                { label: 'Meat', value: 'meat' },
+                { label: 'Seafood', value: 'seafood' },
+                { label: 'Food & Ingredients', value: 'food_ingredients' },
+                { label: 'Beverages', value: 'beverages' },
+                { label: 'Toiletries', value: 'toiletries' },
+                { label: 'Housekeeping Supplies', value: 'housekeeping_supplies' },
+                { label: 'Cleaning Materials', value: 'cleaning_materials' },
+                { label: 'Maintenance Materials', value: 'maintenance_materials' },
+                { label: 'Electrical Items', value: 'electrical_items' },
+                { label: 'Stationery', value: 'stationery' },
+                { label: 'Minibar Products', value: 'minibar_products' },
+                { label: 'Linen & Laundry', value: 'linen_laundry' },
+                { label: 'Other', value: 'other' }
+              ]}
+            />
+          </div>
+          <Input label="Description" value={itemEditForm.description || ''} onChange={(event) => setItemEditForm({ ...itemEditForm, description: event.target.value })} />
+          <Input label="Storage location" value={itemEditForm.location || ''} onChange={(event) => setItemEditForm({ ...itemEditForm, location: event.target.value })} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="Minimum stock threshold" type="number" min="0" step="any" value={itemEditForm.minStockThreshold ?? ''} onChange={(event) => setItemEditForm({ ...itemEditForm, minStockThreshold: event.target.value })} />
+            <Input label="Maximum stock level (optional)" type="number" min="0" step="any" value={itemEditForm.maxStockLevel ?? ''} onChange={(event) => setItemEditForm({ ...itemEditForm, maxStockLevel: event.target.value })} />
+            <Input label="Reorder quantity" type="number" min="0" step="any" value={itemEditForm.reorderQuantity ?? ''} onChange={(event) => setItemEditForm({ ...itemEditForm, reorderQuantity: event.target.value })} />
+            <Input label="Verification interval override (days, optional)" type="number" min="1" max="365" step="1" value={itemEditForm.stockVerificationIntervalDays ?? ''} onChange={(event) => setItemEditForm({ ...itemEditForm, stockVerificationIntervalDays: event.target.value })} />
+          </div>
+          <div className="flex flex-wrap gap-4 text-sm text-slate-700">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={Boolean(itemEditForm.trackExpiry)} onChange={(event) => setItemEditForm({ ...itemEditForm, trackExpiry: event.target.checked })} />
+              Track expiry by batch
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={Boolean(itemEditForm.trackBatchNumber)} onChange={(event) => setItemEditForm({ ...itemEditForm, trackBatchNumber: event.target.checked })} />
+              Track batch numbers
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={Boolean(itemEditForm.isActive)} onChange={(event) => setItemEditForm({ ...itemEditForm, isActive: event.target.checked })} />
+              Active raw material
+            </label>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setEditingItem(null)}>Cancel</Button>
+            <Button type="submit">Save changes</Button>
+          </div>
+        </form>
+      </Modal>
+
       {/* Add Item Modal */}
       <Modal
         isOpen={isAddItemOpen}
@@ -1234,6 +1929,12 @@ export const InventoryPage = () => {
               value={itemForm.category}
               onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}
               options={[
+                { label: 'Vegetables', value: 'vegetables' },
+                { label: 'Fruits', value: 'fruits' },
+                { label: 'Groceries', value: 'groceries' },
+                { label: 'Dairy Products', value: 'dairy_products' },
+                { label: 'Meat', value: 'meat' },
+                { label: 'Seafood', value: 'seafood' },
                 { label: 'Food & Ingredients', value: 'food_ingredients' },
                 { label: 'Beverages', value: 'beverages' },
                 { label: 'Toiletries', value: 'toiletries' },
@@ -1248,44 +1949,214 @@ export const InventoryPage = () => {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Select
-              label="Unit"
-              value={itemForm.unit}
-              onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
-              options={['kg', 'g', 'liter', 'ml', 'pcs', 'box', 'packet'].map((unit) => ({ label: unit, value: unit }))}
-            />
-            <Input label="Storage location" value={itemForm.location || 'Main Store'} onChange={(e) => setItemForm({ ...itemForm, location: e.target.value })} />
+          <div className="rounded-2xl border border-[#eadfce] bg-[#faf7f0]/70 p-4">
+            <div className="mb-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">Units for this raw material</h3>
+                  <p className="mt-1 text-xs text-slate-500">Choose the stock unit and purchase packages here. Quantities are converted to the base unit.</p>
+                </div>
+                {canManageInventory && (
+                  <div className="flex flex-wrap gap-2">
+                    {!units.some((unit) => unit.isActive) && (
+                      <Button type="button" size="sm" variant="outline" onClick={handleCreateDefaultUnits}>Add standard units</Button>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setUnitForm({ name: '', symbol: '', category: 'weight', description: '', isActive: true });
+                        setIsUnitFormOpen((open) => !open);
+                      }}
+                    >
+                      {isUnitFormOpen ? 'Cancel new unit' : 'Create a unit'}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+            {isUnitFormOpen && canManageInventory && (
+              <div className="mb-4 rounded-xl border border-[#eadfce] bg-white p-3">
+                <p className="mb-3 text-xs font-semibold text-slate-700">Add a reusable unit</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Input label="Unit name" required maxLength={80} value={unitForm.name} onChange={(event) => setUnitForm({ ...unitForm, name: event.target.value })} placeholder="Kilogram" />
+                  <Input label="Unit symbol" required maxLength={24} value={unitForm.symbol} onChange={(event) => setUnitForm({ ...unitForm, symbol: event.target.value })} placeholder="kg" />
+                  <Select
+                    label="Unit type"
+                    required
+                    value={unitForm.category}
+                    onChange={(event) => setUnitForm({ ...unitForm, category: event.target.value })}
+                    options={['weight', 'volume', 'quantity', 'length', 'area', 'other'].map((category) => ({
+                      label: category[0].toUpperCase() + category.slice(1),
+                      value: category
+                    }))}
+                  />
+                  <Input label="Description (optional)" value={unitForm.description} onChange={(event) => setUnitForm({ ...unitForm, description: event.target.value })} />
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <Button type="button" size="sm" onClick={handleSaveUnit}>Save unit</Button>
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Select
+                label="Base unit"
+                searchable
+                searchPlaceholder="Search units..."
+                required
+                value={itemForm.baseUnitId}
+                onChange={(e) => {
+                  const unit = getUnit(e.target.value);
+                  setItemForm({
+                    ...itemForm,
+                    unit: unit?.symbol || '',
+                    baseUnit: unit?.symbol || '',
+                    baseUnitId: e.target.value,
+                    purchaseUnit: unit?.symbol || '',
+                    purchaseUnitId: e.target.value,
+                    purchaseConversionFactor: 1,
+                    conversionFactor: 1,
+                    packagingOptions: []
+                  });
+                }}
+                options={unitChoices()}
+              />
+              <Input label="Storage location" value={itemForm.location || 'Main Store'} onChange={(e) => setItemForm({ ...itemForm, location: e.target.value })} />
+              <Select
+                label="Purchase unit"
+                searchable
+                searchPlaceholder="Search units..."
+                required
+                value={itemForm.purchaseUnitId}
+                onChange={(e) => {
+                  const unit = getUnit(e.target.value);
+                  const configured = itemForm.packagingOptions.find((option) => option.unitId === e.target.value)?.conversionFactor;
+                  const sameUnit = e.target.value === itemForm.baseUnitId;
+                  setItemForm({
+                    ...itemForm,
+                    purchaseUnit: unit?.symbol || '',
+                    purchaseUnitId: e.target.value,
+                    purchaseConversionFactor: sameUnit
+                      ? 1
+                      : configured || defaultConversionFactor(itemForm.baseUnit, unit?.symbol),
+                    packagingOptions: itemForm.packagingOptions.filter((option) => option.unitId !== e.target.value)
+                  });
+                }}
+                options={unitChoices()}
+              />
+              <Input
+                label={`1 ${getUnit(itemForm.purchaseUnitId)?.name || 'purchase unit'} equals how many ${getUnit(itemForm.baseUnitId)?.name || 'base units'}?`}
+                type="number"
+                min="0.000000001"
+                step="any"
+                required={itemForm.purchaseUnitId !== itemForm.baseUnitId}
+                value={itemForm.purchaseConversionFactor}
+                onChange={(e) => setItemForm({ ...itemForm, purchaseConversionFactor: e.target.value })}
+              />
+            </div>
+            {!units.some((unit) => unit.isActive) && (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                Add standard units or create a unit above to configure this raw material.
+              </div>
+            )}
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">Additional packaging options</p>
+                  <p className="text-[11px] text-slate-500">Configure a factor for each package to convert it into the base unit.</p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!units.some((unit) => unit.isActive)}
+                  onClick={() => setItemForm({
+                    ...itemForm,
+                    packagingOptions: [...itemForm.packagingOptions, { unitId: '', conversionFactor: '' }]
+                  })}
+                >Add unit</Button>
+              </div>
+              {itemForm.packagingOptions.map((option, index) => (
+                <div key={`${index}-${option.unitId}`} className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                  <Select
+                    label={index === 0 ? 'Package unit' : ''}
+                    searchable
+                    searchPlaceholder="Search existing units..."
+                    required
+                    value={option.unitId}
+                    onChange={(e) => {
+                      const unit = getUnit(e.target.value);
+                      setItemForm({
+                        ...itemForm,
+                        packagingOptions: itemForm.packagingOptions.map((entry, row) => row === index
+                          ? { ...entry, unitId: e.target.value, conversionFactor: defaultConversionFactor(itemForm.baseUnit, unit?.symbol) }
+                          : entry)
+                      });
+                    }}
+                    options={unitChoices().filter((unit) => (
+                      unit.value !== itemForm.baseUnitId
+                      && unit.value !== itemForm.purchaseUnitId
+                      && !itemForm.packagingOptions.some((entry, row) => row !== index && entry.unitId === unit.value)
+                    ))}
+                  />
+                  <Input
+                    label={index === 0 ? `1 ${getUnit(option.unitId)?.name || 'package'} equals how many ${getUnit(itemForm.baseUnitId)?.name || 'base units'}?` : ''}
+                    type="number"
+                    min="0.000000001"
+                    step="any"
+                    required
+                    value={option.conversionFactor}
+                    onChange={(e) => setItemForm({
+                      ...itemForm,
+                      packagingOptions: itemForm.packagingOptions.map((entry, row) => row === index
+                        ? { ...entry, conversionFactor: e.target.value }
+                        : entry)
+                    })}
+                  />
+                  <Button type="button" size="sm" variant="danger" onClick={() => setItemForm({
+                    ...itemForm,
+                    packagingOptions: itemForm.packagingOptions.filter((_, row) => row !== index)
+                  })}>Remove</Button>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Input
-              label="Current Stock"
+              label={`Opening stock (${itemForm.baseUnit})`}
               type="number"
               required
+              min="0"
+              step="any"
               value={itemForm.currentStock}
               onChange={(e) => setItemForm({ ...itemForm, currentStock: e.target.value })}
             />
             <Input
-              label="Min Threshold"
+              label={`Min Threshold (${itemForm.baseUnit})`}
               type="number"
               required
+              min="0"
+              step="any"
               value={itemForm.minStockThreshold}
               onChange={(e) => setItemForm({ ...itemForm, minStockThreshold: e.target.value })}
             />
             <Input
-              label={`Unit Cost (${currencySymbol})`}
+              label={`Purchase price / ${itemForm.purchaseUnit} (${currencySymbol})`}
               type="number"
               step="0.01"
               required
-              value={itemForm.unitCost}
-              onChange={(e) => setItemForm({ ...itemForm, unitCost: e.target.value })}
+              min="0"
+              value={itemForm.purchasePrice}
+              onChange={(e) => setItemForm({ ...itemForm, purchasePrice: e.target.value })}
             />
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input label="Maximum stock level" type="number" min="0" step="0.001" value={itemForm.maxStockLevel} onChange={(e) => setItemForm({ ...itemForm, maxStockLevel: e.target.value })} />
-            <Input label="Reorder quantity" type="number" min="0" step="0.001" value={itemForm.reorderQuantity} onChange={(e) => setItemForm({ ...itemForm, reorderQuantity: e.target.value })} />
+            <Input label={`Maximum stock level (${itemForm.baseUnit})`} type="number" min="0" step="any" value={itemForm.maxStockLevel} onChange={(e) => setItemForm({ ...itemForm, maxStockLevel: e.target.value })} />
+            <Input label={`Reorder quantity (${itemForm.baseUnit})`} type="number" min="0" step="any" value={itemForm.reorderQuantity} onChange={(e) => setItemForm({ ...itemForm, reorderQuantity: e.target.value })} />
+            <Input label="Verification interval override (days, optional)" type="number" min="1" max="365" step="1" value={itemForm.stockVerificationIntervalDays} onChange={(e) => setItemForm({ ...itemForm, stockVerificationIntervalDays: e.target.value })} />
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -1370,23 +2241,48 @@ export const InventoryPage = () => {
           <Input label="Expected delivery" type="date" value={poForm.expectedDeliveryDate} onChange={(e) => setPoForm({ ...poForm, expectedDeliveryDate: e.target.value })} />
           <div className="space-y-3">
             {poForm.items.map((line, index) => (
-              <div key={index} className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[2fr_1fr_1fr_auto]">
+              <div key={index} className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[2fr_0.8fr_1fr_1fr_auto]">
                 <Select
                   label={index === 0 ? 'Item' : ''}
+                  searchable
+                  searchPlaceholder="Search inventory items..."
                   required
                   value={line.itemId}
                   onChange={(e) => {
                     const selected = items.find((item) => item._id === e.target.value);
-                    setPoForm({ ...poForm, items: poForm.items.map((entry, row) => row === index ? { ...entry, itemId: e.target.value, unitCost: selected?.unitCost || entry.unitCost } : entry) });
+                    setPoForm({ ...poForm, items: poForm.items.map((entry, row) => row === index ? {
+                      ...entry,
+                      itemId: e.target.value,
+                      unit: selected?.purchaseUnit || selected?.baseUnit || selected?.unit || '',
+                      unitCost: selected
+                        ? selected.purchasePrice ?? selected.unitCost * (selected.purchaseConversionFactor || 1)
+                        : entry.unitCost
+                    } : entry) });
                   }}
-                  options={[{ label: 'Choose item', value: '' }, ...items.map((item) => ({ label: `${item.name} (${item.unit})`, value: item._id }))]}
+                  options={[{ label: 'Choose item', value: '' }, ...items.map((item) => ({ label: `${item.name} (${item.baseUnit || item.unit})`, value: item._id }))]}
                 />
-                <Input label={index === 0 ? 'Quantity' : ''} type="number" min="0.001" step="0.001" required value={line.quantity} onChange={(e) => setPoForm({ ...poForm, items: poForm.items.map((entry, row) => row === index ? { ...entry, quantity: e.target.value } : entry) })} />
-                <Input label={index === 0 ? 'Unit price' : ''} type="number" min="0" step="0.01" required value={line.unitCost} onChange={(e) => setPoForm({ ...poForm, items: poForm.items.map((entry, row) => row === index ? { ...entry, unitCost: e.target.value } : entry) })} />
+                <Input label={index === 0 ? 'Quantity' : ''} type="number" min="0.00000001" step="any" required value={line.quantity} onChange={(e) => setPoForm({ ...poForm, items: poForm.items.map((entry, row) => row === index ? { ...entry, quantity: e.target.value } : entry) })} />
+                <Select
+                  label={index === 0 ? 'Purchase unit' : ''}
+                  searchable
+                  searchPlaceholder="Search supported units..."
+                  required
+                  value={line.unit}
+                  onChange={(e) => {
+                    const selected = items.find((item) => item._id === line.itemId);
+                    const unit = e.target.value;
+                    const factor = conversionFactorForItem(selected, unit);
+                    setPoForm({ ...poForm, items: poForm.items.map((entry, row) => row === index
+                      ? { ...entry, unit, unitCost: Number(selected?.unitCost || 0) * Number(factor || 1) }
+                      : entry) });
+                  }}
+                  options={unitChoicesForItem(items.find((item) => item._id === line.itemId), units)}
+                />
+                <Input label={index === 0 ? 'Price / unit' : ''} type="number" min="0" step="0.01" required value={line.unitCost} onChange={(e) => setPoForm({ ...poForm, items: poForm.items.map((entry, row) => row === index ? { ...entry, unitCost: e.target.value } : entry) })} />
                 {poForm.items.length > 1 && <Button type="button" size="sm" variant="danger" onClick={() => setPoForm({ ...poForm, items: poForm.items.filter((_, row) => row !== index) })}>Remove</Button>}
               </div>
             ))}
-            <Button type="button" size="sm" variant="outline" onClick={() => setPoForm({ ...poForm, items: [...poForm.items, { itemId: '', quantity: 1, unitCost: 0 }] })}>Add another item</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setPoForm({ ...poForm, items: [...poForm.items, { itemId: '', quantity: 1, unit: '', unitCost: 0 }] })}>Add another item</Button>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Tax amount" type="number" min="0" step="0.01" value={poForm.taxAmount} onChange={(e) => setPoForm({ ...poForm, taxAmount: e.target.value })} />
@@ -1405,7 +2301,7 @@ export const InventoryPage = () => {
           <div className="space-y-3">
             {receivingLines.map((line, index) => (
               <div key={`${line.itemId}-${index}`} className="rounded-xl border border-slate-200 p-3">
-                <p className="mb-2 text-sm font-bold">{line.name} <span className="text-xs font-normal text-slate-500">({line.remaining} remaining)</span></p>
+                <p className="mb-2 text-sm font-bold">{line.name} <span className="text-xs font-normal text-slate-500">({line.remaining} {line.unit} remaining)</span></p>
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                   {['receivedQuantity', 'acceptedQuantity', 'damagedQuantity', 'rejectedQuantity'].map((field) => (
                     <Input
@@ -1414,7 +2310,7 @@ export const InventoryPage = () => {
                       type="number"
                       min="0"
                       max={line.remaining}
-                      step="0.001"
+                      step="any"
                       value={line[field]}
                       onChange={(e) => setReceivingLines(receivingLines.map((entry, row) => row === index ? { ...entry, [field]: e.target.value } : entry))}
                     />
@@ -1425,6 +2321,7 @@ export const InventoryPage = () => {
               </div>
             ))}
           </div>
+          <Input label="Purchase / invoice date" type="date" value={purchaseDate} onChange={(event) => setPurchaseDate(event.target.value)} required />
           <Input label="Invoice number" name="invoiceNumber" />
           <Input label="Invoice attachment URL" name="invoiceAttachment" placeholder="https://..." />
           <Select label="Receiving location" name="location" value={receivingLocation} onChange={(e) => setReceivingLocation(e.target.value)} options={[
@@ -1447,13 +2344,19 @@ export const InventoryPage = () => {
         <form onSubmit={handleCreateDepartmentRequest} className="space-y-4">
           <Select label="Department" value={departmentForm.department} onChange={(e) => setDepartmentForm({ ...departmentForm, department: e.target.value })} options={['Housekeeping', 'Maintenance', 'Restaurant', 'Kitchen', 'Minibar'].map((name) => ({ label: name, value: name }))} />
           {departmentForm.lines.map((line, index) => (
-            <div key={index} className="grid grid-cols-[2fr_1fr_auto] items-end gap-2">
-              <Select label={index === 0 ? 'Item' : ''} required value={line.itemId} onChange={(e) => setDepartmentForm({ ...departmentForm, lines: departmentForm.lines.map((entry, row) => row === index ? { ...entry, itemId: e.target.value } : entry) })} options={[{ label: 'Choose item', value: '' }, ...items.map((item) => ({ label: `${item.name} (${item.unit})`, value: item._id }))]} />
-              <Input label={index === 0 ? 'Quantity' : ''} type="number" min="0.001" step="0.001" required value={line.quantity} onChange={(e) => setDepartmentForm({ ...departmentForm, lines: departmentForm.lines.map((entry, row) => row === index ? { ...entry, quantity: e.target.value } : entry) })} />
+            <div key={index} className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[1.5fr_0.7fr_1fr_auto]">
+              <Select label={index === 0 ? 'Item' : ''} searchable searchPlaceholder="Search inventory items..." required value={line.itemId} onChange={(e) => {
+                const item = items.find((entry) => entry._id === e.target.value);
+                setDepartmentForm({ ...departmentForm, lines: departmentForm.lines.map((entry, row) => row === index
+                  ? { ...entry, itemId: e.target.value, unit: item?.baseUnit || item?.unit || '' }
+                  : entry) });
+              }} options={[{ label: 'Choose item', value: '' }, ...items.map((item) => ({ label: `${item.name} (${item.baseUnit || item.unit})`, value: item._id }))]} />
+              <Input label={index === 0 ? 'Quantity' : ''} type="number" min="0.00000001" step="any" required value={line.quantity} onChange={(e) => setDepartmentForm({ ...departmentForm, lines: departmentForm.lines.map((entry, row) => row === index ? { ...entry, quantity: e.target.value } : entry) })} />
+              <Select label={index === 0 ? 'Unit' : ''} searchable searchPlaceholder="Search supported units..." required value={line.unit} onChange={(e) => setDepartmentForm({ ...departmentForm, lines: departmentForm.lines.map((entry, row) => row === index ? { ...entry, unit: e.target.value } : entry) })} options={unitChoicesForItem(items.find((item) => item._id === line.itemId), units)} />
               {departmentForm.lines.length > 1 && <Button type="button" size="sm" variant="danger" onClick={() => setDepartmentForm({ ...departmentForm, lines: departmentForm.lines.filter((_, row) => row !== index) })}>Remove</Button>}
             </div>
           ))}
-          <Button type="button" size="sm" variant="outline" onClick={() => setDepartmentForm({ ...departmentForm, lines: [...departmentForm.lines, { itemId: '', quantity: 1 }] })}>Add item</Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setDepartmentForm({ ...departmentForm, lines: [...departmentForm.lines, { itemId: '', quantity: 1, unit: '' }] })}>Add item</Button>
           <Input label="Request notes" value={departmentForm.notes} onChange={(e) => setDepartmentForm({ ...departmentForm, notes: e.target.value })} />
           <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setIsDepartmentRequestOpen(false)}>Cancel</Button><Button type="submit">Submit request</Button></div>
         </form>
@@ -1461,7 +2364,7 @@ export const InventoryPage = () => {
 
       <Modal isOpen={isRecipeOpen} onClose={() => setIsRecipeOpen(false)} title="Create Recipe Version" subtitle="This version applies to future finalized restaurant sales">
         <form onSubmit={handleSaveRecipe} className="space-y-5">
-          <Select label="Menu item" required value={recipeForm.menuItemId} onChange={(e) => setRecipeForm({ ...recipeForm, menuItemId: e.target.value })} options={[{ label: 'Choose menu item', value: '' }, ...menuItems.map((menuItem) => ({ label: menuItem.name, value: menuItem._id }))]} />
+          <Select label="Menu item" searchable searchPlaceholder="Search menu items..." required value={recipeForm.menuItemId} onChange={(e) => setRecipeForm({ ...recipeForm, menuItemId: e.target.value })} options={[{ label: 'Choose menu item', value: '' }, ...menuItems.map((menuItem) => ({ label: menuItem.name, value: menuItem._id }))]} />
 
           <div className="space-y-3">
             {recipeForm.ingredients.map((ingredient, index) => (
@@ -1482,15 +2385,15 @@ export const InventoryPage = () => {
 
                 {/* Main ingredient fields */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto]">
-                  <Select label="Ingredient" required value={ingredient.itemId} onChange={(e) => {
+                  <Select label="Ingredient" searchable searchPlaceholder="Search inventory items..." required value={ingredient.itemId} onChange={(e) => {
                     const item = items.find((entry) => entry._id === e.target.value);
-                    setRecipeForm({ ...recipeForm, ingredients: recipeForm.ingredients.map((entry, row) => row === index ? { ...entry, itemId: e.target.value, unit: item?.unit || '' } : entry) });
-                  }} options={[{ label: 'Choose ingredient', value: '' }, ...items.map((item) => ({ label: `${item.name} (${item.unit})`, value: item._id }))]} />
+                    setRecipeForm({ ...recipeForm, ingredients: recipeForm.ingredients.map((entry, row) => row === index ? { ...entry, itemId: e.target.value, unit: item?.baseUnit || item?.unit || '' } : entry) });
+                  }} options={[{ label: 'Choose ingredient', value: '' }, ...items.map((item) => ({ label: `${item.name} (${item.baseUnit || item.unit})`, value: item._id }))]} />
                   <div className="w-full sm:w-24">
-                    <Input label="Quantity" type="number" min="0.001" step="0.001" required value={ingredient.quantity} onChange={(e) => setRecipeForm({ ...recipeForm, ingredients: recipeForm.ingredients.map((entry, row) => row === index ? { ...entry, quantity: e.target.value } : entry) })} />
+                    <Input label="Quantity" type="number" min="0.00000001" step="any" required value={ingredient.quantity} onChange={(e) => setRecipeForm({ ...recipeForm, ingredients: recipeForm.ingredients.map((entry, row) => row === index ? { ...entry, quantity: e.target.value } : entry) })} />
                   </div>
-                  <div className="w-full sm:w-28">
-                    <Input label="Unit" required value={ingredient.unit} onChange={(e) => setRecipeForm({ ...recipeForm, ingredients: recipeForm.ingredients.map((entry, row) => row === index ? { ...entry, unit: e.target.value } : entry) })} placeholder="kg, g, pcs..." />
+                  <div className="w-full sm:w-36">
+                    <Select label="Unit" searchable searchPlaceholder="Search supported units..." required value={ingredient.unit} onChange={(e) => setRecipeForm({ ...recipeForm, ingredients: recipeForm.ingredients.map((entry, row) => row === index ? { ...entry, unit: e.target.value } : entry) })} options={unitChoicesForItem(items.find((item) => item._id === ingredient.itemId), units)} />
                   </div>
                 </div>
 
@@ -1508,15 +2411,15 @@ export const InventoryPage = () => {
                     </label>
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto]">
-                    <Select label="Allowed substitute" value={ingredient.substituteItemId} onChange={(e) => {
+                    <Select label="Allowed substitute" searchable searchPlaceholder="Search inventory items..." value={ingredient.substituteItemId} onChange={(e) => {
                       const item = items.find((entry) => entry._id === e.target.value);
-                      setRecipeForm({ ...recipeForm, ingredients: recipeForm.ingredients.map((entry, row) => row === index ? { ...entry, substituteItemId: e.target.value, substituteUnit: item?.unit || '' } : entry) });
-                    }} options={[{ label: 'No substitute', value: '' }, ...items.filter((item) => item._id !== ingredient.itemId).map((item) => ({ label: `${item.name} (${item.unit})`, value: item._id }))]} />
+                      setRecipeForm({ ...recipeForm, ingredients: recipeForm.ingredients.map((entry, row) => row === index ? { ...entry, substituteItemId: e.target.value, substituteUnit: item?.baseUnit || item?.unit || '' } : entry) });
+                    }} options={[{ label: 'No substitute', value: '' }, ...items.filter((item) => item._id !== ingredient.itemId).map((item) => ({ label: `${item.name} (${item.baseUnit || item.unit})`, value: item._id }))]} />
                     <div className="w-full sm:w-24">
-                      <Input label="Sub. qty" type="number" min="0.001" step="0.001" value={ingredient.substituteQuantity} onChange={(e) => setRecipeForm({ ...recipeForm, ingredients: recipeForm.ingredients.map((entry, row) => row === index ? { ...entry, substituteQuantity: e.target.value } : entry) })} />
+                      <Input label="Sub. qty" type="number" min="0.00000001" step="any" value={ingredient.substituteQuantity} onChange={(e) => setRecipeForm({ ...recipeForm, ingredients: recipeForm.ingredients.map((entry, row) => row === index ? { ...entry, substituteQuantity: e.target.value } : entry) })} />
                     </div>
-                    <div className="w-full sm:w-28">
-                      <Input label="Sub. unit" value={ingredient.substituteUnit} onChange={(e) => setRecipeForm({ ...recipeForm, ingredients: recipeForm.ingredients.map((entry, row) => row === index ? { ...entry, substituteUnit: e.target.value } : entry) })} />
+                    <div className="w-full sm:w-36">
+                      <Select label="Sub. unit" searchable searchPlaceholder="Search supported units..." value={ingredient.substituteUnit} onChange={(e) => setRecipeForm({ ...recipeForm, ingredients: recipeForm.ingredients.map((entry, row) => row === index ? { ...entry, substituteUnit: e.target.value } : entry) })} options={unitChoicesForItem(items.find((item) => item._id === ingredient.substituteItemId), units)} />
                     </div>
                   </div>
                 </div>
@@ -1535,8 +2438,14 @@ export const InventoryPage = () => {
 
       <Modal isOpen={isTransferOpen} onClose={() => setIsTransferOpen(false)} title="Transfer Stock" subtitle="The source and destination ledgers update together">
         <form onSubmit={handleTransferStock} className="space-y-4">
-          <Select label="Item" required value={transferForm.itemId} onChange={(e) => setTransferForm({ ...transferForm, itemId: e.target.value })} options={[{ label: 'Choose item', value: '' }, ...items.map((item) => ({ label: `${item.name} (${item.currentStock} ${item.unit})`, value: item._id }))]} />
-          <Input label="Quantity" type="number" min="0.001" step="0.001" required value={transferForm.quantity} onChange={(e) => setTransferForm({ ...transferForm, quantity: e.target.value })} />
+          <Select label="Item" searchable searchPlaceholder="Search inventory items..." required value={transferForm.itemId} onChange={(e) => {
+            const item = items.find((entry) => entry._id === e.target.value);
+            setTransferForm({ ...transferForm, itemId: e.target.value, unit: item?.baseUnit || item?.unit || '' });
+          }} options={[{ label: 'Choose item', value: '' }, ...items.map((item) => ({ label: `${item.name} (${formatInventoryQuantity(item.currentStock, item)})`, value: item._id }))]} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="Quantity" type="number" min="0.00000001" step="any" required value={transferForm.quantity} onChange={(e) => setTransferForm({ ...transferForm, quantity: e.target.value })} />
+            <Select label="Unit" searchable searchPlaceholder="Search supported units..." required value={transferForm.unit} onChange={(e) => setTransferForm({ ...transferForm, unit: e.target.value })} options={unitChoicesForItem(items.find((item) => item._id === transferForm.itemId), units)} />
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {['fromLocation', 'toLocation'].map((field) => (
               <Select key={field} label={field === 'fromLocation' ? 'From location' : 'To location'} value={transferForm[field]} onChange={(e) => setTransferForm({ ...transferForm, [field]: e.target.value })} options={['Main Store', 'Kitchen Store', 'Restaurant Store', 'Housekeeping Store', 'Maintenance Store', 'Minibar Store'].map((location) => ({ label: location, value: location }))} />
@@ -1549,8 +2458,14 @@ export const InventoryPage = () => {
 
       <Modal isOpen={isMinibarAssignOpen} onClose={() => setIsMinibarAssignOpen(false)} title={`Replenish Room ${minibarData?.room?.roomNumber || ''}`}>
         <form onSubmit={handleMinibarAssignment} className="space-y-4">
-          <Select label="Product" required value={minibarAssignForm.itemId} onChange={(e) => setMinibarAssignForm({ ...minibarAssignForm, itemId: e.target.value })} options={[{ label: 'Choose product', value: '' }, ...items.map((item) => ({ label: `${item.name} (${item.currentStock} ${item.unit})`, value: item._id }))]} />
-          <Input label="Quantity" type="number" min="0.001" step="0.001" required value={minibarAssignForm.quantity} onChange={(e) => setMinibarAssignForm({ ...minibarAssignForm, quantity: e.target.value })} />
+          <Select label="Product" searchable searchPlaceholder="Search inventory items..." required value={minibarAssignForm.itemId} onChange={(e) => {
+            const item = items.find((entry) => entry._id === e.target.value);
+            setMinibarAssignForm({ ...minibarAssignForm, itemId: e.target.value, unit: item?.baseUnit || item?.unit || '' });
+          }} options={[{ label: 'Choose product', value: '' }, ...items.map((item) => ({ label: `${item.name} (${formatInventoryQuantity(item.currentStock, item)})`, value: item._id }))]} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="Quantity" type="number" min="0.00000001" step="any" required value={minibarAssignForm.quantity} onChange={(e) => setMinibarAssignForm({ ...minibarAssignForm, quantity: e.target.value })} />
+            <Select label="Unit" searchable searchPlaceholder="Search supported units..." required value={minibarAssignForm.unit} onChange={(e) => setMinibarAssignForm({ ...minibarAssignForm, unit: e.target.value })} options={unitChoicesForItem(items.find((item) => item._id === minibarAssignForm.itemId), units)} />
+          </div>
           <Select label="Issue from location" value={minibarAssignForm.fromLocation} onChange={(e) => setMinibarAssignForm({ ...minibarAssignForm, fromLocation: e.target.value })} options={['Main Store', 'Minibar Store'].map((location) => ({ label: location, value: location }))} />
           <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setIsMinibarAssignOpen(false)}>Cancel</Button><Button type="submit">Assign stock</Button></div>
         </form>
@@ -1558,7 +2473,10 @@ export const InventoryPage = () => {
 
       <Modal isOpen={isAdjustmentOpen} onClose={() => setIsAdjustmentOpen(false)} title="Report Stock Adjustment" subtitle="An administrator must approve this adjustment before it affects stock">
         <form onSubmit={handleCreateAdjustment} className="space-y-4">
-          <Select label="Item" required value={adjustmentForm.itemId} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, itemId: e.target.value })} options={[{ label: 'Choose item', value: '' }, ...items.map((item) => ({ label: `${item.name} (${item.currentStock} ${item.unit})`, value: item._id }))]} />
+          <Select label="Item" searchable searchPlaceholder="Search inventory items..." required value={adjustmentForm.itemId} onChange={(e) => {
+            const item = items.find((entry) => entry._id === e.target.value);
+            setAdjustmentForm({ ...adjustmentForm, itemId: e.target.value, unit: item?.baseUnit || item?.unit || '' });
+          }} options={[{ label: 'Choose item', value: '' }, ...items.map((item) => ({ label: `${item.name} (${formatInventoryQuantity(item.currentStock, item)})`, value: item._id }))]} />
           <Select label="Reason" value={adjustmentForm.reason} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, reason: e.target.value })} options={[
             { label: 'Expired products', value: 'expired' },
             { label: 'Damaged products', value: 'damaged' },
@@ -1568,19 +2486,77 @@ export const InventoryPage = () => {
             { label: 'Physical stock mismatch (enter counted total)', value: 'physical_mismatch' },
             { label: 'Internal usage', value: 'internal_usage' }
           ]} />
-          <Input label={adjustmentForm.reason === 'physical_mismatch' ? 'Physical count (new total)' : 'Quantity affected'} type="number" min="0.001" step="0.001" required value={adjustmentForm.quantity} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, quantity: e.target.value })} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label={adjustmentForm.reason === 'physical_mismatch' ? 'Physical count (new total)' : 'Quantity affected'} type="number" min="0.00000001" step="any" required value={adjustmentForm.quantity} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, quantity: e.target.value })} />
+            <Select label="Unit" searchable searchPlaceholder="Search supported units..." required value={adjustmentForm.unit} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, unit: e.target.value })} options={unitChoicesForItem(items.find((item) => item._id === adjustmentForm.itemId), units)} />
+          </div>
           <Input label="Department" value={adjustmentForm.department} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, department: e.target.value })} />
           <Input label="Remarks" value={adjustmentForm.remarks} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, remarks: e.target.value })} />
           <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setIsAdjustmentOpen(false)}>Cancel</Button><Button type="submit">Submit for approval</Button></div>
         </form>
       </Modal>
 
+      <Modal isOpen={isVerificationOpen} onClose={() => setIsVerificationOpen(false)} title="Verify Physical Stock" subtitle="Enter usable stock, then classify reductions as used, wasted, or unexplained">
+        <form onSubmit={handleStockVerification} className="space-y-4">
+          <Select
+            label="Raw material"
+            searchable
+            required
+            value={verificationForm.itemId}
+            onChange={(event) => {
+              const item = items.find((entry) => entry._id === event.target.value);
+              setVerificationForm({
+                ...verificationForm,
+                itemId: event.target.value,
+                actualStock: item?.currentStock ?? '',
+                unit: item?.baseUnit || item?.unit || ''
+              });
+            }}
+            options={[{ label: 'Choose raw material', value: '' }, ...items.map((item) => ({
+              label: `${item.name} · Expected ${formatInventoryQuantity(item.currentStock, item)}`,
+              value: item._id
+            }))]}
+          />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="Period start" type="date" required value={verificationForm.periodStart} onChange={(event) => setVerificationForm({ ...verificationForm, periodStart: event.target.value })} />
+            <Input label="Period end" type="date" required value={verificationForm.periodEnd} onChange={(event) => setVerificationForm({ ...verificationForm, periodEnd: event.target.value })} />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="Actual usable stock" type="number" min="0" step="any" required value={verificationForm.actualStock} onChange={(event) => setVerificationForm({ ...verificationForm, actualStock: event.target.value })} />
+            <Select label="Unit" searchable required value={verificationForm.unit} onChange={(event) => setVerificationForm({ ...verificationForm, unit: event.target.value })} options={unitChoicesForItem(items.find((item) => item._id === verificationForm.itemId), units)} />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="Unrecorded consumption to reconcile" type="number" min="0" step="any" value={verificationForm.consumptionQuantity} onChange={(event) => setVerificationForm({ ...verificationForm, consumptionQuantity: event.target.value })} />
+            <Input label="Wasted during period" type="number" min="0" step="any" value={verificationForm.wastageQuantity} onChange={(event) => setVerificationForm({ ...verificationForm, wastageQuantity: event.target.value })} />
+          </div>
+          <Input label="Discrepancy / gain reason (if applicable)" value={verificationForm.discrepancyReason} onChange={(event) => setVerificationForm({ ...verificationForm, discrepancyReason: event.target.value })} />
+          <Input label="Remarks" value={verificationForm.remarks} onChange={(event) => setVerificationForm({ ...verificationForm, remarks: event.target.value })} />
+          <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+            Only enter consumption and wastage that have not already been posted to inventory. Previously recorded movements are already reflected in expected stock. The remaining difference is recorded as a stock discrepancy; a reason is required when unexplained stock or a stock gain remains.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setIsVerificationOpen(false)}>Cancel</Button>
+            <Button type="submit">Confirm verification</Button>
+          </div>
+        </form>
+      </Modal>
+
       <Modal isOpen={isVendorHistoryOpen} onClose={() => setIsVendorHistoryOpen(false)} title={`${selectedVendor?.name || 'Supplier'} purchase history`}>
         <div className="space-y-3">
           {vendorPurchases.map((po) => (
-            <div key={po._id} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-              <div><p className="font-semibold">{po.poNumber}</p><p className="text-xs text-slate-500">{dayjs(po.createdAt).format('MMM D, YYYY')} · {po.status}</p></div>
-              <span className="font-bold">{formatCurrency(po.totalAmount)}</span>
+            <div key={po._id} className="rounded-lg border p-3 text-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div><p className="font-semibold">{po.poNumber}</p><p className="text-xs text-slate-500">{dayjs(po.createdAt).format('MMM D, YYYY')} · {po.status}</p></div>
+                <span className="font-bold">{formatCurrency(po.totalAmount)}</span>
+              </div>
+              <div className="mt-3 space-y-1 border-t pt-2">
+                {(po.items || []).map((line, index) => (
+                  <div key={`${po._id}-${line.itemId || index}`} className="flex items-start justify-between gap-3 text-xs">
+                    <span>{line.itemName || 'Raw material'} · {line.quantity} {line.unit}</span>
+                    <span className="shrink-0 text-right">{formatCurrency(line.unitCost)} / {line.unit}<br />{formatCurrency(line.totalAmount)} total</span>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
           {!vendorPurchases.length && <p className="py-8 text-center text-sm text-slate-400">No purchases found for this supplier.</p>}

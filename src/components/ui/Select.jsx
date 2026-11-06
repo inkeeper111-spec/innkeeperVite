@@ -1,11 +1,12 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Search } from 'lucide-react';
 
 const collectOptions = (children, options) => {
   if (options?.length) return options.map((opt) => ({
     value: String(opt.value),
     label: opt.label,
+    group: opt.group || '',
     disabled: Boolean(opt.disabled)
   }));
 
@@ -48,6 +49,8 @@ export const Select = ({
   name,
   disabled = false,
   placeholder,
+  searchable = false,
+  searchPlaceholder = 'Search options...',
   size = 'md',
   'aria-label': ariaLabel,
   'aria-labelledby': ariaLabelledBy,
@@ -59,9 +62,15 @@ export const Select = ({
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [menuStyle, setMenuStyle] = useState({});
 
   const items = useMemo(() => collectOptions(children, options), [children, options]);
+  const filteredItems = useMemo(() => {
+    if (!searchable || !query.trim()) return items;
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    return items.filter((item) => String(item.label).toLocaleLowerCase().includes(normalizedQuery));
+  }, [items, query, searchable]);
   const selected = items.find((item) => String(item.value) === String(value ?? ''));
   const displayLabel = selected?.label ?? placeholder ?? 'Select';
 
@@ -157,7 +166,11 @@ export const Select = ({
           aria-expanded={open}
           aria-label={ariaLabel}
           aria-labelledby={ariaLabelledBy}
-          onClick={() => !disabled && setOpen((prev) => !prev)}
+          onClick={() => {
+            if (disabled) return;
+            setQuery('');
+            setOpen((prev) => !prev);
+          }}
           className={`premium-select-trigger w-full ${sizeClasses} bg-white border text-left text-orvelle-text flex items-center justify-between gap-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] transition-all ${
             error
               ? 'border-rose-400 focus:border-rose-500'
@@ -176,36 +189,62 @@ export const Select = ({
       {open && createPortal(
         <div
           ref={menuRef}
-          role="listbox"
           style={menuStyle}
           className="premium-select-menu overflow-hidden rounded-xl border border-orvelle-border bg-white shadow-[0_18px_50px_rgba(59,36,26,0.18)]"
         >
-          <div className="max-h-64 overflow-y-auto py-1.5">
-            {items.map((item) => {
+          {searchable && (
+            <div className="sticky top-0 border-b border-orvelle-border bg-white p-2">
+              <div className="flex items-center gap-2 rounded-lg border border-orvelle-border px-2.5 focus-within:border-orvelle-champagne focus-within:ring-2 focus-within:ring-orvelle-champagne/20">
+                <Search className="h-4 w-4 flex-shrink-0 text-orvelle-muted" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={query}
+                  autoFocus
+                  aria-label={searchPlaceholder}
+                  placeholder={searchPlaceholder}
+                  onChange={(event) => setQuery(event.target.value)}
+                  className="w-full border-0 bg-transparent py-2 text-sm text-orvelle-text outline-none placeholder:text-orvelle-muted"
+                />
+              </div>
+            </div>
+          )}
+          <div role="listbox" className="max-h-64 overflow-y-auto py-1.5">
+            {filteredItems.map((item, index) => {
               const isActive = String(item.value) === String(value ?? '');
+              const previous = filteredItems[index - 1];
               return (
-                <button
-                  key={item.value}
-                  type="button"
-                  role="option"
-                  disabled={item.disabled}
-                  aria-selected={isActive}
-                  onClick={() => {
-                    if (item.disabled) return;
-                    emitChange(item.value);
-                    setOpen(false);
-                  }}
-                  className={`w-full px-3.5 py-2.5 text-left text-sm flex items-center justify-between gap-3 transition-colors ${
-                    isActive
-                      ? 'bg-orvelle-ivory text-orvelle-primary font-semibold'
-                      : 'text-orvelle-text hover:bg-orvelle-cream'
-                  } ${item.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-                >
-                  <span className="truncate">{item.label}</span>
-                  {isActive && <Check className="w-4 h-4 text-orvelle-champagne flex-shrink-0" />}
-                </button>
+                <React.Fragment key={item.value}>
+                  {item.group && item.group !== previous?.group && (
+                    <p className="px-3.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-orvelle-muted">
+                      {item.group}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    role="option"
+                    disabled={item.disabled}
+                    aria-selected={isActive}
+                    onClick={() => {
+                      if (item.disabled) return;
+                      emitChange(item.value);
+                      setOpen(false);
+                      setQuery('');
+                    }}
+                    className={`w-full px-3.5 py-2.5 text-left text-sm flex items-center justify-between gap-3 transition-colors ${
+                      isActive
+                        ? 'bg-orvelle-ivory text-orvelle-primary font-semibold'
+                        : 'text-orvelle-text hover:bg-orvelle-cream'
+                    } ${item.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  >
+                    <span className="truncate">{item.label}</span>
+                    {isActive && <Check className="w-4 h-4 text-orvelle-champagne flex-shrink-0" />}
+                  </button>
+                </React.Fragment>
               );
             })}
+            {filteredItems.length === 0 && (
+              <p className="px-3.5 py-3 text-sm text-orvelle-muted">No matching options.</p>
+            )}
           </div>
         </div>,
         document.body

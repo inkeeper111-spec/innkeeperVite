@@ -99,6 +99,10 @@ const ProtectedRoute = ({
     '/restaurant': 'restaurant.view',
     '/menu-management': 'menu_management.view',
     '/inventory': 'inventory.view',
+    '/inventory/dashboard': 'inventory.view',
+    '/inventory/categories': 'inventory.view',
+    '/inventory/items': 'inventory.view',
+    '/inventory/stock': 'inventory.view',
     '/maintenance': 'maintenance.view',
     '/expenses': 'expenses.view',
     '/staff': 'staff_directory.view',
@@ -187,7 +191,7 @@ export const App = () => {
         <Route path="/housekeeping" element={<HousekeepingPage />} />
         <Route path="/restaurant" element={<RestaurantPOS />} />
         <Route path="/menu-management" element={<MenuManagementPage />} />
-        <Route path="/inventory" element={<InventoryPage />} />
+        <Route path="/inventory/*" element={<InventoryPage />} />
         <Route path="/expenses" element={<ExpensesPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />
         <Route path="/staff" element={<StaffPage />} />
