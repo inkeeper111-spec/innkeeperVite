@@ -7,7 +7,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:5005',
+        target: 'http://localhost:5010',
         changeOrigin: true
       }
     }
@@ -18,4 +18,3 @@ export default defineConfig({
     setupFiles: './src/test/setup.js'
   }
 });
-

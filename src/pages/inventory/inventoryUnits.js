@@ -53,12 +53,105 @@ export const INVENTORY_UNITS = [
 const unitDefinitions = new Map(INVENTORY_UNITS.flatMap(({ category, units }) =>
   units.map((entry) => [entry.unit, { ...entry, category }])
 ));
+const PACKAGE_UNIT_SYMBOLS = new Set([
+  'bag', 'box', 'bottle', 'can', 'carton', 'packet', 'roll', 'set', 'tray'
+]);
 const UNIT_ALIASES = new Map([
   ['liter', 'L'], ['litre', 'L'], ['liters', 'L'], ['litres', 'L'],
   ['pieces', 'pcs'], ['piece', 'pcs'], ['boxes', 'box'],
   ['packets', 'packet'], ['bottles', 'bottle'], ['meters', 'm'], ['metres', 'm']
 ]);
 const normalizeUnit = (unit = '') => UNIT_ALIASES.get(String(unit).toLowerCase()) || unit;
+
+const resolveUnit = (reference, availableUnits) => {
+  if (reference && typeof reference === 'object') return reference;
+  return availableUnits.find((unit) => String(unit._id) === String(reference)
+    || unit.symbol === reference) || null;
+};
+
+const conversionFactorFromUnitRecords = (from, to) => {
+  if (!from || !to || from.category !== to.category) return null;
+  const fromBaseId = String(from.baseUnitId?._id || from.baseUnitId || '');
+  const toBaseId = String(to.baseUnitId?._id || to.baseUnitId || '');
+  const fromFactor = Number(from.conversionFactor);
+  const toFactor = Number(to.conversionFactor);
+  if (fromBaseId && fromBaseId === String(to._id) && fromFactor > 0) return fromFactor;
+  if (toBaseId && toBaseId === String(from._id) && toFactor > 0) return 1 / toFactor;
+  if (fromBaseId && fromBaseId === toBaseId && fromFactor > 0 && toFactor > 0) {
+    return fromFactor / toFactor;
+  }
+  if (from._id && to._id && String(from._id) === String(to._id)) return 1;
+  return null;
+};
+
+export const isPackageUnit = (unit) => Boolean(
+  unit && (unit.category === 'package' || (
+    unit.category === 'quantity' && PACKAGE_UNIT_SYMBOLS.has(String(unit.symbol || '').toLowerCase())
+  ))
+);
+
+export const getUnitConversionFactor = (fromReference, toReference, availableUnits = []) => {
+  const fromUnit = resolveUnit(fromReference, availableUnits);
+  const toUnit = resolveUnit(toReference, availableUnits);
+  const configuredFactor = conversionFactorFromUnitRecords(fromUnit, toUnit);
+  if (configuredFactor) return configuredFactor;
+  const fromSymbol = typeof fromReference === 'object' ? fromReference?.symbol : fromReference;
+  const toSymbol = typeof toReference === 'object' ? toReference?.symbol : toReference;
+  const from = unitDefinitions.get(normalizeUnit(fromSymbol));
+  const to = unitDefinitions.get(normalizeUnit(toSymbol));
+  if (!from || !to || from.category !== to.category || !from.factor || !to.factor) return null;
+  return from.factor / to.factor;
+};
+
+export const packageConversionFactorToBase = (packageSize, measurementUnitId, baseUnitId, availableUnits = []) => {
+  const quantity = Number(packageSize);
+  const measurementUnit = resolveUnit(measurementUnitId, availableUnits);
+  const baseUnit = resolveUnit(baseUnitId, availableUnits);
+  if (!Number.isFinite(quantity) || quantity <= 0
+    || !measurementUnit || !baseUnit
+    || isPackageUnit(measurementUnit)
+    || measurementUnit.category !== baseUnit.category) return null;
+  const measurementFactor = getUnitConversionFactor(measurementUnit, baseUnit, availableUnits);
+  return measurementFactor > 0 ? quantity * measurementFactor : null;
+};
+
+export const supportedUnitConversionFactorToBase = (
+  purchaseUnitId,
+  supportedUnits = [],
+  baseUnitId,
+  availableUnits = [],
+  visiting = new Set()
+) => {
+  const purchaseId = String(purchaseUnitId || '');
+  const baseId = String(typeof baseUnitId === 'object' ? baseUnitId?._id : baseUnitId || '');
+  if (!purchaseId || !baseId) return null;
+  if (purchaseId === baseId) return 1;
+  if (visiting.has(purchaseId)) return null;
+  const unit = availableUnits.find((entry) => String(entry._id) === purchaseId);
+  if (!unit || unit.isActive === false) return null;
+
+  const configured = supportedUnits.find((entry) => {
+    const ref = typeof entry.unitId === 'object' ? entry.unitId?._id : entry.unitId;
+    return String(ref || '') === purchaseId && entry.isActive !== false;
+  });
+  if (isPackageUnit(unit)) {
+    if (!configured || !(Number(configured.packageSize) > 0) || !configured.packageMeasurementUnitId) return null;
+    const nextVisiting = new Set(visiting);
+    nextVisiting.add(purchaseId);
+    const factor = supportedUnitConversionFactorToBase(
+      typeof configured.packageMeasurementUnitId === 'object'
+        ? configured.packageMeasurementUnitId?._id
+        : configured.packageMeasurementUnitId,
+      supportedUnits,
+      baseId,
+      availableUnits,
+      nextVisiting
+    );
+    return factor ? factor * Number(configured.packageSize) : null;
+  }
+  const base = availableUnits.find((entry) => String(entry._id) === baseId);
+  return getUnitConversionFactor(unit, base, availableUnits);
+};
 
 export const unitChoicesForItem = (item, availableUnits = []) => {
   if (!item) return [];
@@ -67,6 +160,26 @@ export const unitChoicesForItem = (item, availableUnits = []) => {
     if (reference && typeof reference === 'object') return reference;
     return availableUnits.find((unit) => String(unit._id) === String(reference)) || null;
   };
+  if (Array.isArray(item.supportedUnits)) {
+    const supportedChoices = item.supportedUnits
+      .filter((entry) => entry?.isActive !== false)
+      .map((entry) => {
+        const unit = typeof entry.unitId === 'object' ? entry.unitId : referenceUnit(entry.unitId);
+        const symbol = entry.unitSymbolSnapshot || unit?.symbol || entry.symbol;
+        if (!symbol || unit?.isActive === false) return null;
+        return {
+          group: unit?.category
+            ? unit.category.charAt(0).toUpperCase() + unit.category.slice(1)
+            : 'Purchase',
+          label: `${unit?.name || entry.unitNameSnapshot || symbol} (${symbol})`,
+          value: symbol
+        };
+      })
+      .filter(Boolean);
+    return supportedChoices.filter((choice, index, choices) =>
+      choices.findIndex((entry) => entry.value === choice.value) === index
+    );
+  }
   const baseReference = referenceUnit(item.baseUnitId)
     || availableUnits.find((unit) => unit.symbol === baseUnit)
     || null;
@@ -82,15 +195,19 @@ export const unitChoicesForItem = (item, availableUnits = []) => {
     ...(item.packagingOptions || []).map((option) => option.unit)
   ].filter(Boolean));
   const baseDefinition = unitDefinitions.get(baseUnit);
-  const eligible = availableUnits.filter((unit) => unit.isActive && (
-    (baseReference
+  const eligible = availableUnits.filter((unit) => {
+    const compatible = baseReference
       && unit.category === baseReference.category
-      && baseDefinition?.category.toLowerCase() === baseReference.category
-      && unitDefinitions.get(unit.symbol)?.factor
-      && baseDefinition.factor)
+      && ((baseDefinition?.category.toLowerCase() === baseReference.category
+        && unitDefinitions.get(unit.symbol)?.factor
+        && baseDefinition.factor)
+        || getUnitConversionFactor(unit, baseReference, availableUnits));
+    return unit.isActive && (
+      compatible
     || configuredIds.has(String(unit._id))
     || configuredSymbols.has(unit.symbol)
-  ));
+    );
+  });
   const allChoices = [...eligible, ...[baseReference, ...configuredReferences].filter(Boolean)]
     .filter((unit, index, units) => units.findIndex((entry) => String(entry._id) === String(unit._id)) === index);
   const legacySymbols = [baseUnit, ...configuredSymbols].filter((symbol) => (
@@ -110,6 +227,26 @@ export const unitChoicesForItem = (item, availableUnits = []) => {
       label: `${unit.name} (${unit.symbol})`,
       value: unit.symbol
     }));
+};
+
+export const unitIdForItemSymbol = (item, symbol, availableUnits = []) => {
+  if (!item || !symbol) return undefined;
+  const configured = item.supportedUnits?.find((entry) => {
+    const unit = typeof entry.unitId === 'object'
+      ? entry.unitId
+      : availableUnits.find((candidate) => String(candidate._id) === String(entry.unitId));
+    return (entry.unitSymbolSnapshot || unit?.symbol || entry.symbol) === symbol
+      && entry.isActive !== false
+      && unit?.isActive !== false;
+  });
+  if (configured) {
+    const unitId = typeof configured.unitId === 'object'
+      ? configured.unitId._id
+      : configured.unitId;
+    return unitId ? String(unitId) : undefined;
+  }
+  if (item.supportedUnits) return undefined;
+  return String(item.baseUnitId?._id || item.baseUnitId || '') || undefined;
 };
 
 export const formatInventoryQuantity = (quantity, item) => {

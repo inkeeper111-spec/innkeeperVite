@@ -124,7 +124,7 @@ export const RestaurantPOS = () => {
 
   useEffect(() => {
     fetchMenuAndOrders();
-    const refreshInterval = window.setInterval(() => fetchMenuAndOrders(false), 15000);
+    const refreshInterval = window.setInterval(() => fetchMenuAndOrders(false), 15010);
     return () => window.clearInterval(refreshInterval);
   }, [canManageTables]);
 

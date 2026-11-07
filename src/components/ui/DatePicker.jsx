@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { FieldInfo } from './FieldInfo';
 
 const pad = (value) => String(value).padStart(2, '0');
 
@@ -36,6 +37,7 @@ export const DatePicker = ({
   required,
   error,
   helperText,
+  info,
   disabled,
   className = '',
   id,
@@ -131,9 +133,12 @@ export const DatePicker = ({
   return (
     <div ref={rootRef} className="relative w-full">
       {label && (
-        <label htmlFor={id} className="block text-xs font-semibold text-orvelle-primary uppercase tracking-wider mb-1.5">
-          {label} {required && <span className="text-orvelle-error">*</span>}
-        </label>
+        <div className="mb-1.5 flex min-h-8 items-start justify-between gap-2">
+          <label htmlFor={id} className="min-w-0 flex-1 text-xs font-semibold leading-4 text-orvelle-primary uppercase tracking-wider">
+            {label} {required && <span className="text-orvelle-error">*</span>}
+          </label>
+          {info && <FieldInfo text={info} label={label} />}
+        </div>
       )}
       <input type="hidden" name={name} value={value || ''} readOnly required={required} />
       <button

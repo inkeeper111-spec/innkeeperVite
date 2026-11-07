@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Search } from 'lucide-react';
+import { FieldInfo } from './FieldInfo';
 
 const collectOptions = (children, options) => {
   if (options?.length) return options.map((opt) => ({
@@ -40,6 +41,7 @@ export const Select = ({
   options = [],
   error,
   helperText,
+  info,
   className = '',
   id,
   required,
@@ -132,9 +134,12 @@ export const Select = ({
   return (
     <div className={`w-full ${className}`} ref={rootRef}>
       {label && (
-        <label htmlFor={selectId} className="block text-xs font-semibold text-orvelle-primary uppercase tracking-wider mb-1.5">
-          {label} {required && <span className="text-orvelle-error">*</span>}
-        </label>
+        <div className="mb-1.5 flex min-h-8 items-start justify-between gap-2">
+          <label htmlFor={selectId} className="min-w-0 flex-1 text-xs font-semibold leading-4 text-orvelle-primary uppercase tracking-wider">
+            {label} {required && <span className="text-orvelle-error">*</span>}
+          </label>
+          {info && <FieldInfo text={info} label={label} />}
+        </div>
       )}
 
       <div className="relative">

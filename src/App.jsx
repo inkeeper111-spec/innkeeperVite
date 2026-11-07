@@ -19,6 +19,7 @@ import { BillingPage } from './pages/billing/BillingPage';
 import { HousekeepingPage } from './pages/housekeeping/HousekeepingPage';
 import { RestaurantPOS } from './pages/restaurant/RestaurantPOS';
 import { InventoryPage } from './pages/inventory/InventoryPage';
+import { RawMaterialMasterPage } from './pages/inventory/RawMaterialMasterPage';
 import { ExpensesPage } from './pages/expenses/ExpensesPage';
 import { MaintenancePage } from './pages/maintenance/MaintenancePage';
 import { StaffPage } from './pages/staff/StaffPage';
@@ -103,6 +104,8 @@ const ProtectedRoute = ({
     '/inventory/categories': 'inventory.view',
     '/inventory/items': 'inventory.view',
     '/inventory/stock': 'inventory.view',
+    '/inventory/raw-materials': 'inventory.view',
+    '/inventory/raw-material-categories': 'inventory.view',
     '/maintenance': 'maintenance.view',
     '/expenses': 'expenses.view',
     '/staff': 'staff_directory.view',
@@ -122,7 +125,8 @@ const ProtectedRoute = ({
     : hasPermissionOverride
       ? overrides[permissionForPath]
     : allowedRoles.includes(user.role);
-  if (!hasRouteAccess && (strictRoleGate || user.role !== 'super_admin')) {
+  if ((strictRoleGate && user.role !== 'super_admin' && !allowedRoles.includes(user.role))
+    || (!hasRouteAccess && (strictRoleGate || user.role !== 'super_admin'))) {
     return <Navigate to={deniedPath || getPermissionFallbackPath(user, location.pathname)} replace />;
   }
   if (!skipStatusGate && user.role !== 'super_admin') {
@@ -191,6 +195,15 @@ export const App = () => {
         <Route path="/housekeeping" element={<HousekeepingPage />} />
         <Route path="/restaurant" element={<RestaurantPOS />} />
         <Route path="/menu-management" element={<MenuManagementPage />} />
+        <Route
+          path="/inventory/raw-material-categories"
+          element={
+            <ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']} strictRoleGate>
+              <RawMaterialMasterPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/inventory/raw-materials" element={<RawMaterialMasterPage />} />
         <Route path="/inventory/*" element={<InventoryPage />} />
         <Route path="/expenses" element={<ExpensesPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />

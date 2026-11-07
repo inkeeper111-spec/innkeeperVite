@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { FieldInfo } from './FieldInfo';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -33,6 +34,7 @@ export const MonthPicker = ({
   required,
   error,
   helperText,
+  info,
   disabled,
   className = '',
   id,
@@ -110,9 +112,12 @@ export const MonthPicker = ({
   return (
     <div ref={rootRef} className={`w-full ${className}`}>
       {label && (
-        <label htmlFor={id} className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-orvelle-primary">
-          {label} {required && <span className="text-orvelle-error">*</span>}
-        </label>
+        <div className="mb-1.5 flex min-h-8 items-start justify-between gap-2">
+          <label htmlFor={id} className="min-w-0 flex-1 text-xs font-semibold leading-4 uppercase tracking-wider text-orvelle-primary">
+            {label} {required && <span className="text-orvelle-error">*</span>}
+          </label>
+          {info && <FieldInfo text={info} label={label} />}
+        </div>
       )}
       <input type="hidden" name={name} value={value || ''} readOnly required={required} />
       <button

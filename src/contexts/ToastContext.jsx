@@ -56,11 +56,11 @@ export const ToastProvider = ({ children }) => {
 
   useEffect(() => {
     const cleanup = window.setInterval(() => {
-      const cutoff = Date.now() - 5000;
+      const cutoff = Date.now() - 5010;
       recentMessages.current.forEach((timestamp, key) => {
         if (timestamp < cutoff) recentMessages.current.delete(key);
       });
-    }, 5000);
+    }, 5010);
     return () => window.clearInterval(cleanup);
   }, []);
 

@@ -1,11 +1,13 @@
 import React, { useId } from 'react';
 import { DatePicker } from './DatePicker';
 import { MonthPicker } from './MonthPicker';
+import { FieldInfo } from './FieldInfo';
 
 export const Input = ({
   label,
   error,
   helperText,
+  info,
   className = '',
   id,
   required,
@@ -23,6 +25,7 @@ export const Input = ({
         required={required}
         error={error}
         helperText={helperText}
+        info={info}
         className={className}
       />
     );
@@ -37,6 +40,7 @@ export const Input = ({
         required={required}
         error={error}
         helperText={helperText}
+        info={info}
         className={className}
       />
     );
@@ -45,9 +49,12 @@ export const Input = ({
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={inputId} className="block text-xs font-semibold text-orvelle-primary uppercase tracking-wider mb-1.5">
-          {label} {required && <span className="text-orvelle-error">*</span>}
-        </label>
+        <div className="mb-1.5 flex min-h-8 items-start justify-between gap-2">
+          <label htmlFor={inputId} className="min-w-0 flex-1 text-xs font-semibold leading-4 text-orvelle-primary uppercase tracking-wider">
+            {label} {required && <span className="text-orvelle-error">*</span>}
+          </label>
+          {info && <FieldInfo text={info} label={label} />}
+        </div>
       )}
       <input
         id={inputId}

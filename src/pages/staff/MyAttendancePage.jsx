@@ -69,7 +69,7 @@ export const MyAttendancePage = () => {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 15000,
+          timeout: 15010,
           maximumAge: 0
         });
       });

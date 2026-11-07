@@ -10,7 +10,14 @@ import { Select } from '../../components/ui/Select';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../hooks/useCurrency';
-import { INVENTORY_UNITS, formatInventoryQuantity, unitChoicesForItem } from './inventoryUnits';
+import {
+  INVENTORY_UNITS,
+  formatInventoryQuantity,
+  getUnitConversionFactor,
+  isPackageUnit,
+  unitChoicesForItem,
+  unitIdForItemSymbol
+} from './inventoryUnits';
 import {
   Boxes,
   AlertTriangle,
@@ -51,9 +58,45 @@ export const InventoryPage = () => {
       ? purchase.factor / base.factor
       : '';
   };
+  const rawMaterialPurchaseUnits = (item) => (item?.supportedUnits || [])
+    .filter((entry) => entry.isActive !== false
+      && Number(entry.conversionFactorToBase) > 0)
+    .map((entry) => {
+      const unit = typeof entry.unitId === 'object'
+        ? entry.unitId
+        : units.find((candidate) => String(candidate._id) === String(entry.unitId));
+      const symbol = entry.unitSymbolSnapshot || unit?.symbol;
+      const measurementUnit = typeof entry.packageMeasurementUnitId === 'object'
+        ? entry.packageMeasurementUnitId
+        : units.find((candidate) => String(candidate._id) === String(entry.packageMeasurementUnitId));
+      if (!symbol || unit?.isActive === false) return null;
+      return {
+        symbol,
+        label: `${entry.packageName
+          ? `${entry.packageName}${entry.packageSize && (measurementUnit?.symbol || entry.packageMeasurementUnitSymbolSnapshot)
+            ? ` (${entry.packageSize} ${measurementUnit?.symbol || entry.packageMeasurementUnitSymbolSnapshot})`
+            : ''}`
+          : entry.unitNameSnapshot || unit?.name || symbol} (${symbol})`,
+        factor: Number(entry.conversionFactorToBase),
+        isDefault: entry.isDefaultPurchaseUnit === true
+      };
+    })
+    .filter(Boolean);
   const conversionFactorForItem = (item, unit) => {
     if (!item || !unit) return 1;
     if (unit === (item.baseUnit || item.unit)) return 1;
+    const supportedUnit = item.supportedUnits?.find((entry) => (
+      (entry.unitSymbolSnapshot || entry.unitId?.symbol) === unit
+      && entry.isActive !== false
+    ));
+    if (Number(supportedUnit?.conversionFactorToBase) > 0) {
+      return Number(supportedUnit.conversionFactorToBase);
+    }
+    const configuredUnit = units.find((entry) => entry.symbol === unit);
+    const baseUnit = units.find((entry) => entry._id === String(item.baseUnitId?._id || item.baseUnitId))
+      || units.find((entry) => entry.symbol === (item.baseUnit || item.unit));
+    const dynamicFactor = getUnitConversionFactor(configuredUnit, baseUnit, units);
+    if (dynamicFactor) return dynamicFactor;
     const configured = item.unitConversions?.[unit]
       ?? item.packagingOptions?.find((option) => option.unit === unit)?.conversionFactor;
     return Number(configured) > 0 ? Number(configured) : defaultConversionFactor(item.baseUnit || item.unit, unit);
@@ -66,6 +109,7 @@ export const InventoryPage = () => {
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [paymentForm, setPaymentForm] = useState({ amount: '', paymentMethod: 'bank_transfer', referenceNumber: '', invoiceNumber: '', notes: '' });
   const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [stockReceiptRequests, setStockReceiptRequests] = useState([]);
   const [dashboard, setDashboard] = useState(null);
   const [ledger, setLedger] = useState([]);
   const [departmentRequests, setDepartmentRequests] = useState([]);
@@ -86,9 +130,12 @@ export const InventoryPage = () => {
     name: '',
     symbol: '',
     category: 'weight',
+    baseUnitId: '',
+    conversionFactor: '',
     description: '',
     isActive: true
   });
+  const unitFormIsPackage = isPackageUnit({ category: unitForm.category, symbol: unitForm.symbol });
 
   // Modals
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
@@ -109,28 +156,24 @@ export const InventoryPage = () => {
   const [selectedItemForMove, setSelectedItemForMove] = useState(null);
 
   const [itemForm, setItemForm] = useState({
-    name: '',
-    code: '',
-    category: 'food_ingredients',
+    itemId: '',
+    department: '',
     unit: '',
-    baseUnit: '',
-    baseUnitId: '',
-    purchaseUnit: '',
-    purchaseUnitId: '',
-    purchaseConversionFactor: '',
-    conversionFactor: '',
-    packagingOptions: [],
-    currentStock: 10,
-    minStockThreshold: 15,
-    maxStockLevel: '',
-    reorderQuantity: 0,
-    purchasePrice: 5,
-    trackExpiry: false,
-    trackBatchNumber: false,
-    stockVerificationIntervalDays: '',
-    openingBatchNumber: '',
-    openingExpiryDate: ''
+    quantity: '',
+    existingStockDeduction: '0',
+    existingStockDeductionUnit: '',
+    hasWastage: 'no',
+    wastageQuantity: '',
+    wastageUnit: '',
+    wastageReason: '',
+    purchasePrice: '',
+    vendorId: '',
+    expiryDate: '',
+    location: 'Main Store',
+    notes: ''
   });
+  const [receiptBatches, setReceiptBatches] = useState([]);
+  const [receiptBatchesLoading, setReceiptBatchesLoading] = useState(false);
 
   const [moveForm, setMoveForm] = useState({
     movementType: 'receipt',
@@ -215,7 +258,7 @@ export const InventoryPage = () => {
   const fetchInventory = async () => {
     try {
       setLoading(true);
-      const [itemsRes, vendorsRes, posRes, dashboardRes, ledgerRes, requestsRes, recipesRes, adjustmentsRes, suggestionsRes, unitsRes, verificationsRes, settingsRes] = await Promise.all([
+      const [itemsRes, vendorsRes, posRes, dashboardRes, ledgerRes, requestsRes, recipesRes, adjustmentsRes, suggestionsRes, unitsRes, verificationsRes, settingsRes, stockReceiptRequestsRes] = await Promise.all([
         api.get('/inventory/items', { params: { page: inventoryPage, limit: 100, includeInactive: canManageInventory ? 'true' : undefined } }),
         api.get('/inventory/vendors'),
         api.get('/inventory/purchase-orders'),
@@ -227,14 +270,28 @@ export const InventoryPage = () => {
         api.get('/inventory/reorder-suggestions'),
         api.get('/inventory/units', { params: canManageInventory ? { includeInactive: true } : {} }),
         api.get('/inventory/verifications'),
-        api.get('/inventory/settings')
+        api.get('/inventory/settings'),
+        api.get('/inventory/stock-receipt-requests')
       ]);
 
-      if (itemsRes.data.success) setItems(itemsRes.data.data);
+      const rawMaterialsRes = await api.get('/inventory/raw-materials', {
+        params: canManageInventory ? { includeInactive: true } : {}
+      }).catch(() => null);
+      if (itemsRes.data.success) {
+        const regularItems = itemsRes.data.data || [];
+        const rawData = rawMaterialsRes?.data?.data;
+        const rawMaterials = rawMaterialsRes?.data?.success
+          ? (Array.isArray(rawData) ? rawData : rawData?.materials || [])
+          : [];
+        const combined = new Map(regularItems.map((item) => [String(item._id), item]));
+        rawMaterials.forEach((item) => combined.set(String(item._id), item));
+        setItems([...combined.values()]);
+      }
       if (unitsRes.data.success) setUnits(unitsRes.data.data || []);
       setInventoryPages(itemsRes.data.pagination?.pages || 1);
       if (vendorsRes.data.success) setVendors(vendorsRes.data.data);
       if (posRes.data.success) setPurchaseOrders(posRes.data.data);
+      if (stockReceiptRequestsRes.data.success) setStockReceiptRequests(stockReceiptRequestsRes.data.data || []);
       if (dashboardRes.data.success) setDashboard(dashboardRes.data.data);
       if (ledgerRes.data.success) setLedger(ledgerRes.data.data);
       if (requestsRes.data.success) setDepartmentRequests(requestsRes.data.data);
@@ -293,6 +350,65 @@ export const InventoryPage = () => {
       value: unit._id
     }));
   const getUnit = (id) => units.find((unit) => unit._id === id);
+  const defaultSupportedUnitForItem = (item) => {
+    const directUnits = (item?.supportedUnits || []).filter((entry) => {
+      if (entry.isActive === false) return false;
+      const unit = typeof entry.unitId === 'object'
+        ? entry.unitId
+        : units.find((candidate) => String(candidate._id) === String(entry.unitId));
+      return !isPackageUnit(unit || { symbol: entry.unitSymbolSnapshot })
+        && !(Number(entry.packageSize) > 0 && entry.packageMeasurementUnitId);
+    });
+    return directUnits.find((entry) => entry.isDefaultPurchaseUnit) || directUnits[0];
+  };
+  const defaultPurchaseUnitForItem = (item) => {
+    const configured = defaultSupportedUnitForItem(item);
+    const configuredUnit = configured?.unitId;
+    return configured?.unitSymbolSnapshot
+      || (typeof configuredUnit === 'object' ? configuredUnit.symbol : null)
+      || units.find((unit) => unit._id === String(configuredUnit))?.symbol
+      || item?.purchaseUnit
+      || item?.baseUnit
+      || item?.unit
+      || '';
+  };
+  const purchaseUnitChoicesForItem = (item) => {
+    if (item?.inventoryType !== 'raw_material' || !Array.isArray(item.supportedUnits)) {
+      return unitChoicesForItem(item, units);
+    }
+    return item.supportedUnits.filter((entry) => {
+      if (entry.isActive === false) return false;
+      const unit = typeof entry.unitId === 'object'
+        ? entry.unitId
+        : units.find((candidate) => String(candidate._id) === String(entry.unitId));
+      return !isPackageUnit(unit || { symbol: entry.unitSymbolSnapshot })
+        && !(Number(entry.packageSize) > 0 && entry.packageMeasurementUnitId);
+    }).map((entry) => {
+      const configuredUnitId = typeof entry.unitId === 'object' ? entry.unitId?._id : entry.unitId;
+      return {
+        group: 'Units',
+        label: `${entry.unitNameSnapshot || entry.unitSymbolSnapshot} (${entry.unitSymbolSnapshot})`,
+        value: `unit:${configuredUnitId}`
+      };
+    });
+  };
+  const directUnitChoicesForItem = (item) => {
+    if (item?.inventoryType !== 'raw_material' || !Array.isArray(item.supportedUnits)) {
+      return unitChoicesForItem(item, units);
+    }
+    return item.supportedUnits.filter((entry) => {
+      if (entry.isActive === false) return false;
+      const unit = typeof entry.unitId === 'object'
+        ? entry.unitId
+        : units.find((candidate) => String(candidate._id) === String(entry.unitId));
+      return !isPackageUnit(unit || { symbol: entry.unitSymbolSnapshot })
+        && !(Number(entry.packageSize) > 0 && entry.packageMeasurementUnitId);
+    }).map((entry) => ({
+      group: 'Units',
+      label: `${entry.unitNameSnapshot || entry.unitSymbolSnapshot} (${entry.unitSymbolSnapshot})`,
+      value: entry.unitSymbolSnapshot
+    }));
+  };
 
   useEffect(() => {
     if (activeTab !== 'recipes' || !canManageInventory) return;
@@ -308,36 +424,132 @@ export const InventoryPage = () => {
       .catch((err) => showApiErrorToast(err, 'Could not load minibar rooms'));
   }, [activeTab]);
 
+  useEffect(() => {
+    if (!isAddItemOpen || !itemForm.itemId) {
+      setReceiptBatches([]);
+      setReceiptBatchesLoading(false);
+      return;
+    }
+    let active = true;
+    setReceiptBatchesLoading(true);
+    api.get('/inventory/batches', {
+      params: { itemId: itemForm.itemId, location: itemForm.location || 'Main Store' }
+    })
+      .then(({ data }) => {
+        if (active) setReceiptBatches(data.data || []);
+      })
+      .catch((error) => {
+        if (active) showApiErrorToast(error, 'Could not load batch history');
+      })
+      .finally(() => {
+        if (active) setReceiptBatchesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isAddItemOpen, itemForm.itemId, itemForm.location]);
+
   const handleCreateItem = async (e) => {
     e.preventDefault();
     try {
-      const res = await api.post('/inventory/items', {
-        ...itemForm,
-        unit: getUnit(itemForm.baseUnitId)?.symbol || '',
-        baseUnit: getUnit(itemForm.baseUnitId)?.symbol || '',
-        baseUnitId: itemForm.baseUnitId,
-        purchaseUnitId: itemForm.purchaseUnitId,
-        conversionFactor: Number(itemForm.purchaseConversionFactor),
-        currentStock: Number(itemForm.currentStock),
-        minStockThreshold: Number(itemForm.minStockThreshold),
-        maxStockLevel: itemForm.maxStockLevel ? Number(itemForm.maxStockLevel) : null,
-        reorderQuantity: Number(itemForm.reorderQuantity),
-        purchasePrice: Number(itemForm.purchasePrice),
-        stockVerificationIntervalDays: itemForm.stockVerificationIntervalDays
-          ? Number(itemForm.stockVerificationIntervalDays)
-          : null,
-        purchaseConversionFactor: Number(itemForm.purchaseConversionFactor),
-        additionalPackagingOptions: itemForm.packagingOptions
-          .map((option) => ({ unitId: option.unitId, conversionFactor: Number(option.conversionFactor) }))
-      });
+      const selectedMaterial = items.find((item) => item._id === itemForm.itemId);
+      const selectedPurchaseUnit = rawMaterialPurchaseUnits(selectedMaterial)
+        .find((unit) => unit.symbol === itemForm.unit);
+      if (!selectedMaterial || !selectedPurchaseUnit) {
+        throw new Error('Select a raw material and one of its configured purchase units.');
+      }
+      const purchaseQuantity = Number(itemForm.quantity);
+      const purchasePrice = Number(itemForm.purchasePrice);
+      if (!Number.isFinite(purchaseQuantity) || purchaseQuantity <= 0
+        || !Number.isFinite(purchasePrice) || purchasePrice < 0) {
+        throw new Error('Enter a positive quantity and a valid purchase price.');
+      }
+      const receiptPayload = {
+        itemId: selectedMaterial._id,
+        quantity: purchaseQuantity,
+        unit: selectedPurchaseUnit.symbol,
+        purchaseUnitPrice: purchasePrice,
+        vendorId: itemForm.vendorId || null,
+        department: itemForm.department,
+        location: itemForm.location || 'Main Store',
+        expiryDate: itemForm.expiryDate || null,
+        notes: itemForm.notes
+      };
+      const previousAvailableQuantity = receiptBatches.reduce(
+        (total, batch) => total + Math.max(0, Number(batch.remainingQuantity) || 0), 0
+      );
+      const requiresApproval = previousAvailableQuantity > 0;
+      const enteredStockDeduction = itemForm.existingStockDeduction === ''
+        ? 0
+        : Number(itemForm.existingStockDeduction);
+      if (!Number.isFinite(enteredStockDeduction) || enteredStockDeduction < 0
+        || (enteredStockDeduction > 0 && !receiptDeductionUnit)) {
+        throw new Error('Enter a non-negative existing-stock deduction and select its unit.');
+      }
+      const existingStockDeduction = enteredStockDeduction * (receiptDeductionUnit?.factor || 1);
+      if (existingStockDeduction > previousAvailableQuantity) {
+        throw new Error(`The deduction cannot exceed ${formatReceiptQuantity(previousAvailableQuantity)} ${receiptBaseUnit} available.`);
+      }
+      const wastageQuantity = itemForm.hasWastage === 'yes' ? Number(itemForm.wastageQuantity) : 0;
+      if (itemForm.hasWastage === 'yes' && (!Number.isFinite(wastageQuantity) || wastageQuantity <= 0)) {
+        throw new Error('Enter a positive wastage quantity.');
+      }
+      const wastageBaseQuantity = wastageQuantity * (receiptWastageUnit?.factor || 0);
+      if (wastageQuantity > 0 && !receiptWastageUnit) {
+        throw new Error('Select a configured wastage unit.');
+      }
+      if (wastageBaseQuantity > receiptWastageAvailableQuantity) {
+        throw new Error(`Wastage cannot exceed the ${formatReceiptQuantity(receiptWastageAvailableQuantity)} ${receiptBaseUnit} available in the batches eligible for wastage.`);
+      }
+      if (wastageQuantity > 0 && !itemForm.wastageReason.trim()) {
+        throw new Error('Enter a reason for the wastage.');
+      }
+      const wastagePayload = wastageQuantity > 0 ? {
+        wastageQuantity,
+        wastageUnit: itemForm.wastageUnit,
+        wastageReason: itemForm.wastageReason.trim()
+      } : {};
+      const res = requiresApproval
+        ? await api.post('/inventory/stock-receipt-requests', {
+          ...receiptPayload,
+          existingStockDeductionQuantity: enteredStockDeduction,
+          existingStockDeductionUnit: itemForm.existingStockDeductionUnit || receiptBaseUnit,
+          ...wastagePayload
+        })
+        : await api.post('/inventory/movements', {
+          ...receiptPayload,
+          movementType: 'receipt',
+          autoGenerateBatchNumber: true,
+          ...wastagePayload
+        });
       if (res.data.success) {
+        const batchNumber = res.data.data?.movement?.batchNumber;
         setIsAddItemOpen(false);
-        setMessage(`Item ${itemForm.name} added to inventory.`);
+        setMessage(requiresApproval
+          ? `${selectedMaterial.name} restock submitted for approval. The existing-stock deduction, fresh batch, and any wastage will be recorded after approval.`
+          : `${selectedMaterial.name} stock added${batchNumber ? ` as batch ${batchNumber}` : ''}${wastageBaseQuantity ? `; ${formatReceiptQuantity(wastageBaseQuantity)} ${receiptBaseUnit} wastage recorded` : ''}.`);
+        setItemForm({
+          itemId: '',
+          department: '',
+          unit: '',
+          quantity: '',
+          existingStockDeduction: '0',
+          existingStockDeductionUnit: '',
+          hasWastage: 'no',
+          wastageQuantity: '',
+          wastageUnit: '',
+          wastageReason: '',
+          purchasePrice: '',
+          vendorId: '',
+          expiryDate: '',
+          location: 'Main Store',
+          notes: ''
+        });
         fetchInventory();
         setTimeout(() => setMessage(''), 3000);
       }
     } catch (err) {
-      showApiErrorToast(err, 'Failed to create item');
+      showApiErrorToast(err, 'Failed to receive raw material stock');
     }
   };
 
@@ -374,12 +586,23 @@ export const InventoryPage = () => {
 
   const handleSaveUnit = async (event) => {
     event?.preventDefault?.();
+    if (!unitFormIsPackage && unitForm.baseUnitId
+      && !(Number(unitForm.conversionFactor) > 0)) {
+      showApiErrorToast(new Error('Enter a positive conversion factor'), 'Conversion factor must be greater than zero');
+      return;
+    }
     try {
-      const { data } = await api.post('/inventory/units', unitForm);
+      const { data } = await api.post('/inventory/units', {
+        ...unitForm,
+        baseUnitId: unitFormIsPackage ? null : unitForm.baseUnitId || null,
+        conversionFactor: unitFormIsPackage || !unitForm.baseUnitId
+          ? null
+          : Number(unitForm.conversionFactor)
+      });
       setUnits((current) => [...current.filter((unit) => unit._id !== data.data._id), data.data]);
       setMessage(`Unit ${unitForm.name} is ready to use for this raw material.`);
       setIsUnitFormOpen(false);
-      setUnitForm({ name: '', symbol: '', category: 'weight', description: '', isActive: true });
+      setUnitForm({ name: '', symbol: '', category: 'weight', baseUnitId: '', conversionFactor: '', description: '', isActive: true });
     } catch (error) {
       showApiErrorToast(error, 'Could not add unit');
     }
@@ -524,7 +747,18 @@ export const InventoryPage = () => {
           ...line,
           quantity: Number(line.quantity),
           unit: line.unit,
-          unitCost: Number(line.unitCost)
+          unitCost: Number(line.unitCost),
+          ...(unitIdForItemSymbol(
+            items.find((item) => String(item._id) === String(line.itemId)),
+            line.unit,
+            units
+          ) ? {
+            unitId: unitIdForItemSymbol(
+              items.find((item) => String(item._id) === String(line.itemId)),
+              line.unit,
+              units
+            )
+          } : {})
         }))
       });
       setIsPurchaseOrderOpen(false);
@@ -546,8 +780,10 @@ export const InventoryPage = () => {
       items: [{
         itemId: item._id,
         quantity: item.suggestedQuantity,
-        unit: item.suggestedUnit || item.purchaseUnit || item.baseUnit || item.unit,
-        unitCost: item.purchasePrice ?? item.unitCost * (item.purchaseConversionFactor || 1)
+        unit: item.suggestedUnit || defaultPurchaseUnitForItem(item),
+        unitId: unitIdForItemSymbol(item, item.suggestedUnit || defaultPurchaseUnitForItem(item), units),
+        purchasePackageId: item.suggestedUnit ? null : defaultSupportedUnitForItem(item)?._id || null,
+        unitCost: item.purchasePrice ?? Number(item.unitCost || 0) * Number(item.purchaseConversionFactor || 1)
       }]
     });
     setIsPurchaseOrderOpen(true);
@@ -673,6 +909,18 @@ export const InventoryPage = () => {
       fetchInventory();
     } catch (err) {
       showApiErrorToast(err, 'Could not review stock adjustment');
+    }
+  };
+
+  const handleReviewStockReceiptRequest = async (request, decision) => {
+    try {
+      const { data } = await api.patch(`/inventory/stock-receipt-requests/${request._id}/review`, { decision });
+      setMessage(decision === 'approve'
+        ? `Restock approved for ${request.itemId?.name || 'raw material'}; new batch ${data.data?.batchNumber || ''} has been added.`
+        : `Restock request rejected for ${request.itemId?.name || 'raw material'}.`);
+      fetchInventory();
+    } catch (err) {
+      showApiErrorToast(err, 'Could not review restock request');
     }
   };
 
@@ -867,6 +1115,47 @@ export const InventoryPage = () => {
       category,
       count: items.filter((item) => item.category === category).length
     }));
+  const rawMaterialsForReceipt = items.filter((item) => item.inventoryType === 'raw_material' && item.isActive !== false);
+  const selectedRawMaterialForReceipt = rawMaterialsForReceipt.find((item) => item._id === itemForm.itemId);
+  const receiptPurchaseUnits = rawMaterialPurchaseUnits(selectedRawMaterialForReceipt);
+  const selectedReceiptPurchaseUnit = receiptPurchaseUnits.find((unit) => unit.symbol === itemForm.unit);
+  const receiptBaseUnit = selectedRawMaterialForReceipt?.baseUnit || selectedRawMaterialForReceipt?.unit || '';
+  const receiptDeductionUnit = receiptPurchaseUnits.find((unit) => unit.symbol === itemForm.existingStockDeductionUnit);
+  const receiptBasePrice = selectedReceiptPurchaseUnit && itemForm.purchasePrice !== ''
+    && Number.isFinite(Number(itemForm.purchasePrice)) && Number(itemForm.purchasePrice) >= 0
+    ? Number(itemForm.purchasePrice) / selectedReceiptPurchaseUnit.factor
+    : null;
+  const receiptWastageUnit = receiptPurchaseUnits.find((unit) => unit.symbol === itemForm.wastageUnit);
+  const receiptPreviousAvailable = receiptBatches.reduce(
+    (total, batch) => total + Math.max(0, Number(batch.remainingQuantity) || 0), 0
+  );
+  const receiptDeductionQuantity = (Number(itemForm.existingStockDeduction) || 0)
+    * (receiptDeductionUnit?.factor || 1);
+  const receiptDeductionMaximum = receiptDeductionUnit
+    ? receiptPreviousAvailable / receiptDeductionUnit.factor
+    : receiptPreviousAvailable;
+  const receiptNewBaseQuantity = selectedReceiptPurchaseUnit && Number(itemForm.quantity) > 0
+    ? Number(itemForm.quantity) * selectedReceiptPurchaseUnit.factor
+    : 0;
+  const receiptRemainingAfterReceipt = Math.max(
+    0,
+    receiptPreviousAvailable - receiptDeductionQuantity + receiptNewBaseQuantity
+  );
+  const receiptWastageAvailableQuantity = receiptNewBaseQuantity
+    + (receiptDeductionQuantity > 0
+      ? Math.max(0, receiptPreviousAvailable - receiptDeductionQuantity)
+      : 0);
+  const receiptWastageBaseQuantity = itemForm.hasWastage === 'yes'
+    && receiptWastageUnit && Number(itemForm.wastageQuantity) > 0
+    ? Number(itemForm.wastageQuantity) * receiptWastageUnit.factor
+    : 0;
+  const receiptRemainingAfterWastage = Math.max(
+    0,
+    receiptRemainingAfterReceipt - receiptWastageBaseQuantity
+  );
+  const formatReceiptQuantity = (quantity) => new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 8
+  }).format(Number(quantity) || 0);
 
   return (
     <div className="inventory-page w-full min-w-0 space-y-6">
@@ -901,7 +1190,7 @@ export const InventoryPage = () => {
                 Add Supplier
               </Button>
               <Button className="w-full sm:w-auto" variant="primary" size="sm" icon={PlusCircle} onClick={() => setIsAddItemOpen(true)}>
-                Add Stock Item
+                Receive Raw Material
               </Button>
             </>
           )}
@@ -927,6 +1216,7 @@ export const InventoryPage = () => {
             { id: 'vendors', label: `Suppliers (${vendors.length})`, icon: Truck },
             { id: 'pos', label: `Purchase Orders (${purchaseOrders.length})`, icon: PackageCheck },
             { id: 'requests', label: `Department Requests (${departmentRequests.length})`, icon: ClipboardList },
+            { id: 'restock-approvals', label: `Restock Approvals (${stockReceiptRequests.filter((request) => request.status === 'pending').length})`, icon: PackageCheck },
             { id: 'adjustments', label: `Adjustments (${adjustments.length})`, icon: AlertTriangle },
             { id: 'recipes', label: `Recipes (${recipes.filter((recipe) => recipe.isActive).length})`, icon: Utensils },
             { id: 'minibar', label: 'Minibar', icon: PackageCheck },
@@ -1237,7 +1527,11 @@ export const InventoryPage = () => {
                                 variant="secondary"
                                 onClick={() => {
                                   setSelectedItemForMove(it);
-                                  setMoveForm({ ...moveForm, unit: it.baseUnit || it.unit });
+                                  setMoveForm({
+                                    ...moveForm,
+                                    unit: it.baseUnit || it.unit,
+                                    quantity: 0
+                                  });
                                   setIsMovementOpen(true);
                                 }}
                               >
@@ -1492,6 +1786,87 @@ export const InventoryPage = () => {
                   </tr>
                 ))}
                 {!adjustments.length && <tr><td colSpan="8" className="py-10 text-center text-slate-400">No adjustments reported.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {activeTab === 'restock-approvals' && (
+        <Card title="Raw Material Restock Approvals" subtitle="Review the existing stock deduction and new receipt together. Both changes are applied only after approval.">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 uppercase text-slate-400">
+                  <th className="pb-3">Date / Material</th>
+                  <th className="pb-3">Existing stock / deduction</th>
+                  <th className="pb-3">Requested restock</th>
+                  <th className="pb-3">Vendor / Location</th>
+                  <th className="pb-3">Requested by</th>
+                  <th className="pb-3">Status</th>
+                  <th className="pb-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {stockReceiptRequests.map((request) => (
+                  <tr key={request._id}>
+                    <td className="py-3">
+                      <div className="font-semibold">{request.itemId?.name || 'Raw material'}</div>
+                      <div className="text-slate-500">{dayjs(request.createdAt).format('YYYY-MM-DD')}</div>
+                    </td>
+                    <td>
+                      <div className="font-semibold">
+                        {formatReceiptQuantity(request.previousAvailableQuantity)} {request.itemId?.baseUnit || request.itemId?.unit}
+                      </div>
+                      <div className="mt-1 text-slate-600">
+                        Deduct {formatReceiptQuantity(request.existingStockDeduction || 0)} {request.itemId?.baseUnit || request.itemId?.unit}
+                      </div>
+                      <div className="text-slate-500">
+                        Remaining old stock: {formatReceiptQuantity(
+                          request.remainingPreviousStockAfterDeduction
+                            ?? Math.max(0, request.previousAvailableQuantity - (request.existingStockDeduction || 0))
+                        )} {request.itemId?.baseUnit || request.itemId?.unit}
+                      </div>
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-sky-700">Batch breakdown</summary>
+                        <ul className="mt-1 space-y-1 text-slate-500">
+                          {request.previousBatches.map((batch) => (
+                            <li key={batch.batchId}>
+                              {batch.batchNumber || 'Unnumbered'}: {formatReceiptQuantity(batch.remainingQuantity)} {request.itemId?.baseUnit || request.itemId?.unit}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    </td>
+                    <td>
+                      {formatReceiptQuantity(request.quantity)} {request.unit}
+                      <div className="text-slate-500">{formatCurrency(request.quantity * request.purchaseUnitPrice)} total</div>
+                      {request.wastageQuantity > 0 && (
+                        <div className="mt-1 text-rose-700">
+                          Wastage {formatReceiptQuantity(request.wastageQuantity)} {request.itemId?.baseUnit || request.itemId?.unit}
+                          {request.wastageReason ? ` · ${request.wastageReason}` : ''}
+                        </div>
+                      )}
+                    </td>
+                    <td>{request.vendorId?.name || '—'}<div className="text-slate-500">{request.location}</div></td>
+                    <td>{request.requestedBy?.name || '—'}</td>
+                    <td><Badge variant={request.status}>{request.status}</Badge></td>
+                    <td className="text-right">
+                      {canManageInventory && request.status === 'pending' && (
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="success" onClick={() => handleReviewStockReceiptRequest(request, 'approve')}>Approve & Receive</Button>
+                          <Button size="sm" variant="danger" onClick={() => handleReviewStockReceiptRequest(request, 'reject')}>Reject</Button>
+                        </div>
+                      )}
+                      {request.reviewedBy?.name && (
+                        <div className="mt-1 text-slate-500">Reviewed by {request.reviewedBy.name}</div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {!stockReceiptRequests.length && (
+                  <tr><td colSpan="7" className="py-10 text-center text-slate-400">No raw material restock requests recorded.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1799,7 +2174,7 @@ export const InventoryPage = () => {
             searchPlaceholder="Search supported units..."
             value={moveForm.unit || selectedItemForMove?.baseUnit || selectedItemForMove?.unit}
             onChange={(e) => setMoveForm({ ...moveForm, unit: e.target.value })}
-            options={unitChoicesForItem(selectedItemForMove, units)}
+            options={directUnitChoicesForItem(selectedItemForMove)}
           />
 
           <Input
@@ -1903,9 +2278,323 @@ export const InventoryPage = () => {
       <Modal
         isOpen={isAddItemOpen}
         onClose={() => setIsAddItemOpen(false)}
-        title="Add Inventory Item"
-        subtitle="Catalog a consumable or hotel supply"
+        title="Add Raw Material Stock"
+        subtitle="Receive stock against an existing raw material"
       >
+        <form onSubmit={handleCreateItem} className="space-y-4">
+          <p className="rounded-lg bg-[#faf7f0] p-3 text-xs leading-relaxed text-slate-700">
+            Select the material and purchase unit first. Enter the quantity and price per purchase unit; stock and cost are converted to the material's base unit. If stock remains in an earlier batch, enter how much to deduct from it. An administrator must approve before the deduction and new receipt are applied.
+          </p>
+          <Select
+            label="Raw material"
+            info="Select a raw material already set up in Raw Material Master. Its configured base unit and purchase units determine how this receipt is converted and stored."
+            searchable
+            searchPlaceholder="Search raw materials..."
+            required
+            value={itemForm.itemId}
+            onChange={(event) => {
+              const material = rawMaterialsForReceipt.find((item) => item._id === event.target.value);
+              const purchaseUnits = rawMaterialPurchaseUnits(material);
+              const defaultUnit = purchaseUnits.find((unit) => unit.isDefault) || purchaseUnits[0];
+              setItemForm({
+                ...itemForm,
+                itemId: event.target.value,
+                unit: defaultUnit?.symbol || '',
+                quantity: '',
+                existingStockDeduction: '0',
+                existingStockDeductionUnit: material?.baseUnit || material?.unit || '',
+                hasWastage: 'no',
+                wastageQuantity: '',
+                wastageUnit: material?.baseUnit || material?.unit || defaultUnit?.symbol || '',
+                wastageReason: '',
+                purchasePrice: '',
+                vendorId: '',
+                expiryDate: '',
+                location: material?.location || 'Main Store'
+              });
+            }}
+            options={[
+              { label: 'Select raw material', value: '' },
+              ...rawMaterialsForReceipt.map((item) => ({
+                label: `${item.name} (${item.baseUnit || item.unit})`,
+                value: item._id
+              }))
+            ]}
+          />
+          {!rawMaterialsForReceipt.length && (
+            <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+              No raw materials are available. Add a raw material before receiving stock.
+            </p>
+          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Select
+              label="Receiving department"
+              info="Choose the department this stock is being received for. This is recorded with the stock movement for reporting."
+              required
+              value={itemForm.department}
+              onChange={(event) => setItemForm({ ...itemForm, department: event.target.value })}
+              options={[
+                { label: 'Select department', value: '' },
+                ...['Kitchen', 'Restaurant', 'Housekeeping', 'Maintenance', 'Minibar'].map((department) => ({
+                  label: department,
+                  value: department
+                }))
+              ]}
+            />
+          </div>
+          {selectedRawMaterialForReceipt && (
+            <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+              Stock is stored in <strong>{receiptBaseUnit}</strong>
+              {selectedReceiptPurchaseUnit && (
+                <span> · 1 {selectedReceiptPurchaseUnit.symbol} = {new Intl.NumberFormat(undefined, { maximumFractionDigits: 8 }).format(selectedReceiptPurchaseUnit.factor)} {receiptBaseUnit}</span>
+              )}
+            </p>
+          )}
+          {selectedRawMaterialForReceipt && (
+            <details className="rounded-lg border border-slate-200 bg-white">
+              <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium text-slate-800">
+                Batch history ({receiptBatches.length})
+              </summary>
+              <div className="space-y-2 border-t border-slate-100 p-3">
+                {receiptBatchesLoading ? (
+                  <p className="text-sm text-slate-500">Loading batch history…</p>
+                ) : receiptBatches.length === 0 ? (
+                  <p className="text-sm text-slate-500">No batches have been received for this material yet.</p>
+                ) : receiptBatches.map((batch) => (
+                  <div key={batch._id} className="rounded-md bg-slate-50 p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <strong className="text-slate-800">{batch.batchNumber || 'Unnumbered batch'}</strong>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        batch.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                      }`}>
+                        {batch.status === 'open' ? 'Open' : 'Exhausted'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-slate-600">
+                      Received {new Intl.NumberFormat(undefined, { maximumFractionDigits: 8 }).format(batch.quantity)} {receiptBaseUnit}
+                      {' · '}Remaining {new Intl.NumberFormat(undefined, { maximumFractionDigits: 8 }).format(batch.remainingQuantity)} {receiptBaseUnit}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {batch.purchaseQuantity != null && batch.purchaseUnit
+                        ? `Purchased ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 8 }).format(batch.purchaseQuantity)} ${batch.purchaseUnit}`
+                        : 'Purchase quantity not recorded'}
+                      {batch.purchaseAmount != null && ` · ${currencySymbol}${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(batch.purchaseAmount)}`}
+                      {batch.receivedAt && ` · ${new Date(batch.receivedAt).toLocaleDateString()}`}
+                      {batch.location && ` · ${batch.location}`}
+                      {batch.vendorId?.name && ` · ${batch.vendorId.name}`}
+                    </p>
+                  </div>
+                ))}
+                <p className="text-xs text-slate-500">
+                  Stock is issued from the oldest open batch first within each location. A batch is exhausted automatically when its remaining quantity reaches zero; receiving new stock does not close an older batch.
+                </p>
+              </div>
+            </details>
+          )}
+          {selectedRawMaterialForReceipt && receiptPreviousAvailable > 0 && (
+            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm text-amber-900">
+                <strong>{formatReceiptQuantity(receiptPreviousAvailable)} {receiptBaseUnit}</strong> is recorded in earlier batches at this location.
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Input
+                  label="Quantity to deduct"
+                  info={`Enter a quantity to remove from existing batches. It will be converted to ${receiptBaseUnit} and deducted FIFO after administrator approval.`}
+                  type="number"
+                  min="0"
+                  max={receiptDeductionMaximum}
+                  step="any"
+                  required
+                  value={itemForm.existingStockDeduction}
+                  onChange={(event) => setItemForm({ ...itemForm, existingStockDeduction: event.target.value })}
+                />
+                <Select
+                  label="Purchase unit (units)"
+                  required
+                  value={itemForm.existingStockDeductionUnit}
+                  onChange={(event) => setItemForm({ ...itemForm, existingStockDeductionUnit: event.target.value })}
+                  options={[
+                    { label: 'Select unit', value: '' },
+                    ...receiptPurchaseUnits.map((unit) => ({ label: unit.label, value: unit.symbol }))
+                  ]}
+                />
+              </div>
+              <p className="text-xs text-amber-900">
+                Deduction: {formatReceiptQuantity(receiptDeductionQuantity)} {receiptBaseUnit}. Existing stock remaining after deduction: {formatReceiptQuantity(Math.max(
+                  0,
+                  receiptPreviousAvailable - receiptDeductionQuantity
+                ))} {receiptBaseUnit}. The deduction and new receipt are both applied only after administrator approval.
+              </p>
+            </div>
+          )}
+          {selectedRawMaterialForReceipt && (
+            <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+              <Select
+                label="Is there any wastage in the remaining stock?"
+                value={itemForm.hasWastage}
+                onChange={(event) => setItemForm({
+                  ...itemForm,
+                  hasWastage: event.target.value,
+                  wastageQuantity: event.target.value === 'yes' ? itemForm.wastageQuantity : '',
+                  wastageUnit: itemForm.wastageUnit || receiptBaseUnit
+                })}
+                options={[
+                  { label: 'No', value: 'no' },
+                  { label: 'Yes', value: 'yes' }
+                ]}
+              />
+              {itemForm.hasWastage === 'yes' && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Input
+                    label="Wastage quantity"
+                    type="number"
+                    min="0.00000001"
+                    step="any"
+                    required
+                    value={itemForm.wastageQuantity}
+                    onChange={(event) => setItemForm({ ...itemForm, wastageQuantity: event.target.value })}
+                  />
+                  <Select
+                    label="Wastage unit"
+                    required
+                    value={itemForm.wastageUnit}
+                    onChange={(event) => setItemForm({ ...itemForm, wastageUnit: event.target.value })}
+                    options={[
+                      { label: 'Select unit', value: '' },
+                      ...receiptPurchaseUnits.map((unit) => ({ label: unit.label, value: unit.symbol }))
+                    ]}
+                  />
+                  <div className="sm:col-span-2">
+                    <Input
+                      label="Wastage reason"
+                      required
+                      value={itemForm.wastageReason}
+                      onChange={(event) => setItemForm({ ...itemForm, wastageReason: event.target.value })}
+                      placeholder="e.g. spoiled during storage"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {selectedRawMaterialForReceipt && !receiptPurchaseUnits.length && (
+            <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+              This raw material has no configured purchase units. Select compatible purchase units in its raw material settings first.
+            </p>
+          )}
+          {selectedRawMaterialForReceipt?.trackExpiry && (
+            <Input
+              label="Expiry date"
+              info="Enter the expiry date printed on the received stock. This is required because expiry tracking is enabled for this raw material."
+              type="date"
+              required
+              value={itemForm.expiryDate}
+              onChange={(event) => setItemForm({ ...itemForm, expiryDate: event.target.value })}
+            />
+          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <Input
+              label="Purchased quantity"
+              info="Enter the amount received in the selected configured purchase unit for this raw material."
+              type="number"
+              min="0.00000001"
+              step="any"
+              required
+              value={itemForm.quantity}
+              onChange={(event) => setItemForm({ ...itemForm, quantity: event.target.value })}
+            />
+            <Select
+              label="Purchase unit"
+              info="Choose a purchase unit configured for this raw material. The saved conversion is used to calculate stock in the base unit."
+              required
+              value={itemForm.unit}
+              onChange={(event) => setItemForm({ ...itemForm, unit: event.target.value, purchasePrice: '' })}
+              options={[
+                { label: 'Select unit', value: '' },
+                ...receiptPurchaseUnits.map((unit) => ({ label: unit.label, value: unit.symbol }))
+              ]}
+            />
+            <Input
+              label={itemForm.unit ? `Purchase price / ${itemForm.unit} (${currencySymbol})` : `Purchase price (${currencySymbol})`}
+              info="Enter the total cost for one selected purchase unit, not the cost per base unit. The system divides it by the unit conversion to calculate base-unit cost."
+              type="number"
+              min="0"
+              step="any"
+              required
+              value={itemForm.purchasePrice}
+              onChange={(event) => setItemForm({ ...itemForm, purchasePrice: event.target.value })}
+            />
+          </div>
+          {selectedReceiptPurchaseUnit && itemForm.purchasePrice !== '' && Number.isFinite(receiptBasePrice) && (
+            <p className="text-xs text-slate-600">
+              Base-unit cost: {currencySymbol}{new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 }).format(receiptBasePrice)} per {receiptBaseUnit}
+              {itemForm.quantity && ` · Stock added: ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 8 }).format(Number(itemForm.quantity) * selectedReceiptPurchaseUnit.factor)} ${receiptBaseUnit}`}
+            </p>
+          )}
+          {selectedRawMaterialForReceipt && (
+            <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+              <p className="font-semibold">Stock calculation preview ({receiptBaseUnit})</p>
+              <p>Previous available: {formatReceiptQuantity(receiptPreviousAvailable)}</p>
+              <p>Existing stock deduction: −{formatReceiptQuantity(receiptDeductionQuantity)}</p>
+              <p>Fresh receipt: +{formatReceiptQuantity(receiptNewBaseQuantity)}</p>
+              <p>Stock eligible for wastage: {formatReceiptQuantity(receiptWastageAvailableQuantity)}</p>
+              <p>Wastage: −{formatReceiptQuantity(receiptWastageBaseQuantity)}</p>
+              <p className="border-t border-sky-200 pt-1 font-bold">
+                Remaining after receipt: {formatReceiptQuantity(receiptRemainingAfterWastage)} {receiptBaseUnit}
+              </p>
+              {receiptWastageBaseQuantity > receiptWastageAvailableQuantity && (
+                <p className="font-medium text-rose-700">Wastage cannot exceed the eligible stock. Earlier batches are only included when an existing-stock deduction is entered.</p>
+              )}
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Select
+              label="Vendor (optional)"
+              info="Select the supplier for this receipt if known. Leaving this blank does not prevent receiving stock."
+              searchable
+              searchPlaceholder="Search vendors..."
+              value={itemForm.vendorId}
+              onChange={(event) => setItemForm({ ...itemForm, vendorId: event.target.value })}
+              options={[
+                { label: 'No vendor selected', value: '' },
+                ...vendors.filter((vendor) => vendor.status === 'active').map((vendor) => ({
+                  label: vendor.name,
+                  value: vendor._id
+                }))
+              ]}
+            />
+            <Select
+              label="Stock location"
+              info="Choose where this delivery is placed. The stock ledger records the location."
+              value={itemForm.location}
+              onChange={(event) => setItemForm({ ...itemForm, location: event.target.value })}
+              options={['Main Store', 'Kitchen Store', 'Restaurant Store', 'Housekeeping Store', 'Maintenance Store', 'Minibar Store'].map((location) => ({
+                label: location,
+                value: location
+              }))}
+            />
+          </div>
+          <Input
+            label="Notes (optional)"
+            info="Add an invoice reference or other details that will help identify this receipt later."
+            value={itemForm.notes}
+            onChange={(event) => setItemForm({ ...itemForm, notes: event.target.value })}
+          />
+          <div className="flex flex-col-reverse gap-3 pt-3 sm:flex-row sm:justify-end">
+            <Button className="w-full sm:w-auto" variant="secondary" type="button" onClick={() => setIsAddItemOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="w-full sm:w-auto"
+              variant="primary"
+              type="submit"
+              disabled={!rawMaterialsForReceipt.length || !receiptPurchaseUnits.length || receiptBatchesLoading}
+            >
+              {receiptBatchesLoading ? 'Checking previous stock…' : 'Receive Stock'}
+            </Button>
+          </div>
+        </form>
+        {false && (
         <form onSubmit={handleCreateItem} className="space-y-4">
           <Input
             label="Item Description"
@@ -1966,7 +2655,7 @@ export const InventoryPage = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        setUnitForm({ name: '', symbol: '', category: 'weight', description: '', isActive: true });
+                        setUnitForm({ name: '', symbol: '', category: 'weight', baseUnitId: '', conversionFactor: '', description: '', isActive: true });
                         setIsUnitFormOpen((open) => !open);
                       }}
                     >
@@ -1986,12 +2675,44 @@ export const InventoryPage = () => {
                     label="Unit type"
                     required
                     value={unitForm.category}
-                    onChange={(event) => setUnitForm({ ...unitForm, category: event.target.value })}
-                    options={['weight', 'volume', 'quantity', 'length', 'area', 'other'].map((category) => ({
+                    onChange={(event) => setUnitForm({ ...unitForm, category: event.target.value, baseUnitId: '', conversionFactor: '' })}
+                    options={['weight', 'volume', 'quantity', 'package', 'length', 'area', 'other'].map((category) => ({
                       label: category[0].toUpperCase() + category.slice(1),
                       value: category
                     }))}
                   />
+                  {['weight', 'volume', 'quantity'].includes(unitForm.category) && !unitFormIsPackage && (
+                    <>
+                      <Select
+                        label="Conversion base unit (optional)"
+                        value={unitForm.baseUnitId}
+                        onChange={(event) => setUnitForm({ ...unitForm, baseUnitId: event.target.value, conversionFactor: '' })}
+                        options={[
+                          { label: 'No global conversion', value: '' },
+                          ...units.filter((unit) => unit.isActive && unit.category === unitForm.category && !isPackageUnit(unit)).map((unit) => ({
+                            label: `${unit.name} (${unit.symbol})`,
+                            value: unit._id
+                          }))
+                        ]}
+                      />
+                      {unitForm.baseUnitId && (
+                        <Input
+                          label={`Conversion factor (1 ${unitForm.symbol || 'unit'} equals how many ${getUnit(unitForm.baseUnitId)?.symbol || 'base units'}?)`}
+                          type="number"
+                          min="0.00000001"
+                          step="any"
+                          required
+                          value={unitForm.conversionFactor}
+                          onChange={(event) => setUnitForm({ ...unitForm, conversionFactor: event.target.value })}
+                        />
+                      )}
+                    </>
+                  )}
+                  {unitFormIsPackage && (
+                    <p className="sm:col-span-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+                      Package-size conversions are configured per raw material. This unit will not have a global base unit or conversion factor.
+                    </p>
+                  )}
                   <Input label="Description (optional)" value={unitForm.description} onChange={(event) => setUnitForm({ ...unitForm, description: event.target.value })} />
                 </div>
                 <div className="mt-3 flex justify-end">
@@ -2184,6 +2905,7 @@ export const InventoryPage = () => {
             </Button>
           </div>
         </form>
+        )}
       </Modal>
 
       {/* Add Vendor Modal */}
@@ -2250,12 +2972,21 @@ export const InventoryPage = () => {
                   value={line.itemId}
                   onChange={(e) => {
                     const selected = items.find((item) => item._id === e.target.value);
+                    const configured = defaultSupportedUnitForItem(selected);
+                    const configuredUnitId = typeof configured?.unitId === 'object'
+                      ? configured.unitId?._id
+                      : configured?.unitId;
+                    const purchaseUnit = configured?.unitSymbolSnapshot
+                      || (typeof configured?.unitId === 'object' ? configured.unitId.symbol : null)
+                      || defaultPurchaseUnitForItem(selected);
                     setPoForm({ ...poForm, items: poForm.items.map((entry, row) => row === index ? {
                       ...entry,
                       itemId: e.target.value,
-                      unit: selected?.purchaseUnit || selected?.baseUnit || selected?.unit || '',
+                      unit: purchaseUnit,
+                      unitId: configuredUnitId || unitIdForItemSymbol(selected, purchaseUnit, units),
+                      purchasePackageId: null,
                       unitCost: selected
-                        ? selected.purchasePrice ?? selected.unitCost * (selected.purchaseConversionFactor || 1)
+                        ? selected.purchasePrice ?? Number(selected.unitCost || 0) * Number(configured?.conversionFactorToBase || selected.purchaseConversionFactor || 1)
                         : entry.unitCost
                     } : entry) });
                   }}
@@ -2267,16 +2998,29 @@ export const InventoryPage = () => {
                   searchable
                   searchPlaceholder="Search supported units..."
                   required
-                  value={line.unit}
+                  value={line.purchasePackageId ? `package:${line.purchasePackageId}` : line.unitId ? `unit:${line.unitId}` : line.unit}
                   onChange={(e) => {
                     const selected = items.find((item) => item._id === line.itemId);
-                    const unit = e.target.value;
-                    const factor = conversionFactorForItem(selected, unit);
+                    const choice = e.target.value;
+                    const [choiceType, choiceId] = choice.includes(':') ? choice.split(':', 2) : ['', ''];
+                    const configured = selected?.supportedUnits?.find((entry) => (
+                      choiceType === 'unit'
+                      && String(typeof entry.unitId === 'object' ? entry.unitId?._id : entry.unitId) === choiceId
+                    ));
+                    const unit = configured?.unitSymbolSnapshot || (typeof configured?.unitId === 'object' ? configured.unitId.symbol : null) || choice;
+                    const factor = Number(configured?.conversionFactorToBase) || conversionFactorForItem(selected, unit);
+                    const configuredUnitId = typeof configured?.unitId === 'object' ? configured.unitId?._id : configured?.unitId;
                     setPoForm({ ...poForm, items: poForm.items.map((entry, row) => row === index
-                      ? { ...entry, unit, unitCost: Number(selected?.unitCost || 0) * Number(factor || 1) }
+                      ? {
+                        ...entry,
+                        unit,
+                        unitId: configuredUnitId || unitIdForItemSymbol(selected, unit, units),
+                        purchasePackageId: null,
+                        unitCost: Number(selected?.unitCost || 0) * Number(factor || 1)
+                      }
                       : entry) });
                   }}
-                  options={unitChoicesForItem(items.find((item) => item._id === line.itemId), units)}
+                  options={purchaseUnitChoicesForItem(items.find((item) => item._id === line.itemId))}
                 />
                 <Input label={index === 0 ? 'Price / unit' : ''} type="number" min="0" step="0.01" required value={line.unitCost} onChange={(e) => setPoForm({ ...poForm, items: poForm.items.map((entry, row) => row === index ? { ...entry, unitCost: e.target.value } : entry) })} />
                 {poForm.items.length > 1 && <Button type="button" size="sm" variant="danger" onClick={() => setPoForm({ ...poForm, items: poForm.items.filter((_, row) => row !== index) })}>Remove</Button>}
@@ -2500,6 +3244,7 @@ export const InventoryPage = () => {
         <form onSubmit={handleStockVerification} className="space-y-4">
           <Select
             label="Raw material"
+            info="Choose the material you counted. The expected quantity shown here is the current stock balance recorded by the system before this verification."
             searchable
             required
             value={verificationForm.itemId}
@@ -2518,21 +3263,78 @@ export const InventoryPage = () => {
             }))]}
           />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input label="Period start" type="date" required value={verificationForm.periodStart} onChange={(event) => setVerificationForm({ ...verificationForm, periodStart: event.target.value })} />
-            <Input label="Period end" type="date" required value={verificationForm.periodEnd} onChange={(event) => setVerificationForm({ ...verificationForm, periodEnd: event.target.value })} />
+            <Input
+              label="Period start"
+              info="Start of the period being reconciled. Only include unrecorded consumption or waste that happened on or after this date."
+              type="date"
+              required
+              value={verificationForm.periodStart}
+              onChange={(event) => setVerificationForm({ ...verificationForm, periodStart: event.target.value })}
+            />
+            <Input
+              label="Period end"
+              info="End of the period being reconciled. This cannot be earlier than the period start."
+              type="date"
+              required
+              value={verificationForm.periodEnd}
+              onChange={(event) => setVerificationForm({ ...verificationForm, periodEnd: event.target.value })}
+            />
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input label="Actual usable stock" type="number" min="0" step="any" required value={verificationForm.actualStock} onChange={(event) => setVerificationForm({ ...verificationForm, actualStock: event.target.value })} />
-            <Select label="Unit" searchable required value={verificationForm.unit} onChange={(event) => setVerificationForm({ ...verificationForm, unit: event.target.value })} options={unitChoicesForItem(items.find((item) => item._id === verificationForm.itemId), units)} />
+            <Input
+              label="Actual usable stock"
+              info="Enter the quantity physically counted that is still usable. Do not include stock that has expired, spoiled, or otherwise been discarded."
+              type="number"
+              min="0"
+              step="any"
+              required
+              value={verificationForm.actualStock}
+              onChange={(event) => setVerificationForm({ ...verificationForm, actualStock: event.target.value })}
+            />
+            <Select
+              label="Unit"
+              info="Choose the unit used for your physical count. The system converts this quantity to the material's inventory base unit."
+              searchable
+              required
+              value={verificationForm.unit}
+              onChange={(event) => setVerificationForm({ ...verificationForm, unit: event.target.value })}
+              options={unitChoicesForItem(items.find((item) => item._id === verificationForm.itemId), units)}
+            />
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input label="Unrecorded consumption to reconcile" type="number" min="0" step="any" value={verificationForm.consumptionQuantity} onChange={(event) => setVerificationForm({ ...verificationForm, consumptionQuantity: event.target.value })} />
-            <Input label="Wasted during period" type="number" min="0" step="any" value={verificationForm.wastageQuantity} onChange={(event) => setVerificationForm({ ...verificationForm, wastageQuantity: event.target.value })} />
+            <Input
+              label="Unrecorded consumption to reconcile"
+              info="Enter stock used during this period that has not already been recorded as an issue or other inventory movement. Leave at zero if all use is already recorded."
+              type="number"
+              min="0"
+              step="any"
+              value={verificationForm.consumptionQuantity}
+              onChange={(event) => setVerificationForm({ ...verificationForm, consumptionQuantity: event.target.value })}
+            />
+            <Input
+              label="Wasted during period"
+              info="Enter stock discarded, spoiled, or damaged during this period only if that waste has not already been recorded in inventory."
+              type="number"
+              min="0"
+              step="any"
+              value={verificationForm.wastageQuantity}
+              onChange={(event) => setVerificationForm({ ...verificationForm, wastageQuantity: event.target.value })}
+            />
           </div>
-          <Input label="Discrepancy / gain reason (if applicable)" value={verificationForm.discrepancyReason} onChange={(event) => setVerificationForm({ ...verificationForm, discrepancyReason: event.target.value })} />
-          <Input label="Remarks" value={verificationForm.remarks} onChange={(event) => setVerificationForm({ ...verificationForm, remarks: event.target.value })} />
+          <Input
+            label="Discrepancy / gain reason (if applicable)"
+            info="Explain any remaining difference between expected stock and the physical count after unrecorded consumption and waste are accounted for. A reason is required for an unexplained difference or stock gain."
+            value={verificationForm.discrepancyReason}
+            onChange={(event) => setVerificationForm({ ...verificationForm, discrepancyReason: event.target.value })}
+          />
+          <Input
+            label="Remarks"
+            info="Add any other context about the count, such as who counted it, where it was found, or a follow-up action. This does not change the quantities."
+            value={verificationForm.remarks}
+            onChange={(event) => setVerificationForm({ ...verificationForm, remarks: event.target.value })}
+          />
           <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
-            Only enter consumption and wastage that have not already been posted to inventory. Previously recorded movements are already reflected in expected stock. The remaining difference is recorded as a stock discrepancy; a reason is required when unexplained stock or a stock gain remains.
+            Expected stock already includes all previously recorded receipts, issues, and adjustments. Enter only unrecorded consumption and waste for the selected period. After those are accounted for, any remaining difference is posted as a stock discrepancy.
           </p>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setIsVerificationOpen(false)}>Cancel</Button>
