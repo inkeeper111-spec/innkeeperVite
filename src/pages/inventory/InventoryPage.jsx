@@ -33,7 +33,12 @@ import {
   Download,
   Search,
   Clock3,
-  Tag
+  Tag,
+  Pencil,
+  Power,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -109,13 +114,16 @@ export const InventoryPage = () => {
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [paymentForm, setPaymentForm] = useState({ amount: '', paymentMethod: 'bank_transfer', referenceNumber: '', invoiceNumber: '', notes: '' });
   const [purchaseOrders, setPurchaseOrders] = useState([]);
-  const [stockReceiptRequests, setStockReceiptRequests] = useState([]);
   const [dashboard, setDashboard] = useState(null);
   const [ledger, setLedger] = useState([]);
   const [departmentRequests, setDepartmentRequests] = useState([]);
   const [adjustments, setAdjustments] = useState([]);
   const [recipes, setRecipes] = useState([]);
   const [reorderSuggestions, setReorderSuggestions] = useState([]);
+  const [expandedBatchItemId, setExpandedBatchItemId] = useState('');
+  const [batchesByItem, setBatchesByItem] = useState({});
+  const [loadingBatchesByItem, setLoadingBatchesByItem] = useState({});
+  const [batchErrorsByItem, setBatchErrorsByItem] = useState({});
   const [report, setReport] = useState([]);
   const [verifications, setVerifications] = useState([]);
   const [verificationIntervalDays, setVerificationIntervalDays] = useState(1);
@@ -151,7 +159,7 @@ export const InventoryPage = () => {
   const [isAdjustmentOpen, setIsAdjustmentOpen] = useState(false);
   const [isVerificationOpen, setIsVerificationOpen] = useState(false);
   const [isVendorHistoryOpen, setIsVendorHistoryOpen] = useState(false);
-  const [isSupplierPaymentOpen, setIsSupplierPaymentOpen] = useState(false);
+  const [isVendorPaymentOpen, setIsVendorPaymentOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState(null);
   const [selectedItemForMove, setSelectedItemForMove] = useState(null);
 
@@ -174,6 +182,8 @@ export const InventoryPage = () => {
   });
   const [receiptBatches, setReceiptBatches] = useState([]);
   const [receiptBatchesLoading, setReceiptBatchesLoading] = useState(false);
+  const [verificationBatches, setVerificationBatches] = useState([]);
+  const [verificationBatchesLoading, setVerificationBatchesLoading] = useState(false);
 
   const [moveForm, setMoveForm] = useState({
     movementType: 'receipt',
@@ -247,8 +257,14 @@ export const InventoryPage = () => {
     unit: '',
     periodStart: dayjs().format('YYYY-MM-DD'),
     periodEnd: dayjs().format('YYYY-MM-DD'),
-    consumptionQuantity: 0,
-    wastageQuantity: 0,
+    hasUnrecordedConsumption: 'no',
+    consumptionQuantity: '',
+    consumptionUnit: '',
+    consumptionReason: '',
+    hasWastage: 'no',
+    wastageQuantity: '',
+    wastageUnit: '',
+    wastageReason: '',
     discrepancyReason: '',
     remarks: ''
   });
@@ -258,7 +274,7 @@ export const InventoryPage = () => {
   const fetchInventory = async () => {
     try {
       setLoading(true);
-      const [itemsRes, vendorsRes, posRes, dashboardRes, ledgerRes, requestsRes, recipesRes, adjustmentsRes, suggestionsRes, unitsRes, verificationsRes, settingsRes, stockReceiptRequestsRes] = await Promise.all([
+      const [itemsRes, vendorsRes, posRes, dashboardRes, ledgerRes, requestsRes, recipesRes, adjustmentsRes, suggestionsRes, unitsRes, verificationsRes, settingsRes] = await Promise.all([
         api.get('/inventory/items', { params: { page: inventoryPage, limit: 100, includeInactive: canManageInventory ? 'true' : undefined } }),
         api.get('/inventory/vendors'),
         api.get('/inventory/purchase-orders'),
@@ -270,8 +286,7 @@ export const InventoryPage = () => {
         api.get('/inventory/reorder-suggestions'),
         api.get('/inventory/units', { params: canManageInventory ? { includeInactive: true } : {} }),
         api.get('/inventory/verifications'),
-        api.get('/inventory/settings'),
-        api.get('/inventory/stock-receipt-requests')
+        api.get('/inventory/settings')
       ]);
 
       const rawMaterialsRes = await api.get('/inventory/raw-materials', {
@@ -284,14 +299,16 @@ export const InventoryPage = () => {
           ? (Array.isArray(rawData) ? rawData : rawData?.materials || [])
           : [];
         const combined = new Map(regularItems.map((item) => [String(item._id), item]));
-        rawMaterials.forEach((item) => combined.set(String(item._id), item));
+        rawMaterials.forEach((item) => combined.set(String(item._id), {
+          ...combined.get(String(item._id)),
+          ...item
+        }));
         setItems([...combined.values()]);
       }
       if (unitsRes.data.success) setUnits(unitsRes.data.data || []);
       setInventoryPages(itemsRes.data.pagination?.pages || 1);
       if (vendorsRes.data.success) setVendors(vendorsRes.data.data);
       if (posRes.data.success) setPurchaseOrders(posRes.data.data);
-      if (stockReceiptRequestsRes.data.success) setStockReceiptRequests(stockReceiptRequestsRes.data.data || []);
       if (dashboardRes.data.success) setDashboard(dashboardRes.data.data);
       if (ledgerRes.data.success) setLedger(ledgerRes.data.data);
       if (requestsRes.data.success) setDepartmentRequests(requestsRes.data.data);
@@ -449,6 +466,31 @@ export const InventoryPage = () => {
     };
   }, [isAddItemOpen, itemForm.itemId, itemForm.location]);
 
+  useEffect(() => {
+    if (!isVerificationOpen || !verificationForm.itemId) {
+      setVerificationBatches([]);
+      setVerificationBatchesLoading(false);
+      return;
+    }
+    let active = true;
+    setVerificationBatchesLoading(true);
+    api.get('/inventory/batches', {
+      params: { itemId: verificationForm.itemId, location: 'Main Store' }
+    })
+      .then(({ data }) => {
+        if (active) setVerificationBatches(data.data || []);
+      })
+      .catch((error) => {
+        if (active) showApiErrorToast(error, 'Could not load batch history');
+      })
+      .finally(() => {
+        if (active) setVerificationBatchesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isVerificationOpen, verificationForm.itemId]);
+
   const handleCreateItem = async (e) => {
     e.preventDefault();
     try {
@@ -478,7 +520,6 @@ export const InventoryPage = () => {
       const previousAvailableQuantity = receiptBatches.reduce(
         (total, batch) => total + Math.max(0, Number(batch.remainingQuantity) || 0), 0
       );
-      const requiresApproval = previousAvailableQuantity > 0;
       const enteredStockDeduction = itemForm.existingStockDeduction === ''
         ? 0
         : Number(itemForm.existingStockDeduction);
@@ -509,25 +550,18 @@ export const InventoryPage = () => {
         wastageUnit: itemForm.wastageUnit,
         wastageReason: itemForm.wastageReason.trim()
       } : {};
-      const res = requiresApproval
-        ? await api.post('/inventory/stock-receipt-requests', {
-          ...receiptPayload,
-          existingStockDeductionQuantity: enteredStockDeduction,
-          existingStockDeductionUnit: itemForm.existingStockDeductionUnit || receiptBaseUnit,
-          ...wastagePayload
-        })
-        : await api.post('/inventory/movements', {
-          ...receiptPayload,
-          movementType: 'receipt',
-          autoGenerateBatchNumber: true,
-          ...wastagePayload
-        });
+      const res = await api.post('/inventory/movements', {
+        ...receiptPayload,
+        movementType: 'receipt',
+        autoGenerateBatchNumber: true,
+        existingStockDeductionQuantity: enteredStockDeduction,
+        existingStockDeductionUnit: itemForm.existingStockDeductionUnit || receiptBaseUnit,
+        ...wastagePayload
+      });
       if (res.data.success) {
         const batchNumber = res.data.data?.movement?.batchNumber;
         setIsAddItemOpen(false);
-        setMessage(requiresApproval
-          ? `${selectedMaterial.name} restock submitted for approval. The existing-stock deduction, fresh batch, and any wastage will be recorded after approval.`
-          : `${selectedMaterial.name} stock added${batchNumber ? ` as batch ${batchNumber}` : ''}${wastageBaseQuantity ? `; ${formatReceiptQuantity(wastageBaseQuantity)} ${receiptBaseUnit} wastage recorded` : ''}.`);
+        setMessage(`${selectedMaterial.name} stock added${batchNumber ? ` as batch ${batchNumber}` : ''}${existingStockDeduction ? `; ${formatReceiptQuantity(existingStockDeduction)} ${receiptBaseUnit} existing stock deducted` : ''}${wastageBaseQuantity ? `; ${formatReceiptQuantity(wastageBaseQuantity)} ${receiptBaseUnit} wastage recorded` : ''}.`);
         setItemForm({
           itemId: '',
           department: '',
@@ -608,16 +642,38 @@ export const InventoryPage = () => {
     }
   };
 
+  const getLastVerificationForItem = (itemId) => verifications
+    .filter((verification) => (
+      String(verification.itemId?._id || verification.itemId) === String(itemId)
+      && (verification.location || 'Main Store') === 'Main Store'
+    ))
+    .sort((left, right) => new Date(right.verifiedAt) - new Date(left.verifiedAt))[0];
+
+  const getVerificationPeriodStart = (item, lastVerified) => {
+    const lastVerifiedPeriodEnd = item?.lastVerifiedPeriodEnd || lastVerified?.periodEnd;
+    return lastVerifiedPeriodEnd
+      ? String(lastVerifiedPeriodEnd).slice(0, 10)
+      : dayjs(item?.createdAt || dayjs()).format('YYYY-MM-DD');
+  };
+
   const openStockVerification = (item) => {
     const now = dayjs().format('YYYY-MM-DD');
+    const selectedItem = item || items[0];
+    const lastVerified = selectedItem?._id ? getLastVerificationForItem(selectedItem._id) : null;
     setVerificationForm({
-      itemId: item?._id || items[0]?._id || '',
-      actualStock: item?.currentStock ?? '',
-      unit: item?.baseUnit || item?.unit || '',
-      periodStart: dayjs(item?.lastVerifiedAt || item?.createdAt || now).format('YYYY-MM-DD'),
+      itemId: selectedItem?._id || '',
+      actualStock: selectedItem?.currentStock ?? '',
+      unit: selectedItem?.baseUnit || selectedItem?.unit || '',
+      periodStart: getVerificationPeriodStart(selectedItem, lastVerified) || now,
       periodEnd: now,
-      consumptionQuantity: 0,
-      wastageQuantity: 0,
+      hasUnrecordedConsumption: 'no',
+      consumptionQuantity: '',
+      consumptionUnit: selectedItem?.baseUnit || selectedItem?.unit || '',
+      consumptionReason: '',
+      hasWastage: 'no',
+      wastageQuantity: '',
+      wastageUnit: selectedItem?.baseUnit || selectedItem?.unit || '',
+      wastageReason: '',
       discrepancyReason: '',
       remarks: ''
     });
@@ -634,7 +690,10 @@ export const InventoryPage = () => {
         ...verificationForm,
         actualStock: Number(verificationForm.actualStock),
         consumptionQuantity: Number(verificationForm.consumptionQuantity || 0),
-        wastageQuantity: Number(verificationForm.wastageQuantity || 0)
+        wastageQuantity: Number(verificationForm.wastageQuantity || 0),
+        consumptionUnit: verificationForm.consumptionUnit || verificationForm.unit,
+        wastageUnit: verificationForm.wastageUnit || verificationForm.unit,
+        timezoneOffsetMinutes: new Date().getTimezoneOffset()
       });
       setIsVerificationOpen(false);
       setMessage(`Physical stock verification saved for ${item.name}.`);
@@ -714,24 +773,24 @@ export const InventoryPage = () => {
       setVendorPurchases(data.data || []);
       setIsVendorHistoryOpen(true);
     } catch (err) {
-      showApiErrorToast(err, 'Could not load supplier purchase history');
+      showApiErrorToast(err, 'Could not load vendor purchase history');
     }
   };
 
-  const handleRecordSupplierPayment = async (e) => {
+  const handleRecordVendorPayment = async (e) => {
     e.preventDefault();
     if (!selectedVendor) return;
     try {
       await api.post(`/inventory/vendors/${selectedVendor._id}/payments`, {
         ...paymentForm,
         amount: Number(paymentForm.amount),
-        idempotencyKey: `supplier-payment-${selectedVendor._id}-${Date.now()}`
+        idempotencyKey: `vendor-payment-${selectedVendor._id}-${Date.now()}`
       });
-      setIsSupplierPaymentOpen(false);
-      setMessage('Supplier payment recorded.');
+      setIsVendorPaymentOpen(false);
+      setMessage('Vendor payment recorded.');
       fetchInventory();
     } catch (err) {
-      showApiErrorToast(err, 'Could not record supplier payment');
+      showApiErrorToast(err, 'Could not record vendor payment');
     }
   };
 
@@ -789,6 +848,33 @@ export const InventoryPage = () => {
     setIsPurchaseOrderOpen(true);
   };
 
+  const toggleItemBatches = async (item) => {
+    if (expandedBatchItemId === item._id) {
+      setExpandedBatchItemId('');
+      return;
+    }
+
+    setExpandedBatchItemId(item._id);
+    if (Object.prototype.hasOwnProperty.call(batchesByItem, item._id) && !batchErrorsByItem[item._id]) {
+      return;
+    }
+
+    setLoadingBatchesByItem((current) => ({ ...current, [item._id]: true }));
+    setBatchErrorsByItem((current) => ({ ...current, [item._id]: '' }));
+    try {
+      const { data } = await api.get('/inventory/batches', { params: { itemId: item._id } });
+      setBatchesByItem((current) => ({ ...current, [item._id]: data.data || [] }));
+    } catch (error) {
+      setBatchErrorsByItem((current) => ({
+        ...current,
+        [item._id]: 'Could not load batch details. Please try again.'
+      }));
+      showApiErrorToast(error, 'Could not load inventory batches');
+    } finally {
+      setLoadingBatchesByItem((current) => ({ ...current, [item._id]: false }));
+    }
+  };
+
   const handleReceivePO = async (event) => {
     event.preventDefault();
     if (!selectedPO) return;
@@ -814,7 +900,7 @@ export const InventoryPage = () => {
   const handleApprovePurchaseOrder = async (poId) => {
     try {
       await api.patch(`/inventory/purchase-orders/${poId}/approve`);
-      setMessage('Purchase order approved and issued to supplier.');
+      setMessage('Purchase order approved and issued to vendor.');
       fetchInventory();
     } catch (err) {
       showApiErrorToast(err, 'Purchase order approval failed');
@@ -912,17 +998,24 @@ export const InventoryPage = () => {
     }
   };
 
-  const handleReviewStockReceiptRequest = async (request, decision) => {
-    try {
-      const { data } = await api.patch(`/inventory/stock-receipt-requests/${request._id}/review`, { decision });
-      setMessage(decision === 'approve'
-        ? `Restock approved for ${request.itemId?.name || 'raw material'}; new batch ${data.data?.batchNumber || ''} has been added.`
-        : `Restock request rejected for ${request.itemId?.name || 'raw material'}.`);
-      fetchInventory();
-    } catch (err) {
-      showApiErrorToast(err, 'Could not review restock request');
-    }
-  };
+  const adjustmentRows = adjustments.flatMap((entry) => {
+    const movement = entry.recordType === 'wastage' ? entry : entry.movementId;
+    const allocations = movement?.batchAllocations?.length
+      ? movement.batchAllocations
+      : [null];
+    return allocations.map((allocation, index) => ({
+      id: `${entry._id}-${index}`,
+      entry,
+      movement,
+      allocation,
+      quantity: allocation?.quantity ?? movement?.quantity ?? entry.quantity,
+      unit: movement?.baseUnit || entry.baseUnit || entry.unit || entry.itemId?.baseUnit || entry.itemId?.unit,
+      batchNumber: allocation
+        ? allocation.batchId?.batchNumber || (allocation.source === 'legacy' ? 'Legacy stock' : 'Unknown batch')
+        : movement?.batchNumber || '—',
+      loggedAt: movement?.createdAt || entry.createdAt
+    }));
+  });
 
   const loadMinibarRoom = async (roomId) => {
     setMinibarRoomId(roomId);
@@ -1007,7 +1100,19 @@ export const InventoryPage = () => {
     try {
       const XLSX = await import('@e965/xlsx');
       const workbook = XLSX.utils.book_new();
-      if (reportType === 'financial') {
+      if (reportType === 'profit-loss') {
+        const summary = report[0];
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet([
+          { Metric: 'Recipe-linked sales revenue', Value: summary.salesRevenue },
+          { Metric: 'Cost of goods sold', Value: summary.costOfGoodsSold },
+          { Metric: 'Gross profit / (loss)', Value: summary.grossProfit },
+          { Metric: 'Wastage and expiry loss', Value: summary.inventoryLoss },
+          { Metric: 'Total inventory expenses', Value: summary.totalInventoryExpenses },
+          { Metric: 'Net profit / (loss)', Value: summary.netProfit },
+          { Metric: 'Stock purchases (inventory asset)', Value: summary.stockPurchasesNotExpensed }
+        ]), 'Profit and Loss');
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summary.menuItemBreakdown || []), 'Menu Item Profitability');
+      } else if (reportType === 'financial') {
         const summary = report[0];
         XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet([
           { Metric: 'Total purchase value', Value: summary.totalPurchaseValue },
@@ -1049,7 +1154,34 @@ export const InventoryPage = () => {
     document.text(`Inventory ${reportType.replace(/-/g, ' ')} report`, 14, 16);
     document.setFontSize(9);
     document.text(`Generated ${dayjs().format('YYYY-MM-DD HH:mm')}`, 14, 22);
-    if (reportType === 'financial') {
+    if (reportType === 'profit-loss') {
+      const summary = report[0];
+      autoTable(document, {
+        startY: 28,
+        head: [['Profit & Loss', 'Amount']],
+        body: [
+          ['Recipe-linked sales revenue (excludes tax)', formatCurrency(summary.salesRevenue || 0)],
+          ['Cost of goods sold', formatCurrency(summary.costOfGoodsSold || 0)],
+          ['Gross profit / (loss)', formatCurrency(summary.grossProfit || 0)],
+          ['Wastage and expiry loss', formatCurrency(summary.inventoryLoss || 0)],
+          ['Total inventory expenses', formatCurrency(summary.totalInventoryExpenses || 0)],
+          ['Net profit / (loss)', formatCurrency(summary.netProfit || 0)],
+          ['Stock purchases (inventory asset; not expensed)', formatCurrency(summary.stockPurchasesNotExpensed || 0)]
+        ]
+      });
+      autoTable(document, {
+        startY: document.lastAutoTable.finalY + 8,
+        head: [['Menu item', 'Quantity sold', 'Net sales', 'Recipe cost', 'Gross profit / (loss)', 'Gross margin']],
+        body: (summary.menuItemBreakdown || []).map((item) => [
+          item.name,
+          item.quantitySold,
+          formatCurrency(item.salesRevenue),
+          formatCurrency(item.foodCost),
+          formatCurrency(item.grossProfit),
+          item.grossMarginPercent == null ? '—' : `${item.grossMarginPercent}%`
+        ])
+      });
+    } else if (reportType === 'financial') {
       const summary = report[0];
       autoTable(document, {
         startY: 28,
@@ -1153,6 +1285,21 @@ export const InventoryPage = () => {
     0,
     receiptRemainingAfterReceipt - receiptWastageBaseQuantity
   );
+  const selectedVerificationItem = items.find((item) => item._id === verificationForm.itemId);
+  const verificationBaseUnit = selectedVerificationItem?.baseUnit || selectedVerificationItem?.unit || '';
+  const verificationUnitFactor = conversionFactorForItem(selectedVerificationItem, verificationForm.unit);
+  const verificationExpectedStock = Number(selectedVerificationItem?.currentStock) || 0;
+  const verificationActualStock = Math.max(0, Number(verificationForm.actualStock) || 0) * verificationUnitFactor;
+  const verificationConsumption = Math.max(0, Number(verificationForm.consumptionQuantity) || 0)
+    * conversionFactorForItem(selectedVerificationItem, verificationForm.consumptionUnit || verificationForm.unit);
+  const verificationWastage = Math.max(0, Number(verificationForm.wastageQuantity) || 0)
+    * conversionFactorForItem(selectedVerificationItem, verificationForm.wastageUnit || verificationForm.unit);
+  const verificationReduction = Math.max(0, verificationExpectedStock - verificationActualStock);
+  const verificationDiscrepancy = Math.max(
+    0,
+    verificationReduction - verificationConsumption - verificationWastage
+  );
+  const verificationGain = Math.max(0, verificationActualStock - verificationExpectedStock);
   const formatReceiptQuantity = (quantity) => new Intl.NumberFormat(undefined, {
     maximumFractionDigits: 8
   }).format(Number(quantity) || 0);
@@ -1187,7 +1334,7 @@ export const InventoryPage = () => {
                 New Purchase
               </Button>
               <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={Truck} onClick={() => setIsAddVendorOpen(true)}>
-                Add Supplier
+                Add Vendor
               </Button>
               <Button className="w-full sm:w-auto" variant="primary" size="sm" icon={PlusCircle} onClick={() => setIsAddItemOpen(true)}>
                 Receive Raw Material
@@ -1213,10 +1360,9 @@ export const InventoryPage = () => {
             { id: 'items', label: `Inventory Items (${items.length})`, icon: Boxes },
             { id: 'ledger', label: 'Stock Management', icon: ArrowLeftRight },
             { id: 'verifications', label: `Stock Verification (${dashboard?.pendingStockVerifications || 0} pending)`, icon: ClipboardList },
-            { id: 'vendors', label: `Suppliers (${vendors.length})`, icon: Truck },
+            { id: 'vendors', label: `Vendors (${vendors.length})`, icon: Truck },
             { id: 'pos', label: `Purchase Orders (${purchaseOrders.length})`, icon: PackageCheck },
             { id: 'requests', label: `Department Requests (${departmentRequests.length})`, icon: ClipboardList },
-            { id: 'restock-approvals', label: `Restock Approvals (${stockReceiptRequests.filter((request) => request.status === 'pending').length})`, icon: PackageCheck },
             { id: 'adjustments', label: `Adjustments (${adjustments.length})`, icon: AlertTriangle },
             { id: 'recipes', label: `Recipes (${recipes.filter((recipe) => recipe.isActive).length})`, icon: Utensils },
             { id: 'minibar', label: 'Minibar', icon: PackageCheck },
@@ -1457,90 +1603,247 @@ export const InventoryPage = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
+              <table className="w-full min-w-[900px] table-fixed break-words whitespace-normal text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Item Name</th>
                     <th className="pb-3">SKU / Code</th>
                     <th className="pb-3">Category</th>
                     <th className="pb-3">Current Stock</th>
-                    <th className="pb-3">Unit Cost</th>
                     <th className="pb-3">Stock Health</th>
-                    <th className="pb-3 text-right">Actions</th>
+                    <th className="w-[250px] pb-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {visibleItems.map((it) => {
                     const availableStock = it.availableStock ?? it.currentStock;
                     const isLow = availableStock <= it.minStockThreshold;
+                    const itemBatches = batchesByItem[it._id] || [];
+                    const openBatchCount = itemBatches.filter((batch) => batch.remainingQuantity > 0).length;
                     return (
-                      <tr key={it._id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3.5 font-bold text-slate-900">
-                          {it.name}
-                          {!it.isActive && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Inactive</span>}
-                        </td>
-                        <td className="py-3.5 font-mono text-slate-500">{it.code}</td>
-                        <td className="py-3.5 capitalize text-slate-600">
-                          {it.category.replace(/_/g, ' ')}
-                        </td>
-                        <td className="py-3.5 font-bold text-slate-900">
-                          {formatInventoryQuantity(availableStock, it)}
-                        </td>
-                        <td className="py-3.5 text-slate-700 font-mono">{formatCurrency(it.unitCost)}<span className="ml-1 text-[10px] text-slate-400">/ {it.baseUnit || it.unit}</span></td>
-                        <td className="py-3.5">
-                          {isLow ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
-                              <AlertTriangle className="w-3 h-3 text-rose-600" />
-                              Low Stock (&le; {it.minStockThreshold} {it.baseUnit || it.unit})
-                            </span>
-                          ) : (
-                            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                              Adequate Stock
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3.5 text-right">
-                          {canManageInventory && (
-                            <div className="flex flex-wrap justify-end gap-1">
-                              <Button size="sm" variant="outline" onClick={() => {
-                                setEditingItem(it);
-                                setItemEditForm({
-                                  name: it.name || '',
-                                  code: it.code || '',
-                                  category: it.category || 'other',
-                                  description: it.description || '',
-                                  minStockThreshold: it.minStockThreshold ?? 0,
-                                  maxStockLevel: it.maxStockLevel ?? '',
-                                  reorderQuantity: it.reorderQuantity ?? 0,
-                                  stockVerificationIntervalDays: it.stockVerificationIntervalDays ?? '',
-                                  location: it.location || 'Main Store',
-                                  trackExpiry: Boolean(it.trackExpiry),
-                                  trackBatchNumber: Boolean(it.trackBatchNumber),
-                                  isActive: Boolean(it.isActive)
-                                });
-                              }}>Edit</Button>
-                              <Button size="sm" variant={it.isActive ? 'danger' : 'success'} onClick={() => toggleItemStatus(it)}>
-                                {it.isActive ? 'Deactivate' : 'Activate'}
-                              </Button>
-                              {it.isActive && <Button
+                      <React.Fragment key={it._id}>
+                        <tr className="hover:bg-slate-50 transition-colors">
+                          <td className="py-3.5 font-bold text-slate-900">
+                            {it.name}
+                            {!it.isActive && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Inactive</span>}
+                          </td>
+                          <td className="py-3.5 font-mono text-slate-500">{it.code}</td>
+                          <td className="py-3.5 capitalize text-slate-600">
+                            {it.category.replace(/_/g, ' ')}
+                          </td>
+                          <td className="py-3.5 font-bold text-slate-900">
+                            {formatInventoryQuantity(availableStock, it)}
+                          </td>
+                          <td className="py-3.5">
+                            {isLow ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                                <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                Low Stock (&le; {it.minStockThreshold} {it.baseUnit || it.unit})
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                Adequate Stock
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3.5 pr-1">
+                            <div className={`grid ${canManageInventory ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                              <Button
                                 size="sm"
-                                variant="secondary"
-                                onClick={() => {
-                                  setSelectedItemForMove(it);
-                                  setMoveForm({
-                                    ...moveForm,
-                                    unit: it.baseUnit || it.unit,
-                                    quantity: 0
-                                  });
-                                  setIsMovementOpen(true);
-                                }}
+                                variant="outline"
+                                className="h-9 w-full whitespace-nowrap px-2"
+                                icon={expandedBatchItemId === it._id ? ChevronUp : ChevronDown}
+                                aria-expanded={expandedBatchItemId === it._id}
+                                onClick={() => toggleItemBatches(it)}
                               >
-                                Adjust Stock
-                              </Button>}
+                                {expandedBatchItemId === it._id ? 'Hide batches' : 'Batches'}
+                              </Button>
+                              {canManageInventory && (
+                                <>
+                                  <Button size="sm" variant="outline" className="h-9 w-full px-2" icon={Pencil} onClick={() => {
+                                    setEditingItem(it);
+                                    setItemEditForm({
+                                      name: it.name || '',
+                                      code: it.code || '',
+                                      category: it.category || 'other',
+                                      description: it.description || '',
+                                      minStockThreshold: it.minStockThreshold ?? 0,
+                                      maxStockLevel: it.maxStockLevel ?? '',
+                                      reorderQuantity: it.reorderQuantity ?? 0,
+                                      stockVerificationIntervalDays: it.stockVerificationIntervalDays ?? '',
+                                      location: it.location || 'Main Store',
+                                      trackExpiry: Boolean(it.trackExpiry),
+                                      trackBatchNumber: Boolean(it.trackBatchNumber),
+                                      isActive: Boolean(it.isActive)
+                                    });
+                                  }}>
+                                    Edit
+                                  </Button>
+                                  <Button size="sm" variant={it.isActive ? 'danger' : 'success'} className="h-9 w-full px-2" icon={Power} onClick={() => toggleItemStatus(it)}>
+                                    {it.isActive ? 'Deactivate' : 'Activate'}
+                                  </Button>
+                                  {it.isActive && <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="h-9 w-full px-2"
+                                    icon={SlidersHorizontal}
+                                    onClick={() => {
+                                      setSelectedItemForMove(it);
+                                      setMoveForm({
+                                        ...moveForm,
+                                        unit: it.baseUnit || it.unit,
+                                        quantity: 0
+                                      });
+                                      setIsMovementOpen(true);
+                                    }}
+                                  >
+                                    Adjust
+                                  </Button>}
+                                </>
+                              )}
                             </div>
-                          )}
-                        </td>
-                      </tr>
+                          </td>
+                        </tr>
+                        {expandedBatchItemId === it._id && (
+                          <tr>
+                            <td colSpan={6} className="bg-[#f8f5ef] p-3 sm:p-5">
+                              <div className="overflow-hidden rounded-2xl border border-[#e8ddcc] bg-gradient-to-br from-[#fffdfa] via-white to-[#faf7f0] shadow-[0_8px_28px_rgba(59,36,26,0.06)]">
+                                <div className="flex flex-col gap-3 border-b border-[#eee5d8] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                                  <div className="flex items-center gap-3">
+                                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f3eadb] text-[#9a6b2f]">
+                                      <PackageCheck className="h-5 w-5" />
+                                    </span>
+                                    <div>
+                                      <p className="text-sm font-bold tracking-wide text-[#3b241a]">Batch ledger</p>
+                                      <p className="mt-0.5 text-xs text-slate-500">
+                                        Purchase history and unit costs · Base unit: {it.baseUnit || it.unit}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {!loadingBatchesByItem[it._id] && !batchErrorsByItem[it._id] && (
+                                    <div className="flex flex-wrap gap-2 text-xs">
+                                      <span className="rounded-full border border-[#eadfce] bg-white px-3 py-1.5 font-medium text-slate-600">
+                                        {itemBatches.length} {itemBatches.length === 1 ? 'batch' : 'batches'}
+                                      </span>
+                                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 font-semibold text-emerald-800">
+                                        {openBatchCount} open
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              {loadingBatchesByItem[it._id] ? (
+                                <div className="grid gap-3 p-4 md:grid-cols-2 sm:p-5">
+                                  {[0, 1].map((placeholder) => (
+                                    <div key={placeholder} className="animate-pulse rounded-xl border border-[#eee5d8] bg-white p-4">
+                                      <div className="h-4 w-1/3 rounded bg-slate-100" />
+                                      <div className="mt-4 grid grid-cols-2 gap-3">
+                                        <div className="h-12 rounded-lg bg-slate-50" />
+                                        <div className="h-12 rounded-lg bg-slate-50" />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : batchErrorsByItem[it._id] ? (
+                                <div className="m-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:m-5">
+                                  {batchErrorsByItem[it._id]}
+                                </div>
+                              ) : !itemBatches.length ? (
+                                <div className="px-4 py-10 text-center sm:px-5">
+                                  <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-[#f6f0e5] text-[#9a6b2f]">
+                                    <PackageCheck className="h-5 w-5" />
+                                  </span>
+                                  <p className="mt-3 text-sm font-semibold text-slate-700">No batch history yet</p>
+                                  <p className="mt-1 text-xs text-slate-500">Received batches will appear here with their purchase and cost details.</p>
+                                </div>
+                              ) : (
+                                <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3 sm:p-5">
+                                  {itemBatches.map((batch, batchIndex) => (
+                                    <article key={batch._id} className="group overflow-hidden rounded-xl border border-[#e9e0d3] bg-white shadow-[0_3px_12px_rgba(59,36,26,0.035)] transition duration-200 hover:-translate-y-0.5 hover:border-[#d9c5a5] hover:shadow-[0_10px_24px_rgba(59,36,26,0.09)]">
+                                      <div className="flex items-start justify-between gap-3 border-b border-[#f0ebe3] px-4 py-3.5">
+                                        <div className="flex min-w-0 items-center gap-3">
+                                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#f8f2e8] text-xs font-bold text-[#8b612b]">
+                                            {String(batchIndex + 1).padStart(2, '0')}
+                                          </span>
+                                          <div className="min-w-0">
+                                            <p className="truncate text-sm font-bold text-[#3b241a]">{batch.batchNumber || 'Unnumbered batch'}</p>
+                                            <p className="mt-0.5 text-[11px] text-slate-500">
+                                              {batch.location || 'Main Store'} · {dayjs(batch.receivedAt).format('MMM D, YYYY')}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                                          batch.remainingQuantity > 0
+                                            ? 'bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200'
+                                            : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
+                                        }`}>
+                                          {batch.remainingQuantity > 0 ? 'Open' : 'Exhausted'}
+                                        </span>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2.5 p-3.5">
+                                        <div className="rounded-lg bg-[#faf7f1] p-3">
+                                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Remaining</p>
+                                          <p className="mt-1 text-sm font-bold text-[#3b241a]">{formatInventoryQuantity(batch.remainingQuantity, it)}</p>
+                                        </div>
+                                        <div className="rounded-lg bg-[#faf7f1] p-3">
+                                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Cost / base unit</p>
+                                          <p className="mt-1 text-sm font-bold text-[#3b241a]">{formatCurrency(batch.unitCost)} <span className="text-xs font-medium text-slate-500">/ {it.baseUnit || it.unit}</span></p>
+                                        </div>
+                                      </div>
+                                      <div className="px-4 pb-4">
+                                        <div className="rounded-lg border border-[#eee7dc]">
+                                          <div className="grid grid-cols-2 divide-x divide-[#eee7dc]">
+                                            <div className="p-3">
+                                              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Purchased as</p>
+                                              <p className="mt-1 text-xs font-semibold text-slate-800">
+                                            {batch.purchaseQuantity != null
+                                              && Number.isFinite(Number(batch.purchaseQuantity))
+                                              && batch.purchaseUnit
+                                              ? `${batch.purchaseQuantity} ${batch.purchaseUnit}`
+                                              : `Base units (${it.baseUnit || it.unit})`}
+                                              </p>
+                                            </div>
+                                            <div className="p-3">
+                                              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Purchase price</p>
+                                              <p className="mt-1 text-xs font-semibold text-slate-800">
+                                            {batch.purchaseUnitCost != null
+                                              && Number.isFinite(Number(batch.purchaseUnitCost))
+                                              && batch.purchaseUnit
+                                              ? `${formatCurrency(batch.purchaseUnitCost)} / ${batch.purchaseUnit}`
+                                              : 'Purchase price not recorded'}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <div className="grid grid-cols-2 divide-x border-t border-[#eee7dc] divide-[#eee7dc]">
+                                            <div className="p-3">
+                                              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Purchase total</p>
+                                              <p className="mt-1 text-xs font-bold text-[#3b241a]">
+                                            {batch.purchaseAmount != null
+                                              ? formatCurrency(batch.purchaseAmount)
+                                              : 'Purchase total not recorded'}
+                                              </p>
+                                            </div>
+                                            <div className="p-3">
+                                              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Vendor</p>
+                                              <p className="mt-1 truncate text-xs font-semibold text-slate-800">{batch.vendorId?.name || '—'}</p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        {(batch.invoiceNumber || batch.expiryDate) && (
+                                          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                                            {batch.invoiceNumber && <span>Invoice {batch.invoiceNumber}</span>}
+                                            {batch.expiryDate && <span>Expires {dayjs(batch.expiryDate).format('MMM D, YYYY')}</span>}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </article>
+                                  ))}
+                                </div>
+                              )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
@@ -1579,9 +1882,9 @@ export const InventoryPage = () => {
                 <Button className="mt-2 w-full" size="sm" variant="secondary" onClick={() => {
                   setSelectedVendor(v);
                   setPaymentForm({ amount: '', paymentMethod: 'bank_transfer', referenceNumber: '', invoiceNumber: '', notes: '' });
-                  setIsSupplierPaymentOpen(true);
+                  setIsVendorPaymentOpen(true);
                 }}>
-                  Record supplier payment
+                  Record vendor payment
                 </Button>
               )}
             </Card>
@@ -1590,77 +1893,108 @@ export const InventoryPage = () => {
       )}
 
       {activeTab === 'pos' && (
-        <Card>
-          {purchaseOrders.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 text-xs">
-              No purchase orders recorded yet.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
-                    <th className="pb-3">PO Number</th>
-                    <th className="pb-3">Vendor</th>
-                    <th className="pb-3">Total Cost</th>
-                    <th className="pb-3">Status</th>
-                    <th className="pb-3">Date</th>
-                    <th className="pb-3 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {purchaseOrders.map((po) => (
-                    <tr key={po._id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 font-mono font-bold text-slate-900">{po.poNumber}</td>
-                      <td className="py-3 font-semibold text-slate-800">{po.vendorId?.name || 'Vendor'}</td>
-                      <td className="py-3 font-black text-slate-900">{formatCurrency(po.totalAmount)}</td>
-                      <td className="py-3">
-                        <Badge variant={po.status}>{po.status}</Badge>
-                      </td>
-                      <td className="py-3 text-slate-500">{dayjs(po.createdAt).format('YYYY-MM-DD')}</td>
-                      <td className="py-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          {canManageInventory && ['draft', 'pending_approval'].includes(po.status) && (
-                            <Button size="sm" variant="success" onClick={() => handleApprovePurchaseOrder(po._id)}>
-                              Approve
-                            </Button>
-                          )}
-                          {canManageInventory && ['ordered', 'partially_received'].includes(po.status) && (
-                            <Button
-                              size="sm"
-                              variant="success"
-                              icon={PackageCheck}
-                              onClick={() => {
-                                setSelectedPO(po);
-                                setPurchaseDate(dayjs().format('YYYY-MM-DD'));
-                                setReceivingLines(po.items.map((line) => ({
-                                  itemId: line.itemId?._id || line.itemId,
-                                  name: line.itemName,
-                                  unit: line.unit || line.itemId?.unit || '',
-                                  conversionFactor: line.conversionFactor || 1,
-                                  remaining: Math.max(0, line.quantity - (line.receivedQuantity || 0)),
-                                  receivedQuantity: Math.max(0, line.quantity - (line.receivedQuantity || 0)),
-                                  acceptedQuantity: Math.max(0, line.quantity - (line.receivedQuantity || 0)),
-                                  damagedQuantity: 0,
-                                  rejectedQuantity: 0,
-                                  batchNumber: '',
-                                  expiryDate: ''
-                                })));
-                                setIsReceivingOpen(true);
-                              }}
-                            >
-                              Receive Goods
-                            </Button>
-                          )}
-                        </div>
-                      </td>
+        <div className="space-y-4">
+          <Card title={`Below-threshold items (${reorderSuggestions.length})`} subtitle="Items below their minimum stock level, excluding expired stock and quantities already on open purchase orders">
+            {reorderSuggestions.length === 0 ? (
+              <p className="py-4 text-center text-sm text-slate-500">No items are currently below their stock threshold.</p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {reorderSuggestions.map((suggestion) => (
+                  <div key={suggestion._id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="font-semibold text-slate-800">{suggestion.name} <span className="font-normal text-slate-500">({suggestion.code})</span></p>
+                      <p className="text-xs text-slate-600">
+                        Available {formatInventoryQuantity(suggestion.availableStock, suggestion)}
+                        {' / Threshold '}
+                        {formatInventoryQuantity(suggestion.minStockThreshold, suggestion)}
+                        {' · On order '}
+                        {formatInventoryQuantity(suggestion.pendingPurchaseQuantity, suggestion)}
+                        {' · Suggested '}
+                        {suggestion.suggestedQuantity} {suggestion.suggestedUnit}
+                      </p>
+                    </div>
+                    {canManageInventory && (
+                      <Button size="sm" variant="outline" onClick={() => prepareSuggestedPurchase(suggestion)}>
+                        Create purchase order
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+          <Card>
+            {purchaseOrders.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 text-xs">
+                No purchase orders recorded yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
+                      <th className="pb-3">PO Number</th>
+                      <th className="pb-3">Vendor</th>
+                      <th className="pb-3">Total Cost</th>
+                      <th className="pb-3">Status</th>
+                      <th className="pb-3">Date</th>
+                      <th className="pb-3 text-right">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {purchaseOrders.map((po) => (
+                      <tr key={po._id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-3 font-mono font-bold text-slate-900">{po.poNumber}</td>
+                        <td className="py-3 font-semibold text-slate-800">{po.vendorId?.name || 'Vendor'}</td>
+                        <td className="py-3 font-black text-slate-900">{formatCurrency(po.totalAmount)}</td>
+                        <td className="py-3">
+                          <Badge variant={po.status}>{po.status}</Badge>
+                        </td>
+                        <td className="py-3 text-slate-500">{dayjs(po.createdAt).format('YYYY-MM-DD')}</td>
+                        <td className="py-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            {canManageInventory && ['draft', 'pending_approval'].includes(po.status) && (
+                              <Button size="sm" variant="success" onClick={() => handleApprovePurchaseOrder(po._id)}>
+                                Approve
+                              </Button>
+                            )}
+                            {canManageInventory && ['ordered', 'partially_received'].includes(po.status) && (
+                              <Button
+                                size="sm"
+                                variant="success"
+                                icon={PackageCheck}
+                                onClick={() => {
+                                  setSelectedPO(po);
+                                  setPurchaseDate(dayjs().format('YYYY-MM-DD'));
+                                  setReceivingLines(po.items.map((line) => ({
+                                    itemId: line.itemId?._id || line.itemId,
+                                    name: line.itemName,
+                                    unit: line.unit || line.itemId?.unit || '',
+                                    conversionFactor: line.conversionFactor || 1,
+                                    remaining: Math.max(0, line.quantity - (line.receivedQuantity || 0)),
+                                    receivedQuantity: Math.max(0, line.quantity - (line.receivedQuantity || 0)),
+                                    acceptedQuantity: Math.max(0, line.quantity - (line.receivedQuantity || 0)),
+                                    damagedQuantity: 0,
+                                    rejectedQuantity: 0,
+                                    batchNumber: '',
+                                    expiryDate: ''
+                                  })));
+                                  setIsReceivingOpen(true);
+                                }}
+                              >
+                                Receive Goods
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
       )}
 
       {activeTab === 'ledger' && (
@@ -1761,112 +2095,41 @@ export const InventoryPage = () => {
       )}
 
       {activeTab === 'adjustments' && (
-        <Card title="Stock Adjustments & Wastage" subtitle="All adjustments require approval before stock is changed">
+        <Card title="Stock Adjustments & Wastage" subtitle="Pending adjustments await approval; logged wastage shows its batch and time">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
-              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Date</th><th className="pb-3">Item</th><th className="pb-3">Quantity</th><th className="pb-3">Reason</th><th className="pb-3">Department</th><th className="pb-3">Reported by</th><th className="pb-3">Status</th><th className="pb-3 text-right">Action</th></tr></thead>
+            <table className="w-full min-w-[1100px] table-fixed break-words whitespace-normal text-left text-xs">
+              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Logged at</th><th className="pb-3">Item</th><th className="pb-3">Batch</th><th className="pb-3">Quantity</th><th className="pb-3">Reason</th><th className="pb-3">Department</th><th className="pb-3">Reported / logged by</th><th className="pb-3">Status</th><th className="pb-3 text-right">Action</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
-                {adjustments.map((adjustment) => (
-                  <tr key={adjustment._id}>
-                    <td className="py-3">{dayjs(adjustment.createdAt).format('YYYY-MM-DD')}</td>
-                    <td className="font-semibold">{adjustment.itemId?.name || 'Item'}</td>
-                    <td>{adjustment.quantity} {adjustment.unit || adjustment.itemId?.baseUnit || adjustment.itemId?.unit}</td>
-                    <td className="capitalize">{adjustment.reason.replace(/_/g, ' ')}</td>
-                    <td>{adjustment.department || '—'}</td>
-                    <td>{adjustment.reportedBy?.name || '—'}</td>
-                    <td><Badge variant={adjustment.status}>{adjustment.status}</Badge></td>
+                {adjustmentRows.map(({ id, entry, movement, quantity, unit, batchNumber, loggedAt }) => {
+                  const isWastageMovement = entry.recordType === 'wastage';
+                  const reason = entry.reason
+                    || movement?.metadata?.reason
+                    || movement?.notes
+                    || (movement?.movementType === 'expiry' ? 'expired' : 'wastage');
+                  const reporter = isWastageMovement ? movement?.recordedBy : entry.reportedBy;
+                  const status = isWastageMovement ? 'Logged' : entry.status;
+                  return (
+                  <tr key={id}>
+                    <td className="py-3">{dayjs(loggedAt).format('YYYY-MM-DD HH:mm:ss')}</td>
+                    <td className="font-semibold">{entry.itemId?.name || 'Item'}</td>
+                    <td>{batchNumber}</td>
+                    <td>{quantity} {unit}</td>
+                    <td className="capitalize">{String(reason).replace(/_/g, ' ')}</td>
+                    <td>{entry.department || movement?.department || '—'}</td>
+                    <td>{reporter?.name || '—'}</td>
+                    <td><Badge variant={status.toLowerCase()}>{status}</Badge></td>
                     <td className="text-right">
-                      {canManageInventory && adjustment.status === 'pending' && (
+                      {canManageInventory && !isWastageMovement && entry.status === 'pending' && (
                         <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="success" onClick={() => handleReviewAdjustment(adjustment, 'approve')}>Approve</Button>
-                          <Button size="sm" variant="danger" onClick={() => handleReviewAdjustment(adjustment, 'reject')}>Reject</Button>
+                          <Button size="sm" variant="success" onClick={() => handleReviewAdjustment(entry, 'approve')}>Approve</Button>
+                          <Button size="sm" variant="danger" onClick={() => handleReviewAdjustment(entry, 'reject')}>Reject</Button>
                         </div>
                       )}
                     </td>
                   </tr>
-                ))}
-                {!adjustments.length && <tr><td colSpan="8" className="py-10 text-center text-slate-400">No adjustments reported.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {activeTab === 'restock-approvals' && (
-        <Card title="Raw Material Restock Approvals" subtitle="Review the existing stock deduction and new receipt together. Both changes are applied only after approval.">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-100 uppercase text-slate-400">
-                  <th className="pb-3">Date / Material</th>
-                  <th className="pb-3">Existing stock / deduction</th>
-                  <th className="pb-3">Requested restock</th>
-                  <th className="pb-3">Vendor / Location</th>
-                  <th className="pb-3">Requested by</th>
-                  <th className="pb-3">Status</th>
-                  <th className="pb-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {stockReceiptRequests.map((request) => (
-                  <tr key={request._id}>
-                    <td className="py-3">
-                      <div className="font-semibold">{request.itemId?.name || 'Raw material'}</div>
-                      <div className="text-slate-500">{dayjs(request.createdAt).format('YYYY-MM-DD')}</div>
-                    </td>
-                    <td>
-                      <div className="font-semibold">
-                        {formatReceiptQuantity(request.previousAvailableQuantity)} {request.itemId?.baseUnit || request.itemId?.unit}
-                      </div>
-                      <div className="mt-1 text-slate-600">
-                        Deduct {formatReceiptQuantity(request.existingStockDeduction || 0)} {request.itemId?.baseUnit || request.itemId?.unit}
-                      </div>
-                      <div className="text-slate-500">
-                        Remaining old stock: {formatReceiptQuantity(
-                          request.remainingPreviousStockAfterDeduction
-                            ?? Math.max(0, request.previousAvailableQuantity - (request.existingStockDeduction || 0))
-                        )} {request.itemId?.baseUnit || request.itemId?.unit}
-                      </div>
-                      <details className="mt-1">
-                        <summary className="cursor-pointer text-sky-700">Batch breakdown</summary>
-                        <ul className="mt-1 space-y-1 text-slate-500">
-                          {request.previousBatches.map((batch) => (
-                            <li key={batch.batchId}>
-                              {batch.batchNumber || 'Unnumbered'}: {formatReceiptQuantity(batch.remainingQuantity)} {request.itemId?.baseUnit || request.itemId?.unit}
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    </td>
-                    <td>
-                      {formatReceiptQuantity(request.quantity)} {request.unit}
-                      <div className="text-slate-500">{formatCurrency(request.quantity * request.purchaseUnitPrice)} total</div>
-                      {request.wastageQuantity > 0 && (
-                        <div className="mt-1 text-rose-700">
-                          Wastage {formatReceiptQuantity(request.wastageQuantity)} {request.itemId?.baseUnit || request.itemId?.unit}
-                          {request.wastageReason ? ` · ${request.wastageReason}` : ''}
-                        </div>
-                      )}
-                    </td>
-                    <td>{request.vendorId?.name || '—'}<div className="text-slate-500">{request.location}</div></td>
-                    <td>{request.requestedBy?.name || '—'}</td>
-                    <td><Badge variant={request.status}>{request.status}</Badge></td>
-                    <td className="text-right">
-                      {canManageInventory && request.status === 'pending' && (
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="success" onClick={() => handleReviewStockReceiptRequest(request, 'approve')}>Approve & Receive</Button>
-                          <Button size="sm" variant="danger" onClick={() => handleReviewStockReceiptRequest(request, 'reject')}>Reject</Button>
-                        </div>
-                      )}
-                      {request.reviewedBy?.name && (
-                        <div className="mt-1 text-slate-500">Reviewed by {request.reviewedBy.name}</div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {!stockReceiptRequests.length && (
-                  <tr><td colSpan="7" className="py-10 text-center text-slate-400">No raw material restock requests recorded.</td></tr>
-                )}
+                  );
+                })}
+                {!adjustmentRows.length && <tr><td colSpan="9" className="py-10 text-center text-slate-400">No adjustments reported.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1973,8 +2236,8 @@ export const InventoryPage = () => {
       )}
 
       {activeTab === 'reports' && (
-        <Card title="Inventory Reports" subtitle="Filter and export stock, valuation, purchase, consumption, wastage, expiry and ledger records">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <Card title="Inventory Reports" subtitle="Review inventory costs, restaurant food sales, profit and loss, stock, wastage, expiry and movement records">
+          <div className={`grid grid-cols-1 gap-3 md:grid-cols-2 ${reportType === 'profit-loss' ? 'xl:grid-cols-4' : 'xl:grid-cols-6'}`}>
             <Select
               label="Report"
               value={reportType}
@@ -1984,6 +2247,7 @@ export const InventoryPage = () => {
                 { label: 'Stock Valuation', value: 'valuation' },
                 { label: 'Purchase History', value: 'purchases' },
                 { label: 'Inventory Financial Summary', value: 'financial' },
+                { label: 'Inventory Profit & Loss', value: 'profit-loss' },
                 { label: 'Physical Stock Verifications', value: 'verifications' },
                 { label: 'Department Consumption', value: 'department-consumption' },
                 { label: 'Recipe Consumption / Food Cost', value: 'recipe-consumption' },
@@ -1996,26 +2260,30 @@ export const InventoryPage = () => {
             />
             <Input label="From" type="date" value={reportFilters.from} onChange={(e) => setReportFilters({ ...reportFilters, from: e.target.value })} />
             <Input label="To" type="date" value={reportFilters.to} onChange={(e) => setReportFilters({ ...reportFilters, to: e.target.value })} />
-            <Select
-              label="Category"
-              value={reportFilters.category}
-              onChange={(e) => setReportFilters({ ...reportFilters, category: e.target.value })}
-              options={[
-                { label: 'All categories', value: 'all' },
-                ...[...new Set(items.map((item) => item.category).filter(Boolean))]
-                  .sort()
-                  .map((category) => ({ label: category.replace(/_/g, ' '), value: category }))
-              ]}
-            />
-            <Select
-              label="Raw material"
-              value={reportFilters.itemId}
-              onChange={(e) => setReportFilters({ ...reportFilters, itemId: e.target.value })}
-              options={[
-                { label: 'All raw materials', value: '' },
-                ...items.map((item) => ({ label: `${item.name} (${item.code})`, value: item._id }))
-              ]}
-            />
+            {reportType !== 'profit-loss' && (
+              <>
+                <Select
+                  label="Category"
+                  value={reportFilters.category}
+                  onChange={(e) => setReportFilters({ ...reportFilters, category: e.target.value })}
+                  options={[
+                    { label: 'All categories', value: 'all' },
+                    ...[...new Set(items.map((item) => item.category).filter(Boolean))]
+                      .sort()
+                      .map((category) => ({ label: category.replace(/_/g, ' '), value: category }))
+                  ]}
+                />
+                <Select
+                  label="Raw material"
+                  value={reportFilters.itemId}
+                  onChange={(e) => setReportFilters({ ...reportFilters, itemId: e.target.value })}
+                  options={[
+                    { label: 'All raw materials', value: '' },
+                    ...items.map((item) => ({ label: `${item.name} (${item.code})`, value: item._id }))
+                  ]}
+                />
+              </>
+            )}
             <div className="flex items-end gap-2">
               <Button className="flex-1" size="sm" onClick={loadReport}>Run Report</Button>
               <Button variant="outline" size="sm" icon={Download} onClick={exportReport}>CSV</Button>
@@ -2023,6 +2291,107 @@ export const InventoryPage = () => {
               <Button variant="outline" size="sm" disabled={!report.length} onClick={exportPdfReport}>PDF</Button>
             </div>
           </div>
+          {reportType === 'profit-loss' && report[0] && (
+            <div className="mt-5 space-y-5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  ['Recipe-linked sales', report[0].salesRevenue, 'text-sky-800'],
+                  ['Food cost', report[0].costOfGoodsSold, 'text-amber-800'],
+                  ['Wastage & expiry', report[0].inventoryLoss, 'text-rose-700'],
+                  ['Net profit / (loss)', report[0].netProfit, report[0].netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700']
+                ].map(([label, amount, tone]) => (
+                  <div key={label} className="rounded-2xl border border-[#eadfce] bg-gradient-to-br from-white to-[#faf7f0] p-4 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+                    <p className={`mt-2 text-xl font-black ${tone}`}>{formatCurrency(amount || 0)}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)]">
+                <Card title="Inventory Profit & Loss" subtitle={`${report[0].settledOrderCount || 0} settled restaurant orders with recorded recipe costs`}>
+                  <div className="divide-y divide-[#eee7dc] text-sm">
+                    <div className="flex items-center justify-between gap-4 py-3">
+                      <span className="text-slate-600">Net sales revenue <span className="text-xs text-slate-400">(tax excluded)</span></span>
+                      <strong className="text-slate-900">{formatCurrency(report[0].salesRevenue || 0)}</strong>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 py-3">
+                      <span className="text-slate-600">Less: recipe ingredient cost</span>
+                      <strong className="text-rose-700">− {formatCurrency(report[0].costOfGoodsSold || 0)}</strong>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-t border-[#e8ddcc] py-3 font-bold">
+                      <span className="text-[#3b241a]">Gross profit / (loss)</span>
+                      <strong className={report[0].grossProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                        {formatCurrency(report[0].grossProfit || 0)}
+                      </strong>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 py-3">
+                      <span className="text-slate-600">Less: inventory wastage and expiry</span>
+                      <strong className="text-rose-700">− {formatCurrency(report[0].inventoryLoss || 0)}</strong>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-t border-[#e8ddcc] py-3 text-base font-black">
+                      <span className="text-[#3b241a]">Net inventory profit / (loss)</span>
+                      <strong className={report[0].netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                        {formatCurrency(report[0].netProfit || 0)}
+                      </strong>
+                    </div>
+                  </div>
+                </Card>
+                <div className="space-y-4">
+                  <Card title="Margin">
+                    <div className="flex items-end justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-slate-500">Gross margin</p>
+                        <p className="mt-1 text-2xl font-black text-[#3b241a]">
+                          {report[0].grossMarginPercent == null ? '—' : `${report[0].grossMarginPercent}%`}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-slate-500">Net margin</p>
+                        <p className={`mt-1 text-2xl font-black ${report[0].netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {report[0].netMarginPercent == null ? '—' : `${report[0].netMarginPercent}%`}
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+                  <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-xs leading-relaxed text-sky-950">
+                    This report includes settled restaurant sales only where recipe consumption was recorded. Sales exclude tax; discounts are allocated across menu items. Inventory purchases ({formatCurrency(report[0].stockPurchasesNotExpensed || 0)}) are shown as stock investment, not as an immediate expense.
+                  </div>
+                </div>
+              </div>
+              <Card title="Menu Item Profitability" subtitle="Net sales compared with recorded recipe ingredient costs">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[700px] text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 uppercase text-slate-400">
+                        <th className="pb-3">Menu item</th>
+                        <th className="pb-3">Qty sold</th>
+                        <th className="pb-3 text-right">Net sales</th>
+                        <th className="pb-3 text-right">Food cost</th>
+                        <th className="pb-3 text-right">Gross profit / (loss)</th>
+                        <th className="pb-3 text-right">Margin</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(report[0].menuItemBreakdown || []).map((entry) => (
+                        <tr key={entry.menuItemId}>
+                          <td className="py-3 font-semibold text-slate-800">{entry.name}</td>
+                          <td>{entry.quantitySold}</td>
+                          <td className="text-right">{formatCurrency(entry.salesRevenue)}</td>
+                          <td className="text-right">{formatCurrency(entry.foodCost)}</td>
+                          <td className={`text-right font-semibold ${entry.grossProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                            {formatCurrency(entry.grossProfit)}
+                          </td>
+                          <td className="text-right">{entry.grossMarginPercent == null ? '—' : `${entry.grossMarginPercent}%`}</td>
+                        </tr>
+                      ))}
+                      {!report[0].menuItemBreakdown?.length && (
+                        <tr><td colSpan="6" className="py-8 text-center text-slate-500">No settled, recipe-costed restaurant sales in this period.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </div>
+          )}
           {reportType === 'financial' && report[0] && (
             <>
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -2119,9 +2488,9 @@ export const InventoryPage = () => {
             </div>
             </>
           )}
-          {reportType !== 'financial' && <div className="mt-5 overflow-x-auto">
+          {reportType !== 'financial' && reportType !== 'profit-loss' && <div className="mt-5 overflow-x-auto">
             <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
-              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Date / Name</th><th className="pb-3">Item / Reference</th><th className="pb-3">Type / Quantity</th><th className="pb-3">Department / Supplier</th><th className="pb-3 text-right">Value</th></tr></thead>
+              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Date / Name</th><th className="pb-3">Item / Reference</th><th className="pb-3">Type / Quantity</th><th className="pb-3">Department / Vendor</th><th className="pb-3 text-right">Value</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {report.map((row, index) => (
                   <tr key={row._id || index}>
@@ -2283,7 +2652,7 @@ export const InventoryPage = () => {
       >
         <form onSubmit={handleCreateItem} className="space-y-4">
           <p className="rounded-lg bg-[#faf7f0] p-3 text-xs leading-relaxed text-slate-700">
-            Select the material and purchase unit first. Enter the quantity and price per purchase unit; stock and cost are converted to the material's base unit. If stock remains in an earlier batch, enter how much to deduct from it. An administrator must approve before the deduction and new receipt are applied.
+            Select the material and purchase unit first. Enter the quantity and price per purchase unit; stock and cost are converted to the material's base unit. Earlier batches can be deducted and wastage recorded as part of this receipt.
           </p>
           <Select
             label="Raw material"
@@ -2399,7 +2768,7 @@ export const InventoryPage = () => {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Input
                   label="Quantity to deduct"
-                  info={`Enter a quantity to remove from existing batches. It will be converted to ${receiptBaseUnit} and deducted FIFO after administrator approval.`}
+                  info={`Enter a quantity to remove from existing batches. It will be converted to ${receiptBaseUnit} and deducted FIFO as part of this receipt.`}
                   type="number"
                   min="0"
                   max={receiptDeductionMaximum}
@@ -2423,7 +2792,7 @@ export const InventoryPage = () => {
                 Deduction: {formatReceiptQuantity(receiptDeductionQuantity)} {receiptBaseUnit}. Existing stock remaining after deduction: {formatReceiptQuantity(Math.max(
                   0,
                   receiptPreviousAvailable - receiptDeductionQuantity
-                ))} {receiptBaseUnit}. The deduction and new receipt are both applied only after administrator approval.
+                ))} {receiptBaseUnit}. The deduction is applied immediately with this receipt.
               </p>
             </div>
           )}
@@ -2550,7 +2919,7 @@ export const InventoryPage = () => {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Select
               label="Vendor (optional)"
-              info="Select the supplier for this receipt if known. Leaving this blank does not prevent receiving stock."
+              info="Select the vendor for this receipt if known. Leaving this blank does not prevent receiving stock."
               searchable
               searchPlaceholder="Search vendors..."
               value={itemForm.vendorId}
@@ -2950,14 +3319,14 @@ export const InventoryPage = () => {
         </form>
       </Modal>
 
-      <Modal isOpen={isPurchaseOrderOpen} onClose={() => setIsPurchaseOrderOpen(false)} title="New Purchase Order" subtitle="Submit a supplier order for administrator approval">
+      <Modal isOpen={isPurchaseOrderOpen} onClose={() => setIsPurchaseOrderOpen(false)} title="New Purchase Order" subtitle="Submit a vendor order for administrator approval">
         <form onSubmit={handleCreatePurchaseOrder} className="space-y-4">
           <Select
-            label="Supplier"
+            label="Vendor"
             required
             value={poForm.vendorId}
             onChange={(e) => setPoForm({ ...poForm, vendorId: e.target.value })}
-            options={[{ label: 'Choose supplier', value: '' }, ...vendors.map((vendor) => ({ label: vendor.name, value: vendor._id }))]}
+            options={[{ label: 'Choose vendor', value: '' }, ...vendors.map((vendor) => ({ label: vendor.name, value: vendor._id }))]}
           />
           <Input label="Department" value={poForm.department} onChange={(e) => setPoForm({ ...poForm, department: e.target.value })} placeholder="Kitchen" />
           <Input label="Expected delivery" type="date" value={poForm.expectedDeliveryDate} onChange={(e) => setPoForm({ ...poForm, expectedDeliveryDate: e.target.value })} />
@@ -3250,11 +3619,22 @@ export const InventoryPage = () => {
             value={verificationForm.itemId}
             onChange={(event) => {
               const item = items.find((entry) => entry._id === event.target.value);
+              const lastVerified = item?._id ? getLastVerificationForItem(item._id) : null;
               setVerificationForm({
                 ...verificationForm,
                 itemId: event.target.value,
                 actualStock: item?.currentStock ?? '',
-                unit: item?.baseUnit || item?.unit || ''
+                unit: item?.baseUnit || item?.unit || '',
+                hasUnrecordedConsumption: 'no',
+                consumptionQuantity: '',
+                consumptionUnit: item?.baseUnit || item?.unit || '',
+                consumptionReason: '',
+                hasWastage: 'no',
+                wastageQuantity: '',
+                wastageUnit: item?.baseUnit || item?.unit || '',
+                wastageReason: '',
+                periodStart: getVerificationPeriodStart(item, lastVerified),
+                periodEnd: dayjs().format('YYYY-MM-DD')
               });
             }}
             options={[{ label: 'Choose raw material', value: '' }, ...items.map((item) => ({
@@ -3265,21 +3645,67 @@ export const InventoryPage = () => {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
               label="Period start"
-              info="Start of the period being reconciled. Only include unrecorded consumption or waste that happened on or after this date."
+              info="Fixed to the selected material's last physical verification date."
               type="date"
               required
+              disabled
               value={verificationForm.periodStart}
-              onChange={(event) => setVerificationForm({ ...verificationForm, periodStart: event.target.value })}
             />
             <Input
               label="Period end"
-              info="End of the period being reconciled. This cannot be earlier than the period start."
+              info="Fixed to today's date."
               type="date"
               required
+              disabled
               value={verificationForm.periodEnd}
-              onChange={(event) => setVerificationForm({ ...verificationForm, periodEnd: event.target.value })}
             />
           </div>
+          {selectedVerificationItem && (
+            <p className="rounded-lg bg-[#faf7f0] p-3 text-sm text-slate-700">
+              Stock is stored in <strong>{verificationBaseUnit}</strong>
+              {verificationForm.unit && (
+                <span> · 1 {verificationForm.unit} = {formatReceiptQuantity(verificationUnitFactor)} {verificationBaseUnit}</span>
+              )}
+            </p>
+          )}
+          {selectedVerificationItem && (
+            <details className="rounded-lg border border-slate-200 bg-white">
+              <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium text-slate-800">
+                Batch history ({verificationBatches.length})
+              </summary>
+              <div className="space-y-2 border-t border-slate-100 p-3">
+                {verificationBatchesLoading ? (
+                  <p className="text-sm text-slate-500">Loading batch history…</p>
+                ) : verificationBatches.length === 0 ? (
+                  <p className="text-sm text-slate-500">No batches have been received for this material at Main Store.</p>
+                ) : verificationBatches.map((batch) => (
+                  <div key={batch._id} className="rounded-md bg-slate-50 p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <strong className="text-slate-800">{batch.batchNumber || 'Unnumbered batch'}</strong>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        batch.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                      }`}>
+                        {batch.status === 'open' ? 'Open' : 'Exhausted'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-slate-600">
+                      Received {formatReceiptQuantity(batch.quantity)} {verificationBaseUnit}
+                      {' · '}Remaining {formatReceiptQuantity(batch.remainingQuantity)} {verificationBaseUnit}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {batch.receivedAt && `Received ${dayjs(batch.receivedAt).format('MMM D, YYYY')}`}
+                      {batch.expiryDate && ` · Expires ${dayjs(batch.expiryDate).format('MMM D, YYYY')}`}
+                      {batch.location && ` · ${batch.location}`}
+                      {batch.vendorId?.name && ` · ${batch.vendorId.name}`}
+                    </p>
+                  </div>
+                ))}
+                <p className="text-xs text-slate-500">
+                  Compare the physical count with the batches recorded at Main Store. Report only consumption and wastage that have not already been recorded.
+                </p>
+              </div>
+            </details>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
               label="Actual usable stock"
@@ -3301,26 +3727,125 @@ export const InventoryPage = () => {
               options={unitChoicesForItem(items.find((item) => item._id === verificationForm.itemId), units)}
             />
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input
-              label="Unrecorded consumption to reconcile"
-              info="Enter stock used during this period that has not already been recorded as an issue or other inventory movement. Leave at zero if all use is already recorded."
-              type="number"
-              min="0"
-              step="any"
-              value={verificationForm.consumptionQuantity}
-              onChange={(event) => setVerificationForm({ ...verificationForm, consumptionQuantity: event.target.value })}
-            />
-            <Input
-              label="Wasted during period"
-              info="Enter stock discarded, spoiled, or damaged during this period only if that waste has not already been recorded in inventory."
-              type="number"
-              min="0"
-              step="any"
-              value={verificationForm.wastageQuantity}
-              onChange={(event) => setVerificationForm({ ...verificationForm, wastageQuantity: event.target.value })}
-            />
+          <div className="space-y-3">
+            <div className="space-y-3 rounded-lg border border-[#e7d4c0] p-3">
+              <Select
+                label="Is there any unrecorded consumption in the remaining stock?"
+                value={verificationForm.hasUnrecordedConsumption}
+                onChange={(event) => setVerificationForm({
+                  ...verificationForm,
+                  hasUnrecordedConsumption: event.target.value,
+                  consumptionQuantity: event.target.value === 'yes' ? verificationForm.consumptionQuantity : '',
+                  consumptionUnit: verificationForm.consumptionUnit || verificationBaseUnit,
+                  consumptionReason: event.target.value === 'yes' ? verificationForm.consumptionReason : ''
+                })}
+                options={[
+                  { label: 'No', value: 'no' },
+                  { label: 'Yes', value: 'yes' }
+                ]}
+              />
+              {verificationForm.hasUnrecordedConsumption === 'yes' && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Input
+                    label="Consumption quantity"
+                    info="Enter only stock used during this period that has not already been recorded as an issue or other inventory movement."
+                    type="number"
+                    min="0.00000001"
+                    step="any"
+                    required
+                    value={verificationForm.consumptionQuantity}
+                    onChange={(event) => setVerificationForm({ ...verificationForm, consumptionQuantity: event.target.value })}
+                  />
+                  <Select
+                    label="Consumption unit"
+                    required
+                    searchable
+                    value={verificationForm.consumptionUnit}
+                    onChange={(event) => setVerificationForm({ ...verificationForm, consumptionUnit: event.target.value })}
+                    options={unitChoicesForItem(selectedVerificationItem, units)}
+                  />
+                  <div className="sm:col-span-2">
+                    <Input
+                      label="Consumption reason"
+                      required
+                      value={verificationForm.consumptionReason}
+                      onChange={(event) => setVerificationForm({ ...verificationForm, consumptionReason: event.target.value })}
+                      placeholder="e.g. used for staff meals"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="space-y-3 rounded-lg border border-[#e7d4c0] p-3">
+              <Select
+                label="Is there any wastage in the remaining stock?"
+                value={verificationForm.hasWastage}
+                onChange={(event) => setVerificationForm({
+                  ...verificationForm,
+                  hasWastage: event.target.value,
+                  wastageQuantity: event.target.value === 'yes' ? verificationForm.wastageQuantity : '',
+                  wastageUnit: verificationForm.wastageUnit || verificationBaseUnit,
+                  wastageReason: event.target.value === 'yes' ? verificationForm.wastageReason : ''
+                })}
+                options={[
+                  { label: 'No', value: 'no' },
+                  { label: 'Yes', value: 'yes' }
+                ]}
+              />
+              {verificationForm.hasWastage === 'yes' && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Input
+                    label="Wastage quantity"
+                    info="Enter stock discarded, spoiled, or damaged during this period only if it has not already been recorded in inventory."
+                    type="number"
+                    min="0.00000001"
+                    step="any"
+                    required
+                    value={verificationForm.wastageQuantity}
+                    onChange={(event) => setVerificationForm({ ...verificationForm, wastageQuantity: event.target.value })}
+                  />
+                  <Select
+                    label="Wastage unit"
+                    required
+                    searchable
+                    value={verificationForm.wastageUnit}
+                    onChange={(event) => setVerificationForm({ ...verificationForm, wastageUnit: event.target.value })}
+                    options={unitChoicesForItem(selectedVerificationItem, units)}
+                  />
+                  <div className="sm:col-span-2">
+                    <Input
+                      label="Wastage reason"
+                      required
+                      value={verificationForm.wastageReason}
+                      onChange={(event) => setVerificationForm({ ...verificationForm, wastageReason: event.target.value })}
+                      placeholder="e.g. spoiled during storage"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
+          {selectedVerificationItem && (
+            <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+              <p className="font-semibold">Stock calculation preview ({verificationBaseUnit})</p>
+              <p>Expected stock: {formatReceiptQuantity(verificationExpectedStock)}</p>
+              <p>Actual usable stock: {formatReceiptQuantity(verificationActualStock)}</p>
+              <p>Unrecorded consumption: −{formatReceiptQuantity(verificationConsumption)}</p>
+              <p>Wastage: −{formatReceiptQuantity(verificationWastage)}</p>
+              <p>Unexplained discrepancy: {formatReceiptQuantity(verificationDiscrepancy)}</p>
+              {verificationGain > 0 && <p>Stock gain: +{formatReceiptQuantity(verificationGain)}</p>}
+              <p className="border-t border-sky-200 pt-1 font-bold">
+                Remaining after recorded use and wastage: {formatReceiptQuantity(
+                  verificationExpectedStock - verificationConsumption - verificationWastage
+                )} {verificationBaseUnit}
+              </p>
+              {verificationConsumption + verificationWastage > verificationReduction && (
+                <p className="font-medium text-rose-700">
+                  Consumption and wastage cannot exceed the difference between expected and actual stock.
+                </p>
+              )}
+            </div>
+          )}
           <Input
             label="Discrepancy / gain reason (if applicable)"
             info="Explain any remaining difference between expected stock and the physical count after unrecorded consumption and waste are accounted for. A reason is required for an unexplained difference or stock gain."
@@ -3343,7 +3868,7 @@ export const InventoryPage = () => {
         </form>
       </Modal>
 
-      <Modal isOpen={isVendorHistoryOpen} onClose={() => setIsVendorHistoryOpen(false)} title={`${selectedVendor?.name || 'Supplier'} purchase history`}>
+      <Modal isOpen={isVendorHistoryOpen} onClose={() => setIsVendorHistoryOpen(false)} title={`${selectedVendor?.name || 'Vendor'} purchase history`}>
         <div className="space-y-3">
           {vendorPurchases.map((po) => (
             <div key={po._id} className="rounded-lg border p-3 text-sm">
@@ -3361,18 +3886,18 @@ export const InventoryPage = () => {
               </div>
             </div>
           ))}
-          {!vendorPurchases.length && <p className="py-8 text-center text-sm text-slate-400">No purchases found for this supplier.</p>}
+          {!vendorPurchases.length && <p className="py-8 text-center text-sm text-slate-400">No purchases found for this vendor.</p>}
         </div>
       </Modal>
 
-      <Modal isOpen={isSupplierPaymentOpen} onClose={() => setIsSupplierPaymentOpen(false)} title={`Supplier payment · ${selectedVendor?.name || ''}`} subtitle={`Outstanding balance: ${formatCurrency(selectedVendor?.outstandingBalance || 0)}`}>
-        <form onSubmit={handleRecordSupplierPayment} className="space-y-4">
+      <Modal isOpen={isVendorPaymentOpen} onClose={() => setIsVendorPaymentOpen(false)} title={`Vendor payment · ${selectedVendor?.name || ''}`} subtitle={`Outstanding balance: ${formatCurrency(selectedVendor?.outstandingBalance || 0)}`}>
+        <form onSubmit={handleRecordVendorPayment} className="space-y-4">
           <Input label="Payment amount" type="number" min="0.01" max={selectedVendor?.outstandingBalance || undefined} step="0.01" required value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} />
           <Select label="Payment method" value={paymentForm.paymentMethod} onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value })} options={['cash', 'card', 'bank_transfer', 'upi', 'cheque', 'other'].map((method) => ({ label: method.replace(/_/g, ' '), value: method }))} />
           <Input label="Payment reference" value={paymentForm.referenceNumber} onChange={(e) => setPaymentForm({ ...paymentForm, referenceNumber: e.target.value })} />
           <Input label="Invoice number" value={paymentForm.invoiceNumber} onChange={(e) => setPaymentForm({ ...paymentForm, invoiceNumber: e.target.value })} />
           <Input label="Notes" value={paymentForm.notes} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} />
-          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setIsSupplierPaymentOpen(false)}>Cancel</Button><Button type="submit">Record payment</Button></div>
+          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setIsVendorPaymentOpen(false)}>Cancel</Button><Button type="submit">Record payment</Button></div>
         </form>
       </Modal>
     </div>
