@@ -76,9 +76,9 @@ const navGroups = [
     icon: Boxes,
     items: [
       { to: '/inventory/dashboard', label: 'Inventory Dashboard', icon: LayoutDashboard, roles: ['hotel_admin', 'restaurant_staff', 'housekeeping_staff', 'maintenance_staff', 'super_admin'] },
-      { to: '/inventory/raw-material-categories', label: 'Raw Material Categories', icon: Tag, roles: ['hotel_admin', 'super_admin'] },
       { to: '/inventory/raw-materials', label: 'Raw Materials', icon: Boxes, roles: ['hotel_admin', 'restaurant_staff', 'housekeeping_staff', 'maintenance_staff', 'super_admin'] },
       { to: '/inventory/stock', label: 'Stock & Verification', icon: ArrowLeftRight, roles: ['hotel_admin', 'restaurant_staff', 'housekeeping_staff', 'maintenance_staff', 'super_admin'] },
+      { to: '/inventory/recipes', label: 'Recipe Management', icon: UtensilsCrossed, roles: ['hotel_admin', 'restaurant_staff', 'super_admin'] },
     ],
   },
   {
@@ -144,6 +144,7 @@ const moduleByPath = {
   '/inventory/stock': 'inventory',
   '/inventory/raw-materials': 'inventory',
   '/inventory/raw-material-categories': 'inventory',
+  '/inventory/recipes': 'inventory',
   '/maintenance': 'maintenance',
   '/expenses': 'expenses',
   '/staff': 'staff',
@@ -171,6 +172,7 @@ const permissionByPath = {
   '/inventory/stock': 'inventory.view',
   '/inventory/raw-materials': 'inventory.view',
   '/inventory/raw-material-categories': 'inventory.view',
+  '/inventory/recipes': 'inventory.view',
   '/maintenance': 'maintenance.view',
   '/expenses': 'expenses.view',
   '/staff': 'staff_directory.view',
@@ -203,9 +205,14 @@ function canSeeItem(item, user, hotel) {
   return !modKey || !selectedModules.length || selectedModules.includes(modKey);
 }
 
+function isNavItemActive(pathname, item) {
+  return pathname.startsWith(item.to)
+    || (item.to === '/inventory/raw-materials' && pathname === '/inventory/raw-material-categories');
+}
+
 function findGroupForPath(pathname) {
   for (const group of navGroups) {
-    if (group.items.some((item) => pathname.startsWith(item.to))) {
+    if (group.items.some((item) => isNavItemActive(pathname, item))) {
       return group.key;
     }
   }
@@ -379,7 +386,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
                           onClick={() => setIsMobileOpen(false)}
                           className={({ isActive }) =>
                             `group flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] font-medium transition-all ${
-                              isActive
+                              isActive || isNavItemActive(location.pathname, item)
                                 ? 'bg-amber-400/[0.10] font-semibold text-amber-200'
                                 : 'text-slate-400 hover:bg-white/[0.05] hover:text-white'
                             }`

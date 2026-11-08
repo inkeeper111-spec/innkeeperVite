@@ -106,6 +106,7 @@ const ProtectedRoute = ({
     '/inventory/stock': 'inventory.view',
     '/inventory/raw-materials': 'inventory.view',
     '/inventory/raw-material-categories': 'inventory.view',
+    '/inventory/recipes': 'inventory.view',
     '/maintenance': 'maintenance.view',
     '/expenses': 'expenses.view',
     '/staff': 'staff_directory.view',

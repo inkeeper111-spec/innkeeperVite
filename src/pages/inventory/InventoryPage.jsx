@@ -52,7 +52,7 @@ export const InventoryPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const canManageInventory = ['hotel_admin', 'super_admin'].includes(user?.role);
-  const { currencySymbol, formatCurrency } = useCurrency();
+  const { currency, currencySymbol, formatCurrency } = useCurrency();
   const defaultConversionFactor = (baseUnit, purchaseUnit) => {
     const units = INVENTORY_UNITS.flatMap((group) =>
       group.units.map((entry) => ({ ...entry, category: group.category }))
@@ -127,6 +127,7 @@ export const InventoryPage = () => {
   const [report, setReport] = useState([]);
   const [verifications, setVerifications] = useState([]);
   const [verificationIntervalDays, setVerificationIntervalDays] = useState(1);
+  const [recipeDeductionStage, setRecipeDeductionStage] = useState('prepared');
   const [reportType, setReportType] = useState('stock');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -154,6 +155,7 @@ export const InventoryPage = () => {
   const [isPurchaseOrderOpen, setIsPurchaseOrderOpen] = useState(false);
   const [isDepartmentRequestOpen, setIsDepartmentRequestOpen] = useState(false);
   const [isRecipeOpen, setIsRecipeOpen] = useState(false);
+  const [editingRecipe, setEditingRecipe] = useState(null);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isReceivingOpen, setIsReceivingOpen] = useState(false);
   const [isAdjustmentOpen, setIsAdjustmentOpen] = useState(false);
@@ -221,6 +223,10 @@ export const InventoryPage = () => {
   });
   const [recipeForm, setRecipeForm] = useState({
     menuItemId: '',
+    recipeName: '',
+    description: '',
+    servingSize: '1 serving',
+    preparationTimeMinutes: 0,
     ingredients: [{ itemId: '', quantity: 1, unit: '', optional: false, substituteItemId: '', substituteQuantity: '', substituteUnit: '' }]
   });
   const [transferForm, setTransferForm] = useState({
@@ -318,7 +324,10 @@ export const InventoryPage = () => {
       if (adjustmentsRes.data.success) setAdjustments(adjustmentsRes.data.data);
       if (suggestionsRes.data.success) setReorderSuggestions(suggestionsRes.data.data);
       if (verificationsRes.data.success) setVerifications(verificationsRes.data.data || []);
-      if (settingsRes.data.success) setVerificationIntervalDays(settingsRes.data.data.verificationIntervalDays || 1);
+      if (settingsRes.data.success) {
+        setVerificationIntervalDays(settingsRes.data.data.verificationIntervalDays || 1);
+        setRecipeDeductionStage(settingsRes.data.data.recipeDeductionStage || 'prepared');
+      }
     } catch (err) {
       showApiErrorToast(err, 'Could not load inventory data');
     } finally {
@@ -335,7 +344,8 @@ export const InventoryPage = () => {
       '/inventory/dashboard': 'dashboard',
       '/inventory/categories': 'categories',
       '/inventory/items': 'items',
-      '/inventory/stock': 'ledger'
+      '/inventory/stock': 'ledger',
+      '/inventory/recipes': 'recipes'
     };
     if (location.pathname === '/inventory/units') {
       navigate('/inventory/items', { replace: true });
@@ -351,7 +361,8 @@ export const InventoryPage = () => {
       dashboard: '/inventory/dashboard',
       categories: '/inventory/categories',
       items: '/inventory/items',
-      ledger: '/inventory/stock'
+      ledger: '/inventory/stock',
+      recipes: '/inventory/recipes'
     };
     if (pathByTab[tab]) {
       navigate(pathByTab[tab]);
@@ -450,12 +461,24 @@ export const InventoryPage = () => {
       return;
     }
     let active = true;
+    setReceiptBatches([]);
     setReceiptBatchesLoading(true);
     api.get('/inventory/batches', {
       params: { itemId: itemForm.itemId, location: itemForm.location || 'Main Store' }
     })
       .then(({ data }) => {
-        if (active) setReceiptBatches(data.data || []);
+        if (active) {
+          const batches = data.data || [];
+          setReceiptBatches(batches);
+          if (batches.length === 0) {
+            setItemForm((current) => ({
+              ...current,
+              hasWastage: 'no',
+              wastageQuantity: '',
+              wastageReason: ''
+            }));
+          }
+        }
       })
       .catch((error) => {
         if (active) showApiErrorToast(error, 'Could not load batch history');
@@ -552,6 +575,9 @@ export const InventoryPage = () => {
       if (!selectedMaterial || !selectedPurchaseUnit) {
         throw new Error('Select a raw material and one of its configured purchase units.');
       }
+      if (receiptBatchesLoading) {
+        throw new Error('Wait for the batch history to finish loading before receiving stock.');
+      }
       const purchaseQuantity = Number(itemForm.quantity);
       const purchasePrice = Number(itemForm.purchasePrice);
       if (!Number.isFinite(purchaseQuantity) || purchaseQuantity <= 0
@@ -583,8 +609,12 @@ export const InventoryPage = () => {
       if (existingStockDeduction > previousAvailableQuantity) {
         throw new Error(`The deduction cannot exceed ${formatReceiptQuantity(previousAvailableQuantity)} ${receiptBaseUnit} available.`);
       }
-      const wastageQuantity = itemForm.hasWastage === 'yes' ? Number(itemForm.wastageQuantity) : 0;
-      if (itemForm.hasWastage === 'yes' && (!Number.isFinite(wastageQuantity) || wastageQuantity <= 0)) {
+      const hasExistingBatchHistory = receiptBatches.length > 0;
+      const wastageQuantity = hasExistingBatchHistory && itemForm.hasWastage === 'yes'
+        ? Number(itemForm.wastageQuantity)
+        : 0;
+      if (hasExistingBatchHistory && itemForm.hasWastage === 'yes'
+        && (!Number.isFinite(wastageQuantity) || wastageQuantity <= 0)) {
         throw new Error('Enter a positive wastage quantity.');
       }
       const wastageBaseQuantity = wastageQuantity * (receiptWastageUnit?.factor || 0);
@@ -786,6 +816,17 @@ export const InventoryPage = () => {
       await fetchInventory();
     } catch (err) {
       showApiErrorToast(err, 'Could not update verification frequency');
+    }
+  };
+
+  const handleRecipeDeductionStageChange = async (event) => {
+    const stage = event.target.value;
+    try {
+      await api.patch('/inventory/settings', { recipeDeductionStage: stage });
+      setRecipeDeductionStage(stage);
+      setMessage(`Recipe ingredients will be deducted when orders are ${stage === 'prepared' ? 'prepared' : 'served'}.`);
+    } catch (err) {
+      showApiErrorToast(err, 'Could not update recipe deduction stage');
     }
   };
 
@@ -1024,10 +1065,53 @@ export const InventoryPage = () => {
         }))
       });
       setIsRecipeOpen(false);
+      setEditingRecipe(null);
+      setRecipeForm({
+        menuItemId: '',
+        recipeName: '',
+        description: '',
+        servingSize: '1 serving',
+        preparationTimeMinutes: 0,
+        ingredients: [{ itemId: '', quantity: 1, unit: '', optional: false, substituteItemId: '', substituteQuantity: '', substituteUnit: '' }]
+      });
       setMessage('Recipe version saved. Historical consumption remains unchanged.');
       fetchInventory();
     } catch (err) {
       showApiErrorToast(err, 'Could not save recipe');
+    }
+  };
+
+  const handleEditRecipe = (recipe) => {
+    setEditingRecipe(recipe);
+    setRecipeForm({
+      menuItemId: String(recipe.menuItemId?._id || recipe.menuItemId || ''),
+      recipeName: recipe.recipeName || '',
+      description: recipe.description || '',
+      servingSize: recipe.servingSize || '1 serving',
+      preparationTimeMinutes: recipe.preparationTimeMinutes || 0,
+      ingredients: recipe.ingredients.map((ingredient) => {
+        const substitute = ingredient.substitutions?.[0];
+        return {
+          itemId: String(ingredient.itemId?._id || ingredient.itemId || ''),
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+          optional: Boolean(ingredient.optional),
+          substituteItemId: String(substitute?.itemId?._id || substitute?.itemId || ''),
+          substituteQuantity: substitute?.quantity ?? '',
+          substituteUnit: substitute?.unit || ''
+        };
+      })
+    });
+    setIsRecipeOpen(true);
+  };
+
+  const handleRecipeStatusChange = async (recipe) => {
+    try {
+      await api.patch(`/inventory/recipes/${recipe._id}/status`, { isActive: !recipe.isActive });
+      setMessage(`Recipe ${recipe.isActive ? 'deactivated' : 'activated'}.`);
+      await fetchInventory();
+    } catch (err) {
+      showApiErrorToast(err, 'Could not update recipe status');
     }
   };
 
@@ -1283,7 +1367,7 @@ export const InventoryPage = () => {
       });
     } else {
       const rows = report.map((row) => [
-        row.transactionDate || row.receivedAt || row.verifiedAt || row.createdAt || '',
+        row.date || row.month || row.transactionDate || row.receivedAt || row.verifiedAt || row.createdAt || '',
         row.name || row.poNumber || row.itemId?.name || row.itemName || '',
         row.movementType || row.status || '',
         row.quantity !== undefined ? `${row.quantity} ${row.unit || row.itemId?.unit || ''}` : '',
@@ -1379,6 +1463,16 @@ export const InventoryPage = () => {
   const formatReceiptQuantity = (quantity) => new Intl.NumberFormat(undefined, {
     maximumFractionDigits: 8
   }).format(Number(quantity) || 0);
+  const formatInventoryUnitCost = (amount) => {
+    const value = Number(amount);
+    if (!Number.isFinite(value)) return formatCurrency(0);
+    return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 6
+    }).format(value);
+  };
 
   return (
     <div className="inventory-page w-full min-w-0 space-y-6">
@@ -1796,7 +1890,7 @@ export const InventoryPage = () => {
                                     <div>
                                       <p className="text-sm font-bold tracking-wide text-[#3b241a]">Batch ledger</p>
                                       <p className="mt-0.5 text-xs text-slate-500">
-                                        Batch purchases, consumption, wastage, sales profit, and loss · Base unit: {it.baseUnit || it.unit}
+                                        Batch purchases, consumption, wastage, sales revenue, and loss · Base unit: {it.baseUnit || it.unit}
                                       </p>
                                     </div>
                                   </div>
@@ -1869,7 +1963,7 @@ export const InventoryPage = () => {
                                         </div>
                                         <div className="rounded-lg bg-[#faf7f1] p-3">
                                           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Cost / base unit</p>
-                                          <p className="mt-1 text-sm font-bold text-[#3b241a]">{formatCurrency(batch.unitCost)} <span className="text-xs font-medium text-slate-500">/ {it.baseUnit || it.unit}</span></p>
+                                          <p className="mt-1 text-sm font-bold text-[#3b241a]">{formatInventoryUnitCost(batch.unitCost)} <span className="text-xs font-medium text-slate-500">/ {it.baseUnit || it.unit}</span></p>
                                         </div>
                                       </div>
                                       <div className="grid grid-cols-2 gap-2 px-3.5 pb-3.5 sm:grid-cols-3">
@@ -1880,7 +1974,6 @@ export const InventoryPage = () => {
                                           ['Wasted', formatInventoryQuantity(batch.wastageQuantity || 0, it)],
                                           ['Consumed profitably / gain', formatInventoryQuantity(batch.consumedProfitablyQuantity ?? batch.unrecordedQuantity ?? 0, it)],
                                           ['Sales revenue', formatCurrency(batch.salesRevenue || 0)],
-                                          ['Profit', formatCurrency(batch.profit || 0)],
                                           ['Loss (wastage + unrecorded)', formatCurrency(batch.loss || 0)]
                                         ].map(([label, value]) => (
                                           <div key={label} className="rounded-lg border border-[#eee7dc] bg-white p-2.5">
@@ -2240,28 +2333,76 @@ export const InventoryPage = () => {
       )}
 
       {activeTab === 'recipes' && (
-        <Card
-          title="Restaurant Recipes"
-          subtitle="Active recipe versions deduct ingredients when a restaurant bill is finalized"
-          action={canManageInventory ? <Button size="sm" icon={PlusCircle} onClick={() => setIsRecipeOpen(true)}>Add Recipe</Button> : null}
-        >
+        <div className="space-y-4">
+          {canManageInventory && (
+            <Card title="Recipe Deduction Stage" subtitle="Choose when a kitchen order consumes its recipe ingredients">
+              <div className="max-w-sm">
+                <Select
+                  label="Deduct ingredients when the order is"
+                  value={recipeDeductionStage}
+                  onChange={handleRecipeDeductionStageChange}
+                  options={[
+                    { label: 'Prepared (default)', value: 'prepared' },
+                    { label: 'Served', value: 'served' }
+                  ]}
+                />
+              </div>
+            </Card>
+          )}
+          <Card
+            title="Restaurant Recipes"
+            subtitle="Recipe versions retain their ingredient history and estimated costs"
+            action={canManageInventory ? (
+              <Button size="sm" icon={PlusCircle} onClick={() => {
+                setEditingRecipe(null);
+                setRecipeForm({
+                  menuItemId: '',
+                  recipeName: '',
+                  description: '',
+                  servingSize: '1 serving',
+                  preparationTimeMinutes: 0,
+                  ingredients: [{ itemId: '', quantity: 1, unit: '', optional: false, substituteItemId: '', substituteQuantity: '', substituteUnit: '' }]
+                });
+                setIsRecipeOpen(true);
+              }}>Add Recipe</Button>
+            ) : null}
+          >
           <div className="overflow-x-auto">
-            <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
-              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Menu item</th><th className="pb-3">Recipe version</th><th className="pb-3">Ingredients</th><th className="pb-3">Status</th></tr></thead>
+            <table className="w-full min-w-[1050px] text-left text-xs">
+              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Recipe / menu item</th><th className="pb-3">Version</th><th className="pb-3">Ingredients</th><th className="pb-3 text-right">Recipe cost</th><th className="pb-3 text-right">Selling price</th><th className="pb-3 text-right">Est. gross profit / food cost</th><th className="pb-3">Status</th><th className="pb-3 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {recipes.map((recipe) => (
                   <tr key={recipe._id}>
-                    <td className="py-3 font-semibold">{recipe.menuItemId?.name || 'Menu item'}</td>
+                    <td className="py-3">
+                      <p className="font-semibold">{recipe.recipeName || recipe.menuItemId?.name || 'Recipe'}</p>
+                      <p className="text-slate-500">{recipe.menuItemId?.name || 'Menu item'} · {recipe.servingSize || '1 serving'}</p>
+                      {recipe.preparationTimeMinutes > 0 && <p className="text-slate-400">{recipe.preparationTimeMinutes} min prep</p>}
+                    </td>
                     <td>v{recipe.version}</td>
                     <td>{recipe.ingredients.map((ingredient) => `${ingredient.itemId?.name || 'Item'} ${ingredient.quantity} ${ingredient.unit}${ingredient.optional ? ' (optional)' : ''}`).join(', ')}</td>
-                    <td><Badge variant={recipe.isActive ? 'active' : 'inactive'}>{recipe.isActive ? 'Active' : 'Archived'}</Badge></td>
+                    <td className="text-right">{formatCurrency(recipe.estimatedRecipeCost || 0)}<span className="block text-slate-400">per serving</span></td>
+                    <td className="text-right">{formatCurrency(recipe.sellingPrice || 0)}</td>
+                    <td className="text-right">
+                      <span className={recipe.estimatedGrossProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}>{formatCurrency(recipe.estimatedGrossProfit || 0)}</span>
+                      <span className="block text-slate-500">{recipe.foodCostPercent == null ? '—' : `${recipe.foodCostPercent.toFixed(1)}% food cost`}</span>
+                    </td>
+                    <td><Badge variant={recipe.isActive ? 'active' : 'inactive'}>{recipe.isActive ? 'Active' : 'Inactive'}</Badge></td>
+                    <td className="text-right">
+                      {canManageInventory && (
+                        <div className="inline-flex gap-1">
+                          <Button size="sm" variant="outline" icon={Pencil} onClick={() => handleEditRecipe(recipe)}>Edit</Button>
+                          <Button size="sm" variant="outline" onClick={() => handleRecipeStatusChange(recipe)}>{recipe.isActive ? 'Deactivate' : 'Activate'}</Button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
-                {!recipes.length && <tr><td colSpan="4" className="py-10 text-center text-slate-400">No recipes configured.</td></tr>}
+                {!recipes.length && <tr><td colSpan="8" className="py-10 text-center text-slate-400">No recipes configured.</td></tr>}
               </tbody>
             </table>
           </div>
-        </Card>
+          </Card>
+        </div>
       )}
 
       {activeTab === 'minibar' && (
@@ -2354,6 +2495,8 @@ export const InventoryPage = () => {
                 { label: 'Physical Stock Verifications', value: 'verifications' },
                 { label: 'Department Consumption', value: 'department-consumption' },
                 { label: 'Recipe Consumption / Food Cost', value: 'recipe-consumption' },
+                { label: 'Daily Recipe Ingredient Consumption', value: 'recipe-usage' },
+                { label: 'Monthly Recipe Ingredient Consumption', value: 'recipe-monthly-usage' },
                 { label: 'Wastage', value: 'wastage' },
                 { label: 'Expiry', value: 'expiry' },
                 { label: 'Stock Transfers', value: 'transfers' },
@@ -2597,10 +2740,10 @@ export const InventoryPage = () => {
               <tbody className="divide-y divide-slate-100">
                 {report.map((row, index) => (
                   <tr key={row._id || index}>
-                    <td className="py-3">{row.name || row.poNumber || row.orderNumber || dayjs(row.createdAt || row.receivedAt).format('YYYY-MM-DD')}</td>
-                    <td>{row.itemId?.name || row.code || row.referenceNumber || row.vendorId?.name || row.menuItemId?.name || '—'}</td>
+                    <td className="py-3">{row.date || row.month || row.name || row.poNumber || row.orderNumber || dayjs(row.createdAt || row.receivedAt).format('YYYY-MM-DD')}</td>
+                    <td>{row.itemId?.name || row.itemName || row.code || row.referenceNumber || row.vendorId?.name || row.menuItemId?.name || '—'}</td>
                     <td>{row.movementType || (row.quantity !== undefined ? `${row.quantity} ${row.unit || ''}` : row.status || '—')}</td>
-                    <td>{row.department || row.vendorId?.name || row.orderNumber || '—'}</td>
+                    <td>{row.department || row.vendorId?.name || row.orderNumber || row.menuItemName || (row.orderCount ? `${row.orderCount} orders · ${row.month}` : '—')}</td>
                     <td className="text-right">{row.stockValue !== undefined ? formatCurrency(row.stockValue) : row.totalAmount !== undefined ? formatCurrency(row.totalAmount) : row.totalCost !== undefined ? formatCurrency(row.totalCost) : '—'}</td>
                   </tr>
                 ))}
@@ -2899,7 +3042,7 @@ export const InventoryPage = () => {
               </p>
             </div>
           )}
-          {selectedRawMaterialForReceipt && (
+          {selectedRawMaterialForReceipt && !receiptBatchesLoading && receiptBatches.length > 0 && (
             <div className="space-y-3 rounded-lg border border-slate-200 p-3">
               <Select
                 label="Is there any wastage in the remaining stock?"
@@ -3578,9 +3721,30 @@ export const InventoryPage = () => {
         </form>
       </Modal>
 
-      <Modal isOpen={isRecipeOpen} onClose={() => setIsRecipeOpen(false)} title="Create Recipe Version" subtitle="This version applies to future finalized restaurant sales">
+      <Modal isOpen={isRecipeOpen} onClose={() => setIsRecipeOpen(false)} title={editingRecipe ? 'Edit Recipe' : 'Create Recipe'} subtitle="Saving creates a new version and keeps historical order costs unchanged">
         <form onSubmit={handleSaveRecipe} className="space-y-5">
-          <Select label="Menu item" searchable searchPlaceholder="Search menu items..." required value={recipeForm.menuItemId} onChange={(e) => setRecipeForm({ ...recipeForm, menuItemId: e.target.value })} options={[{ label: 'Choose menu item', value: '' }, ...menuItems.map((menuItem) => ({ label: menuItem.name, value: menuItem._id }))]} />
+          <Select label="Menu item" searchable searchPlaceholder="Search menu items..." required value={recipeForm.menuItemId} onChange={(e) => {
+            const menuItem = menuItems.find((entry) => entry._id === e.target.value);
+            setRecipeForm({
+              ...recipeForm,
+              menuItemId: e.target.value,
+              recipeName: recipeForm.recipeName || menuItem?.name || ''
+            });
+          }} options={[{ label: 'Choose menu item', value: '' }, ...menuItems.map((menuItem) => ({ label: menuItem.name, value: menuItem._id }))]} />
+          <Input label="Recipe name" required value={recipeForm.recipeName} onChange={(event) => setRecipeForm({ ...recipeForm, recipeName: event.target.value })} />
+          <label className="block text-sm font-medium text-slate-700">
+            Description
+            <textarea
+              value={recipeForm.description}
+              onChange={(event) => setRecipeForm({ ...recipeForm, description: event.target.value })}
+              rows={2}
+              className="mt-1 w-full rounded-xl border border-orvelle-border bg-white px-3 py-2 text-sm"
+            />
+          </label>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="Serving size" required value={recipeForm.servingSize} onChange={(event) => setRecipeForm({ ...recipeForm, servingSize: event.target.value })} />
+            <Input label="Preparation time (minutes)" type="number" min="0" step="1" value={recipeForm.preparationTimeMinutes} onChange={(event) => setRecipeForm({ ...recipeForm, preparationTimeMinutes: event.target.value })} />
+          </div>
 
           <div className="space-y-3">
             {recipeForm.ingredients.map((ingredient, index) => (
@@ -3646,8 +3810,11 @@ export const InventoryPage = () => {
           <Button type="button" size="sm" variant="outline" onClick={() => setRecipeForm({ ...recipeForm, ingredients: [...recipeForm.ingredients, { itemId: '', quantity: 1, unit: '', optional: false, substituteItemId: '', substituteQuantity: '', substituteUnit: '' }] })}>+ Add ingredient</Button>
 
           <div className="flex justify-end gap-2 border-t border-orvelle-border/40 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setIsRecipeOpen(false)}>Cancel</Button>
-            <Button type="submit">Save recipe version</Button>
+            <Button type="button" variant="secondary" onClick={() => {
+              setIsRecipeOpen(false);
+              setEditingRecipe(null);
+            }}>Cancel</Button>
+            <Button type="submit">{editingRecipe ? 'Save new version' : 'Create recipe'}</Button>
           </div>
         </form>
       </Modal>
