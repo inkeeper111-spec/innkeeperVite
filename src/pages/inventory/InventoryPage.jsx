@@ -1767,17 +1767,21 @@ export const InventoryPage = () => {
                                           <div className="min-w-0">
                                             <p className="truncate text-sm font-bold text-[#3b241a]">{batch.batchNumber || 'Unnumbered batch'}</p>
                                             <p className="mt-0.5 text-[11px] text-slate-500">
-                                              {batch.location || 'Main Store'} · {dayjs(batch.receivedAt).format('MMM D, YYYY')}
-                                            </p>
+                                                {batch.location || 'Main Store'}
+                                                {batch.receivedAt && ` · ${dayjs(batch.receivedAt).format('MMM D, YYYY')}`}
+                                                {batch.legacyStock && ' · Existing stock without batch tracking'}
+                                              </p>
                                           </div>
                                         </div>
-                                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
-                                          batch.remainingQuantity > 0
-                                            ? 'bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200'
-                                            : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
-                                        }`}>
-                                          {batch.remainingQuantity > 0 ? 'Open' : 'Exhausted'}
-                                        </span>
+                                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                                            batch.legacyStock
+                                              ? 'bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200'
+                                              : batch.remainingQuantity > 0
+                                              ? 'bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200'
+                                              : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
+                                          }`}>
+                                            {batch.legacyStock ? 'Untracked' : batch.remainingQuantity > 0 ? 'Open' : 'Exhausted'}
+                                          </span>
                                       </div>
                                       <div className="grid grid-cols-2 gap-2.5 p-3.5">
                                         <div className="rounded-lg bg-[#faf7f1] p-3">
@@ -1785,7 +1789,9 @@ export const InventoryPage = () => {
                                           <p className="mt-1 text-sm font-bold text-[#3b241a]">{formatInventoryQuantity(batch.remainingQuantity, it)}</p>
                                         </div>
                                         <div className="rounded-lg bg-[#faf7f1] p-3">
-                                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Cost / base unit</p>
+                                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                                            {batch.legacyStock ? 'Estimated cost / base unit' : 'Cost / base unit'}
+                                          </p>
                                           <p className="mt-1 text-sm font-bold text-[#3b241a]">{formatCurrency(batch.unitCost)} <span className="text-xs font-medium text-slate-500">/ {it.baseUnit || it.unit}</span></p>
                                         </div>
                                       </div>
@@ -1799,7 +1805,7 @@ export const InventoryPage = () => {
                                               && Number.isFinite(Number(batch.purchaseQuantity))
                                               && batch.purchaseUnit
                                               ? `${batch.purchaseQuantity} ${batch.purchaseUnit}`
-                                              : `Base units (${it.baseUnit || it.unit})`}
+                                              : batch.legacyStock ? 'Purchase details not recorded' : `Base units (${it.baseUnit || it.unit})`}
                                               </p>
                                             </div>
                                             <div className="p-3">
@@ -2734,9 +2740,11 @@ export const InventoryPage = () => {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <strong className="text-slate-800">{batch.batchNumber || 'Unnumbered batch'}</strong>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        batch.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                        batch.legacyStock
+                          ? 'bg-amber-100 text-amber-800'
+                          : batch.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
                       }`}>
-                        {batch.status === 'open' ? 'Open' : 'Exhausted'}
+                        {batch.legacyStock ? 'Untracked' : batch.status === 'open' ? 'Open' : 'Exhausted'}
                       </span>
                     </div>
                     <p className="mt-1 text-slate-600">
@@ -2749,6 +2757,7 @@ export const InventoryPage = () => {
                         : 'Purchase quantity not recorded'}
                       {batch.purchaseAmount != null && ` · ${currencySymbol}${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(batch.purchaseAmount)}`}
                       {batch.receivedAt && ` · ${new Date(batch.receivedAt).toLocaleDateString()}`}
+                      {batch.legacyStock && ' · Existing stock without batch tracking'}
                       {batch.location && ` · ${batch.location}`}
                       {batch.vendorId?.name && ` · ${batch.vendorId.name}`}
                     </p>
@@ -3683,9 +3692,11 @@ export const InventoryPage = () => {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <strong className="text-slate-800">{batch.batchNumber || 'Unnumbered batch'}</strong>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        batch.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                        batch.legacyStock
+                          ? 'bg-amber-100 text-amber-800'
+                          : batch.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
                       }`}>
-                        {batch.status === 'open' ? 'Open' : 'Exhausted'}
+                        {batch.legacyStock ? 'Untracked' : batch.status === 'open' ? 'Open' : 'Exhausted'}
                       </span>
                     </div>
                     <p className="mt-1 text-slate-600">
@@ -3694,6 +3705,7 @@ export const InventoryPage = () => {
                     </p>
                     <p className="text-xs text-slate-500">
                       {batch.receivedAt && `Received ${dayjs(batch.receivedAt).format('MMM D, YYYY')}`}
+                      {batch.legacyStock && 'Existing stock without batch tracking'}
                       {batch.expiryDate && ` · Expires ${dayjs(batch.expiryDate).format('MMM D, YYYY')}`}
                       {batch.location && ` · ${batch.location}`}
                       {batch.vendorId?.name && ` · ${batch.vendorId.name}`}
@@ -3701,7 +3713,7 @@ export const InventoryPage = () => {
                   </div>
                 ))}
                 <p className="text-xs text-slate-500">
-                  Compare the physical count with the batches recorded at Main Store. Report only consumption and wastage that have not already been recorded.
+                  Compare the count with recorded batches and any untracked legacy stock at Main Store. Purchase details are unavailable for legacy stock. Report only consumption and wastage that have not already been recorded.
                 </p>
               </div>
             </details>
@@ -3828,17 +3840,12 @@ export const InventoryPage = () => {
           {selectedVerificationItem && (
             <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
               <p className="font-semibold">Stock calculation preview ({verificationBaseUnit})</p>
-              <p>Expected stock: {formatReceiptQuantity(verificationExpectedStock)}</p>
+              <p>Last available stock: {formatReceiptQuantity(verificationExpectedStock)}</p>
               <p>Actual usable stock: {formatReceiptQuantity(verificationActualStock)}</p>
               <p>Unrecorded consumption: −{formatReceiptQuantity(verificationConsumption)}</p>
               <p>Wastage: −{formatReceiptQuantity(verificationWastage)}</p>
-              <p>Unexplained discrepancy: {formatReceiptQuantity(verificationDiscrepancy)}</p>
+              <p>Unexplained: {formatReceiptQuantity(verificationDiscrepancy)}</p>
               {verificationGain > 0 && <p>Stock gain: +{formatReceiptQuantity(verificationGain)}</p>}
-              <p className="border-t border-sky-200 pt-1 font-bold">
-                Remaining after recorded use and wastage: {formatReceiptQuantity(
-                  verificationExpectedStock - verificationConsumption - verificationWastage
-                )} {verificationBaseUnit}
-              </p>
               {verificationConsumption + verificationWastage > verificationReduction && (
                 <p className="font-medium text-rose-700">
                   Consumption and wastage cannot exceed the difference between expected and actual stock.
