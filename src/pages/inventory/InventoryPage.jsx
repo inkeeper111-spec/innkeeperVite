@@ -183,6 +183,8 @@ export const InventoryPage = () => {
   const [receiptBatches, setReceiptBatches] = useState([]);
   const [receiptBatchesLoading, setReceiptBatchesLoading] = useState(false);
   const [verificationBatches, setVerificationBatches] = useState([]);
+  const [verificationBalances, setVerificationBalances] = useState([]);
+  const [verificationLocations, setVerificationLocations] = useState([]);
   const [verificationBatchesLoading, setVerificationBatchesLoading] = useState(false);
 
   const [moveForm, setMoveForm] = useState({
@@ -253,6 +255,7 @@ export const InventoryPage = () => {
   const [purchaseDate, setPurchaseDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [verificationForm, setVerificationForm] = useState({
     itemId: '',
+    location: '',
     actualStock: '',
     unit: '',
     periodStart: dayjs().format('YYYY-MM-DD'),
@@ -265,7 +268,6 @@ export const InventoryPage = () => {
     wastageQuantity: '',
     wastageUnit: '',
     wastageReason: '',
-    discrepancyReason: '',
     remarks: ''
   });
 
@@ -469,16 +471,66 @@ export const InventoryPage = () => {
   useEffect(() => {
     if (!isVerificationOpen || !verificationForm.itemId) {
       setVerificationBatches([]);
+      setVerificationBalances([]);
+      setVerificationLocations([]);
       setVerificationBatchesLoading(false);
       return;
     }
     let active = true;
     setVerificationBatchesLoading(true);
-    api.get('/inventory/batches', {
-      params: { itemId: verificationForm.itemId, location: 'Main Store' }
-    })
-      .then(({ data }) => {
-        if (active) setVerificationBatches(data.data || []);
+    Promise.all([
+      api.get('/inventory/batches', { params: { itemId: verificationForm.itemId } }),
+      api.get('/inventory/locations', { params: { itemId: verificationForm.itemId } })
+    ])
+      .then(([batchResponse, balanceResponse]) => {
+        if (!active) return;
+        const batches = batchResponse.data.data || [];
+        const itemBalances = (balanceResponse.data.data || []).filter((balance) => (
+          String(balance.itemId?._id || balance.itemId) === String(verificationForm.itemId)
+        ));
+        const item = items.find((entry) => entry._id === verificationForm.itemId);
+        const locations = [...new Set([
+          ...itemBalances.map((balance) => balance.location),
+          ...batches.map((batch) => batch.location),
+          ...verifications
+            .filter((verification) => (
+              String(verification.itemId?._id || verification.itemId) === String(verificationForm.itemId)
+            ))
+            .map((verification) => verification.location || 'Main Store'),
+          item?.location
+        ].filter(Boolean))];
+        if (!locations.length) locations.push('Main Store');
+        const selectedLocationHasStock = itemBalances.some((balance) => (
+          balance.location === verificationForm.location && Number(balance.quantity) > 0
+        )) || batches.some((batch) => (
+          batch.location === verificationForm.location && Number(batch.remainingQuantity) > 0
+        ));
+        const firstStockLocation = itemBalances.find((balance) => Number(balance.quantity) > 0)?.location
+          || batches.find((batch) => Number(batch.remainingQuantity) > 0)?.location;
+        const location = selectedLocationHasStock
+          ? verificationForm.location
+          : firstStockLocation
+            || (locations.includes(verificationForm.location) ? verificationForm.location : null)
+            || (locations.includes(item?.location) ? item.location : locations[0]);
+        const balance = itemBalances.find((entry) => entry.location === location);
+        const expectedStock = balance?.quantity ?? (location === 'Main Store' ? item?.currentStock ?? 0 : 0);
+        const lastVerified = verifications
+          .filter((verification) => (
+            String(verification.itemId?._id || verification.itemId) === String(verificationForm.itemId)
+            && (verification.location || 'Main Store') === location
+          ))
+          .sort((left, right) => new Date(right.verifiedAt) - new Date(left.verifiedAt))[0];
+        setVerificationBatches(batches);
+        setVerificationBalances(itemBalances);
+        setVerificationLocations(locations);
+        setVerificationForm((current) => ({
+          ...current,
+          location,
+          periodStart: getVerificationPeriodStart(item, lastVerified),
+          actualStock: current.actualStock === ''
+            ? String(expectedStock)
+            : current.actualStock
+        }));
       })
       .catch((error) => {
         if (active) showApiErrorToast(error, 'Could not load batch history');
@@ -642,27 +694,43 @@ export const InventoryPage = () => {
     }
   };
 
-  const getLastVerificationForItem = (itemId) => verifications
+  const getLastVerificationForItem = (itemId, location = 'Main Store') => verifications
     .filter((verification) => (
       String(verification.itemId?._id || verification.itemId) === String(itemId)
-      && (verification.location || 'Main Store') === 'Main Store'
+      && (verification.location || 'Main Store') === location
     ))
     .sort((left, right) => new Date(right.verifiedAt) - new Date(left.verifiedAt))[0];
 
   const getVerificationPeriodStart = (item, lastVerified) => {
-    const lastVerifiedPeriodEnd = item?.lastVerifiedPeriodEnd || lastVerified?.periodEnd;
+    const lastVerifiedPeriodEnd = lastVerified?.periodEnd;
     return lastVerifiedPeriodEnd
       ? String(lastVerifiedPeriodEnd).slice(0, 10)
       : dayjs(item?.createdAt || dayjs()).format('YYYY-MM-DD');
   };
 
+  const handleVerificationLocationChange = (location) => {
+    const item = items.find((entry) => entry._id === verificationForm.itemId);
+    const balance = verificationBalances.find((entry) => entry.location === location);
+    const expectedStock = balance?.quantity ?? (location === 'Main Store' ? item?.currentStock ?? 0 : 0);
+    const lastVerified = item?._id ? getLastVerificationForItem(item._id, location) : null;
+    const unitFactor = conversionFactorForItem(item, verificationForm.unit) || 1;
+    setVerificationForm((current) => ({
+      ...current,
+      location,
+      actualStock: String(expectedStock / unitFactor),
+      periodStart: getVerificationPeriodStart(item, lastVerified)
+    }));
+  };
+
   const openStockVerification = (item) => {
     const now = dayjs().format('YYYY-MM-DD');
     const selectedItem = item || items[0];
-    const lastVerified = selectedItem?._id ? getLastVerificationForItem(selectedItem._id) : null;
+    const location = '';
+    const lastVerified = selectedItem?._id ? getLastVerificationForItem(selectedItem._id, location || 'Main Store') : null;
     setVerificationForm({
       itemId: selectedItem?._id || '',
-      actualStock: selectedItem?.currentStock ?? '',
+      location,
+      actualStock: '',
       unit: selectedItem?.baseUnit || selectedItem?.unit || '',
       periodStart: getVerificationPeriodStart(selectedItem, lastVerified) || now,
       periodEnd: now,
@@ -674,9 +742,11 @@ export const InventoryPage = () => {
       wastageQuantity: '',
       wastageUnit: selectedItem?.baseUnit || selectedItem?.unit || '',
       wastageReason: '',
-      discrepancyReason: '',
       remarks: ''
     });
+    setVerificationBatches([]);
+    setVerificationBalances([]);
+    setVerificationLocations([]);
     setIsVerificationOpen(true);
   };
 
@@ -698,6 +768,7 @@ export const InventoryPage = () => {
       setIsVerificationOpen(false);
       setMessage(`Physical stock verification saved for ${item.name}.`);
       await fetchInventory();
+      await refreshBatchLedger(item._id);
     } catch (err) {
       showApiErrorToast(err, 'Could not save stock verification');
     }
@@ -848,6 +919,23 @@ export const InventoryPage = () => {
     setIsPurchaseOrderOpen(true);
   };
 
+  const refreshBatchLedger = async (itemId) => {
+    setLoadingBatchesByItem((current) => ({ ...current, [itemId]: true }));
+    setBatchErrorsByItem((current) => ({ ...current, [itemId]: '' }));
+    try {
+      const { data } = await api.get('/inventory/batches', { params: { itemId } });
+      setBatchesByItem((current) => ({ ...current, [itemId]: data.data || [] }));
+    } catch (error) {
+      setBatchErrorsByItem((current) => ({
+        ...current,
+        [itemId]: 'Could not load batch details. Please try again.'
+      }));
+      showApiErrorToast(error, 'Could not load inventory batches');
+    } finally {
+      setLoadingBatchesByItem((current) => ({ ...current, [itemId]: false }));
+    }
+  };
+
   const toggleItemBatches = async (item) => {
     if (expandedBatchItemId === item._id) {
       setExpandedBatchItemId('');
@@ -858,21 +946,7 @@ export const InventoryPage = () => {
     if (Object.prototype.hasOwnProperty.call(batchesByItem, item._id) && !batchErrorsByItem[item._id]) {
       return;
     }
-
-    setLoadingBatchesByItem((current) => ({ ...current, [item._id]: true }));
-    setBatchErrorsByItem((current) => ({ ...current, [item._id]: '' }));
-    try {
-      const { data } = await api.get('/inventory/batches', { params: { itemId: item._id } });
-      setBatchesByItem((current) => ({ ...current, [item._id]: data.data || [] }));
-    } catch (error) {
-      setBatchErrorsByItem((current) => ({
-        ...current,
-        [item._id]: 'Could not load batch details. Please try again.'
-      }));
-      showApiErrorToast(error, 'Could not load inventory batches');
-    } finally {
-      setLoadingBatchesByItem((current) => ({ ...current, [item._id]: false }));
-    }
+    await refreshBatchLedger(item._id);
   };
 
   const handleReceivePO = async (event) => {
@@ -981,20 +1055,10 @@ export const InventoryPage = () => {
         quantity: Number(adjustmentForm.quantity)
       });
       setIsAdjustmentOpen(false);
-      setMessage('Stock adjustment submitted for approval. Inventory will change only after approval.');
+      setMessage('Stock adjustment recorded and inventory updated.');
       fetchInventory();
     } catch (err) {
       showApiErrorToast(err, 'Could not submit stock adjustment');
-    }
-  };
-
-  const handleReviewAdjustment = async (adjustment, decision) => {
-    try {
-      await api.patch(`/inventory/adjustments/${adjustment._id}/review`, { decision });
-      setMessage(`Stock adjustment ${decision === 'approve' ? 'approved and posted' : 'rejected'}.`);
-      fetchInventory();
-    } catch (err) {
-      showApiErrorToast(err, 'Could not review stock adjustment');
     }
   };
 
@@ -1288,7 +1352,19 @@ export const InventoryPage = () => {
   const selectedVerificationItem = items.find((item) => item._id === verificationForm.itemId);
   const verificationBaseUnit = selectedVerificationItem?.baseUnit || selectedVerificationItem?.unit || '';
   const verificationUnitFactor = conversionFactorForItem(selectedVerificationItem, verificationForm.unit);
-  const verificationExpectedStock = Number(selectedVerificationItem?.currentStock) || 0;
+  const verificationLocationBalance = verificationBalances.find((balance) => (
+    balance.location === verificationForm.location
+  ));
+  const verificationLocationBatches = verificationBatches.filter((batch) => (
+    (batch.location || 'Main Store') === verificationForm.location
+  ));
+  const verificationLocationOptions = verificationLocations.length
+    ? verificationLocations
+    : verificationForm.location ? [verificationForm.location] : [];
+  const verificationExpectedStock = Number(
+    verificationLocationBalance?.quantity
+      ?? (verificationForm.location === 'Main Store' ? selectedVerificationItem?.currentStock : 0)
+  ) || 0;
   const verificationActualStock = Math.max(0, Number(verificationForm.actualStock) || 0) * verificationUnitFactor;
   const verificationConsumption = Math.max(0, Number(verificationForm.consumptionQuantity) || 0)
     * conversionFactorForItem(selectedVerificationItem, verificationForm.consumptionUnit || verificationForm.unit);
@@ -1319,12 +1395,16 @@ export const InventoryPage = () => {
           <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={ClipboardList} onClick={() => setIsDepartmentRequestOpen(true)}>
             Request Stock
           </Button>
-          <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={AlertTriangle} onClick={() => setIsAdjustmentOpen(true)}>
-            Report Wastage
-          </Button>
-          <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={ClipboardList} onClick={() => openStockVerification()}>
-            Verify Stock
-          </Button>
+          {canManageInventory && (
+            <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={AlertTriangle} onClick={() => setIsAdjustmentOpen(true)}>
+              Report Wastage
+            </Button>
+          )}
+          {canManageInventory && (
+            <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={ClipboardList} onClick={() => openStockVerification()}>
+              Verify Stock
+            </Button>
+          )}
           {canManageInventory && (
             <>
               <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={ArrowLeftRight} onClick={() => setIsTransferOpen(true)}>
@@ -1359,7 +1439,7 @@ export const InventoryPage = () => {
             { id: 'categories', label: 'Categories', icon: Tag },
             { id: 'items', label: `Inventory Items (${items.length})`, icon: Boxes },
             { id: 'ledger', label: 'Stock Management', icon: ArrowLeftRight },
-            { id: 'verifications', label: `Stock Verification (${dashboard?.pendingStockVerifications || 0} pending)`, icon: ClipboardList },
+            { id: 'verifications', label: `Stock Verification (${dashboard?.pendingStockVerifications || 0} due)`, icon: ClipboardList },
             { id: 'vendors', label: `Vendors (${vendors.length})`, icon: Truck },
             { id: 'pos', label: `Purchase Orders (${purchaseOrders.length})`, icon: PackageCheck },
             { id: 'requests', label: `Department Requests (${departmentRequests.length})`, icon: ClipboardList },
@@ -1400,7 +1480,7 @@ export const InventoryPage = () => {
               { label: 'Wastage This Month', value: formatCurrency(dashboard?.wastageCostThisMonth || 0), icon: AlertTriangle, tone: 'text-rose-600 bg-rose-50' },
               { label: 'Expiring Soon', value: dashboard?.expiringProducts?.length || 0, icon: Clock3, tone: 'text-orange-600 bg-orange-50' },
               { label: 'Open Requests', value: departmentRequests.filter((request) => request.status === 'pending').length, icon: ClipboardList, tone: 'text-cyan-600 bg-cyan-50' },
-              { label: 'Pending Verification', value: dashboard?.pendingStockVerifications ?? 0, icon: ClipboardList, tone: 'text-orange-600 bg-orange-50' }
+              { label: 'Verification Due', value: dashboard?.pendingStockVerifications ?? 0, icon: ClipboardList, tone: 'text-orange-600 bg-orange-50' }
             ].map(({ label, value, icon: Icon, tone }) => (
               <Card key={label} className="!p-4 sm:!p-5">
                 <div className="flex items-center justify-between gap-3">
@@ -1716,7 +1796,7 @@ export const InventoryPage = () => {
                                     <div>
                                       <p className="text-sm font-bold tracking-wide text-[#3b241a]">Batch ledger</p>
                                       <p className="mt-0.5 text-xs text-slate-500">
-                                        Purchase history and unit costs · Base unit: {it.baseUnit || it.unit}
+                                        Batch purchases, consumption, wastage, sales profit, and loss · Base unit: {it.baseUnit || it.unit}
                                       </p>
                                     </div>
                                   </div>
@@ -1767,33 +1847,47 @@ export const InventoryPage = () => {
                                           <div className="min-w-0">
                                             <p className="truncate text-sm font-bold text-[#3b241a]">{batch.batchNumber || 'Unnumbered batch'}</p>
                                             <p className="mt-0.5 text-[11px] text-slate-500">
-                                                {batch.location || 'Main Store'}
-                                                {batch.receivedAt && ` · ${dayjs(batch.receivedAt).format('MMM D, YYYY')}`}
-                                                {batch.legacyStock && ' · Existing stock without batch tracking'}
-                                              </p>
+                                              {batch.location || 'Main Store'}
+                                              {batch.receivedAt && ` · ${dayjs(batch.receivedAt).format('MMM D, YYYY')}`}
+                                            </p>
                                           </div>
                                         </div>
-                                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
-                                            batch.legacyStock
-                                              ? 'bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200'
-                                              : batch.remainingQuantity > 0
-                                              ? 'bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200'
-                                              : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
-                                          }`}>
-                                            {batch.legacyStock ? 'Untracked' : batch.remainingQuantity > 0 ? 'Open' : 'Exhausted'}
-                                          </span>
+                                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                                          batch.remainingQuantity > 0
+                                            ? 'bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200'
+                                            : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
+                                        }`}>
+                                          {batch.remainingQuantity > 0 ? 'Open' : 'Exhausted'}
+                                        </span>
                                       </div>
                                       <div className="grid grid-cols-2 gap-2.5 p-3.5">
                                         <div className="rounded-lg bg-[#faf7f1] p-3">
-                                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Remaining</p>
-                                          <p className="mt-1 text-sm font-bold text-[#3b241a]">{formatInventoryQuantity(batch.remainingQuantity, it)}</p>
+                                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Actual usable</p>
+                                          <p className="mt-1 text-sm font-bold text-[#3b241a]">
+                                            {formatInventoryQuantity(batch.actualUsableStock ?? batch.remainingQuantity, it)}
+                                          </p>
                                         </div>
                                         <div className="rounded-lg bg-[#faf7f1] p-3">
-                                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                                            {batch.legacyStock ? 'Estimated cost / base unit' : 'Cost / base unit'}
-                                          </p>
+                                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Cost / base unit</p>
                                           <p className="mt-1 text-sm font-bold text-[#3b241a]">{formatCurrency(batch.unitCost)} <span className="text-xs font-medium text-slate-500">/ {it.baseUnit || it.unit}</span></p>
                                         </div>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2 px-3.5 pb-3.5 sm:grid-cols-3">
+                                        {[
+                                          ['Material', batch.materialName || it.name],
+                                          ['Expected', formatInventoryQuantity(batch.expectedStock ?? batch.uploadedQuantity ?? batch.quantity, it)],
+                                          ['Unrecorded consumption', formatInventoryQuantity(batch.unrecordedConsumptionQuantity ?? batch.consumedQuantity ?? 0, it)],
+                                          ['Wasted', formatInventoryQuantity(batch.wastageQuantity || 0, it)],
+                                          ['Consumed profitably / gain', formatInventoryQuantity(batch.consumedProfitablyQuantity ?? batch.unrecordedQuantity ?? 0, it)],
+                                          ['Sales revenue', formatCurrency(batch.salesRevenue || 0)],
+                                          ['Profit', formatCurrency(batch.profit || 0)],
+                                          ['Loss (wastage + unrecorded)', formatCurrency(batch.loss || 0)]
+                                        ].map(([label, value]) => (
+                                          <div key={label} className="rounded-lg border border-[#eee7dc] bg-white p-2.5">
+                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+                                            <p className="mt-1 text-xs font-bold text-[#3b241a]">{value}</p>
+                                          </div>
+                                        ))}
                                       </div>
                                       <div className="px-4 pb-4">
                                         <div className="rounded-lg border border-[#eee7dc]">
@@ -1805,7 +1899,7 @@ export const InventoryPage = () => {
                                               && Number.isFinite(Number(batch.purchaseQuantity))
                                               && batch.purchaseUnit
                                               ? `${batch.purchaseQuantity} ${batch.purchaseUnit}`
-                                              : batch.legacyStock ? 'Purchase details not recorded' : `Base units (${it.baseUnit || it.unit})`}
+                                              : `Base units (${it.baseUnit || it.unit})`}
                                               </p>
                                             </div>
                                             <div className="p-3">
@@ -2032,26 +2126,35 @@ export const InventoryPage = () => {
         <Card
           title="Physical Stock Verification"
           subtitle="Compare usable physical stock with expected stock and classify use, wastage, and discrepancies"
-          action={<Button size="sm" icon={ClipboardList} onClick={() => openStockVerification()}>Record Verification</Button>}
+          action={canManageInventory && <Button size="sm" icon={ClipboardList} onClick={() => openStockVerification()}>Record Verification</Button>}
         >
           <div className="overflow-x-auto">
             <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
-              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Material</th><th className="pb-3">Expected</th><th className="pb-3">Actual usable</th><th className="pb-3">Used</th><th className="pb-3">Wasted</th><th className="pb-3">Discrepancy / Gain</th><th className="pb-3">Period</th><th className="pb-3">Verified by</th><th className="pb-3">Status</th></tr></thead>
+              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Material</th><th className="pb-3">Location</th><th className="pb-3">Expected</th><th className="pb-3">Actual usable</th><th className="pb-3">Unrecorded consumption</th><th className="pb-3">Wasted</th><th className="pb-3">Consumed profitably / gain</th><th className="pb-3">Period</th><th className="pb-3">Verified by</th><th className="pb-3">Status</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {verifications.map((verification) => (
                   <tr key={verification._id}>
                     <td className="py-3 font-semibold">{verification.itemId?.name || 'Material'}</td>
+                    <td>{verification.location || 'Main Store'}</td>
                     <td>{formatInventoryQuantity(verification.expectedStock, verification.itemId || { unit: verification.unit })}</td>
                     <td>{formatInventoryQuantity(verification.actualStock, verification.itemId || { unit: verification.unit })}</td>
                     <td>{formatInventoryQuantity(verification.consumptionQuantity, verification.itemId || { unit: verification.unit })}</td>
                     <td>{formatInventoryQuantity(verification.wastageQuantity, verification.itemId || { unit: verification.unit })}</td>
-                    <td>{verification.stockGain > 0 ? `Gain ${verification.stockGain}` : verification.discrepancyQuantity || 0}</td>
+                    <td>
+                      {verification.stockGain > 0
+                        ? `Gain ${formatInventoryQuantity(verification.stockGain, verification.itemId || { unit: verification.unit })}`
+                        : `Consumed profitably ${formatInventoryQuantity(verification.discrepancyQuantity || 0, verification.itemId || { unit: verification.unit })}`}
+                    </td>
                     <td>{dayjs(verification.periodStart).format('MMM D')} – {dayjs(verification.periodEnd).format('MMM D, YYYY')}</td>
                     <td>{verification.verifiedBy?.name || 'Staff'}</td>
-                    <td><Badge variant={verification.status}>{verification.status}</Badge></td>
+                    <td>
+                      <Badge variant={['pending', 'verified'].includes(verification.status) ? 'approved' : verification.status}>
+                        {['pending', 'verified'].includes(verification.status) ? 'Approved' : verification.status}
+                      </Badge>
+                    </td>
                   </tr>
                 ))}
-                {!verifications.length && <tr><td colSpan="9" className="py-10 text-center text-slate-400">No physical stock verifications recorded yet.</td></tr>}
+                {!verifications.length && <tr><td colSpan="10" className="py-10 text-center text-slate-400">No physical stock verifications recorded yet.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -2059,7 +2162,7 @@ export const InventoryPage = () => {
             <div className="mt-5 border-t border-slate-100 pt-4">
               <h3 className="mb-3 text-sm font-bold text-slate-800">Due for verification</h3>
               <div className="flex flex-wrap gap-2">
-                {dashboard.pendingVerificationItems.map((item) => (
+                {canManageInventory && dashboard.pendingVerificationItems.map((item) => (
                   <Button key={item._id} size="sm" variant="outline" onClick={() => openStockVerification(item)}>
                     Verify {item.name}
                   </Button>
@@ -2101,10 +2204,10 @@ export const InventoryPage = () => {
       )}
 
       {activeTab === 'adjustments' && (
-        <Card title="Stock Adjustments & Wastage" subtitle="Pending adjustments await approval; logged wastage shows its batch and time">
+        <Card title="Stock Adjustments & Wastage" subtitle="Authorized adjustments update stock immediately; wastage shows its batch and time">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] table-fixed break-words whitespace-normal text-left text-xs">
-              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Logged at</th><th className="pb-3">Item</th><th className="pb-3">Batch</th><th className="pb-3">Quantity</th><th className="pb-3">Reason</th><th className="pb-3">Department</th><th className="pb-3">Reported / logged by</th><th className="pb-3">Status</th><th className="pb-3 text-right">Action</th></tr></thead>
+              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Logged at</th><th className="pb-3">Item</th><th className="pb-3">Batch</th><th className="pb-3">Quantity</th><th className="pb-3">Reason</th><th className="pb-3">Department</th><th className="pb-3">Reported / logged by</th><th className="pb-3">Status</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {adjustmentRows.map(({ id, entry, movement, quantity, unit, batchNumber, loggedAt }) => {
                   const isWastageMovement = entry.recordType === 'wastage';
@@ -2113,7 +2216,9 @@ export const InventoryPage = () => {
                     || movement?.notes
                     || (movement?.movementType === 'expiry' ? 'expired' : 'wastage');
                   const reporter = isWastageMovement ? movement?.recordedBy : entry.reportedBy;
-                  const status = isWastageMovement ? 'Logged' : entry.status;
+                  const status = isWastageMovement || ['pending', 'logged'].includes(entry.status)
+                    ? 'Approved'
+                    : entry.status;
                   return (
                   <tr key={id}>
                     <td className="py-3">{dayjs(loggedAt).format('YYYY-MM-DD HH:mm:ss')}</td>
@@ -2123,19 +2228,11 @@ export const InventoryPage = () => {
                     <td className="capitalize">{String(reason).replace(/_/g, ' ')}</td>
                     <td>{entry.department || movement?.department || '—'}</td>
                     <td>{reporter?.name || '—'}</td>
-                    <td><Badge variant={status.toLowerCase()}>{status}</Badge></td>
-                    <td className="text-right">
-                      {canManageInventory && !isWastageMovement && entry.status === 'pending' && (
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="success" onClick={() => handleReviewAdjustment(entry, 'approve')}>Approve</Button>
-                          <Button size="sm" variant="danger" onClick={() => handleReviewAdjustment(entry, 'reject')}>Reject</Button>
-                        </div>
-                      )}
-                    </td>
+                    <td><Badge variant={status.toLowerCase()}>{status === 'approved' ? 'Approved' : status}</Badge></td>
                   </tr>
                   );
                 })}
-                {!adjustmentRows.length && <tr><td colSpan="9" className="py-10 text-center text-slate-400">No adjustments reported.</td></tr>}
+                {!adjustmentRows.length && <tr><td colSpan="8" className="py-10 text-center text-slate-400">No adjustments reported.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -2740,11 +2837,9 @@ export const InventoryPage = () => {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <strong className="text-slate-800">{batch.batchNumber || 'Unnumbered batch'}</strong>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        batch.legacyStock
-                          ? 'bg-amber-100 text-amber-800'
-                          : batch.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                        batch.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
                       }`}>
-                        {batch.legacyStock ? 'Untracked' : batch.status === 'open' ? 'Open' : 'Exhausted'}
+                        {batch.status === 'open' ? 'Open' : 'Exhausted'}
                       </span>
                     </div>
                     <p className="mt-1 text-slate-600">
@@ -2757,7 +2852,6 @@ export const InventoryPage = () => {
                         : 'Purchase quantity not recorded'}
                       {batch.purchaseAmount != null && ` · ${currencySymbol}${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(batch.purchaseAmount)}`}
                       {batch.receivedAt && ` · ${new Date(batch.receivedAt).toLocaleDateString()}`}
-                      {batch.legacyStock && ' · Existing stock without batch tracking'}
                       {batch.location && ` · ${batch.location}`}
                       {batch.vendorId?.name && ` · ${batch.vendorId.name}`}
                     </p>
@@ -3593,7 +3687,7 @@ export const InventoryPage = () => {
         </form>
       </Modal>
 
-      <Modal isOpen={isAdjustmentOpen} onClose={() => setIsAdjustmentOpen(false)} title="Report Stock Adjustment" subtitle="An administrator must approve this adjustment before it affects stock">
+      <Modal isOpen={isAdjustmentOpen} onClose={() => setIsAdjustmentOpen(false)} title="Report Stock Adjustment" subtitle="This adjustment is recorded immediately and updates inventory">
         <form onSubmit={handleCreateAdjustment} className="space-y-4">
           <Select label="Item" searchable searchPlaceholder="Search inventory items..." required value={adjustmentForm.itemId} onChange={(e) => {
             const item = items.find((entry) => entry._id === e.target.value);
@@ -3614,25 +3708,27 @@ export const InventoryPage = () => {
           </div>
           <Input label="Department" value={adjustmentForm.department} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, department: e.target.value })} />
           <Input label="Remarks" value={adjustmentForm.remarks} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, remarks: e.target.value })} />
-          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setIsAdjustmentOpen(false)}>Cancel</Button><Button type="submit">Submit for approval</Button></div>
+          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setIsAdjustmentOpen(false)}>Cancel</Button><Button type="submit">Record adjustment</Button></div>
         </form>
       </Modal>
 
-      <Modal isOpen={isVerificationOpen} onClose={() => setIsVerificationOpen(false)} title="Verify Physical Stock" subtitle="Enter usable stock, then classify reductions as used, wasted, or unexplained">
+      <Modal isOpen={isVerificationOpen} onClose={() => setIsVerificationOpen(false)} title="Verify Physical Stock" subtitle="Enter usable stock, then classify reductions as consumed or wasted">
         <form onSubmit={handleStockVerification} className="space-y-4">
           <Select
             label="Raw material"
-            info="Choose the material you counted. The expected quantity shown here is the current stock balance recorded by the system before this verification."
+            info="Choose the material and stock location you counted. Expected stock is calculated from that location's recorded balance."
             searchable
             required
             value={verificationForm.itemId}
             onChange={(event) => {
               const item = items.find((entry) => entry._id === event.target.value);
-              const lastVerified = item?._id ? getLastVerificationForItem(item._id) : null;
+              const location = '';
+              const lastVerified = item?._id ? getLastVerificationForItem(item._id, location || 'Main Store') : null;
               setVerificationForm({
                 ...verificationForm,
                 itemId: event.target.value,
-                actualStock: item?.currentStock ?? '',
+                location,
+                actualStock: '',
                 unit: item?.baseUnit || item?.unit || '',
                 hasUnrecordedConsumption: 'no',
                 consumptionQuantity: '',
@@ -3645,12 +3741,24 @@ export const InventoryPage = () => {
                 periodStart: getVerificationPeriodStart(item, lastVerified),
                 periodEnd: dayjs().format('YYYY-MM-DD')
               });
+              setVerificationBatches([]);
+              setVerificationBalances([]);
+              setVerificationLocations([]);
             }}
             options={[{ label: 'Choose raw material', value: '' }, ...items.map((item) => ({
-              label: `${item.name} · Expected ${formatInventoryQuantity(item.currentStock, item)}`,
+              label: item.name,
               value: item._id
             }))]}
           />
+          {selectedVerificationItem && (
+            <Select
+              label="Stock location"
+              required
+              value={verificationForm.location}
+              onChange={(event) => handleVerificationLocationChange(event.target.value)}
+              options={verificationLocationOptions.map((location) => ({ label: location, value: location }))}
+            />
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
               label="Period start"
@@ -3680,23 +3788,21 @@ export const InventoryPage = () => {
           {selectedVerificationItem && (
             <details className="rounded-lg border border-slate-200 bg-white">
               <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium text-slate-800">
-                Batch history ({verificationBatches.length})
+                Batch history ({verificationLocationBatches.length})
               </summary>
               <div className="space-y-2 border-t border-slate-100 p-3">
                 {verificationBatchesLoading ? (
                   <p className="text-sm text-slate-500">Loading batch history…</p>
-                ) : verificationBatches.length === 0 ? (
-                  <p className="text-sm text-slate-500">No batches have been received for this material at Main Store.</p>
-                ) : verificationBatches.map((batch) => (
+                ) : verificationLocationBatches.length === 0 ? (
+                  <p className="text-sm text-slate-500">No batches have been received for this material at {verificationForm.location}.</p>
+                ) : verificationLocationBatches.map((batch) => (
                   <div key={batch._id} className="rounded-md bg-slate-50 p-3 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <strong className="text-slate-800">{batch.batchNumber || 'Unnumbered batch'}</strong>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        batch.legacyStock
-                          ? 'bg-amber-100 text-amber-800'
-                          : batch.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                        batch.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
                       }`}>
-                        {batch.legacyStock ? 'Untracked' : batch.status === 'open' ? 'Open' : 'Exhausted'}
+                        {batch.status === 'open' ? 'Open' : 'Exhausted'}
                       </span>
                     </div>
                     <p className="mt-1 text-slate-600">
@@ -3705,7 +3811,6 @@ export const InventoryPage = () => {
                     </p>
                     <p className="text-xs text-slate-500">
                       {batch.receivedAt && `Received ${dayjs(batch.receivedAt).format('MMM D, YYYY')}`}
-                      {batch.legacyStock && 'Existing stock without batch tracking'}
                       {batch.expiryDate && ` · Expires ${dayjs(batch.expiryDate).format('MMM D, YYYY')}`}
                       {batch.location && ` · ${batch.location}`}
                       {batch.vendorId?.name && ` · ${batch.vendorId.name}`}
@@ -3713,7 +3818,7 @@ export const InventoryPage = () => {
                   </div>
                 ))}
                 <p className="text-xs text-slate-500">
-                  Compare the count with recorded batches and any untracked legacy stock at Main Store. Purchase details are unavailable for legacy stock. Report only consumption and wastage that have not already been recorded.
+                  Compare the count with the recorded batches at {verificationForm.location}. Report only consumption and wastage that have not already been recorded.
                 </p>
               </div>
             </details>
@@ -3844,7 +3949,7 @@ export const InventoryPage = () => {
               <p>Actual usable stock: {formatReceiptQuantity(verificationActualStock)}</p>
               <p>Unrecorded consumption: −{formatReceiptQuantity(verificationConsumption)}</p>
               <p>Wastage: −{formatReceiptQuantity(verificationWastage)}</p>
-              <p>Unexplained: {formatReceiptQuantity(verificationDiscrepancy)}</p>
+              <p>Profitably consumed: {formatReceiptQuantity(verificationDiscrepancy)}</p>
               {verificationGain > 0 && <p>Stock gain: +{formatReceiptQuantity(verificationGain)}</p>}
               {verificationConsumption + verificationWastage > verificationReduction && (
                 <p className="font-medium text-rose-700">
@@ -3854,19 +3959,13 @@ export const InventoryPage = () => {
             </div>
           )}
           <Input
-            label="Discrepancy / gain reason (if applicable)"
-            info="Explain any remaining difference between expected stock and the physical count after unrecorded consumption and waste are accounted for. A reason is required for an unexplained difference or stock gain."
-            value={verificationForm.discrepancyReason}
-            onChange={(event) => setVerificationForm({ ...verificationForm, discrepancyReason: event.target.value })}
-          />
-          <Input
             label="Remarks"
             info="Add any other context about the count, such as who counted it, where it was found, or a follow-up action. This does not change the quantities."
             value={verificationForm.remarks}
             onChange={(event) => setVerificationForm({ ...verificationForm, remarks: event.target.value })}
           />
           <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
-            Expected stock already includes all previously recorded receipts, issues, and adjustments. Enter only unrecorded consumption and waste for the selected period. After those are accounted for, any remaining difference is posted as a stock discrepancy.
+            Last available stock already includes all previously recorded receipts, issues, and adjustments. Enter only unrecorded consumption and waste for the selected period. Any remaining reduction is recorded as profitably consumed; no additional reason is needed.
           </p>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setIsVerificationOpen(false)}>Cancel</Button>
