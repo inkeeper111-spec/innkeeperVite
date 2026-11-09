@@ -5,6 +5,7 @@ import { DashboardLayout } from './components/layout/DashboardLayout';
 
 // Auth Pages
 import { Login } from './pages/auth/Login';
+import { LandingPage } from './pages/LandingPage';
 import { Register } from './pages/auth/Register';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { ResetPassword } from './pages/auth/ResetPassword';
@@ -19,6 +20,7 @@ import { BillingPage } from './pages/billing/BillingPage';
 import { HousekeepingPage } from './pages/housekeeping/HousekeepingPage';
 import { RestaurantPOS } from './pages/restaurant/RestaurantPOS';
 import { InventoryPage } from './pages/inventory/InventoryPage';
+import { ProductionPage } from './pages/inventory/ProductionPage';
 import { RawMaterialMasterPage } from './pages/inventory/RawMaterialMasterPage';
 import { ExpensesPage } from './pages/expenses/ExpensesPage';
 import { MaintenancePage } from './pages/maintenance/MaintenancePage';
@@ -153,7 +155,7 @@ export const App = () => {
   return (
     <Routes key={user?.id || user?._id || 'anonymous'}>
       {/* Public authentication entry */}
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={user ? <Navigate to={loginPath} replace /> : <LandingPage />} />
       <Route path="/login" element={user ? <Navigate to={loginPath} replace /> : <Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -205,6 +207,7 @@ export const App = () => {
           }
         />
         <Route path="/inventory/raw-materials" element={<RawMaterialMasterPage />} />
+        <Route path="/inventory/production" element={<ProductionPage />} />
         <Route path="/inventory/*" element={<InventoryPage />} />
         <Route path="/expenses" element={<ExpensesPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />

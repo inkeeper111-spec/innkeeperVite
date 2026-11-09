@@ -25,8 +25,11 @@ const EMPTY_MATERIAL = {
   isActive: true,
   minimumStockLevel: 0,
   reorderLevel: 0,
+  desiredStockLevel: '',
   minimumStockUnitId: '',
   reorderLevelUnitId: '',
+  desiredStockUnitId: '',
+  preferredSupplierId: '',
   baseUnitId: '',
   supportedUnits: []
 };
@@ -85,8 +88,13 @@ const normalizeMaterialForm = (material, units = []) => {
     location: material.location || 'Main Store',
     minimumStockLevel: factorToBase > 0 ? Number(baseMinimum) / factorToBase : baseMinimum,
     reorderLevel: factorToBase > 0 ? Number(baseReorder) / factorToBase : baseReorder,
+    desiredStockLevel: factorToBase > 0
+      ? Number(material.maxStockLevel || 0) / factorToBase
+      : Number(material.maxStockLevel || 0),
     minimumStockUnitId: stockUnitId,
     reorderLevelUnitId: stockUnitId,
+    desiredStockUnitId: stockUnitId,
+    preferredSupplierId: String(material.vendorId?._id || material.vendorId || ''),
     supportedUnits
   };
 };
@@ -100,6 +108,7 @@ export const RawMaterialMasterPage = () => {
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [materials, setMaterials] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [units, setUnits] = useState([]);
   const [expandedMaterialId, setExpandedMaterialId] = useState('');
   const [batchesByMaterial, setBatchesByMaterial] = useState({});
@@ -171,13 +180,15 @@ export const RawMaterialMasterPage = () => {
   const loadMasterData = async () => {
     setLoading(true);
     try {
-      const [categoryResponse, materialResponse, unitResponse] = await Promise.all([
+      const [categoryResponse, materialResponse, unitResponse, vendorResponse] = await Promise.all([
         api.get('/inventory/raw-materials/categories', { params: canManage ? { includeInactive: true } : {} }),
         api.get('/inventory/raw-materials', { params: canManage ? { includeInactive: true } : {} }),
-        api.get('/inventory/units', { params: { includeInactive: true } })
+        api.get('/inventory/units', { params: { includeInactive: true } }),
+        api.get('/inventory/vendors')
       ]);
       setCategories(listFrom(categoryResponse, 'categories'));
       setMaterials(listFrom(materialResponse, 'materials'));
+      setVendors(listFrom(vendorResponse, 'vendors'));
       let availableUnits = listFrom(unitResponse, 'units');
       if (!availableUnits.length && canManage) {
         try {
@@ -336,7 +347,8 @@ export const RawMaterialMasterPage = () => {
         const next = { ...current, supportedUnits };
         for (const [valueKey, unitKey] of [
           ['minimumStockLevel', 'minimumStockUnitId'],
-          ['reorderLevel', 'reorderLevelUnitId']
+          ['reorderLevel', 'reorderLevelUnitId'],
+          ['desiredStockLevel', 'desiredStockUnitId']
         ]) {
           const currentUnitAvailable = supportedUnits.some((entry) => (
             entry.unitId === current[unitKey] && entry.isActive !== false
@@ -462,7 +474,8 @@ export const RawMaterialMasterPage = () => {
       return;
     }
     if (!(thresholdUnitFactor(materialForm.minimumStockUnitId) > 0)
-      || !(thresholdUnitFactor(materialForm.reorderLevelUnitId) > 0)) {
+      || !(thresholdUnitFactor(materialForm.reorderLevelUnitId) > 0)
+      || (Number(materialForm.desiredStockLevel) > 0 && !(thresholdUnitFactor(materialForm.desiredStockUnitId) > 0))) {
       showApiErrorToast(new Error('Choose a valid purchase unit for each stock threshold'), 'Select a compatible purchase unit for minimum stock and reorder level');
       return;
     }
@@ -480,6 +493,9 @@ export const RawMaterialMasterPage = () => {
           * thresholdUnitFactor(materialForm.minimumStockUnitId),
         reorderLevel: Number(materialForm.reorderLevel || 0)
           * thresholdUnitFactor(materialForm.reorderLevelUnitId),
+        maxStockLevel: Number(materialForm.desiredStockLevel || 0)
+          * (thresholdUnitFactor(materialForm.desiredStockUnitId) || 1),
+        vendorId: materialForm.preferredSupplierId || null,
         baseUnitId: materialForm.baseUnitId,
         supportedUnits: materialForm.supportedUnits.map((entry) => ({
           ...(entry._id ? { _id: entry._id } : {}),
@@ -639,7 +655,11 @@ export const RawMaterialMasterPage = () => {
                           {entry.isDefaultPurchaseUnit ? ' · default' : ''}
                         </span>;
                       })}</td>
-                      <td className="py-3 text-xs text-slate-600">Min {material.minimumStockLevel ?? material.minStockThreshold ?? 0} {base?.symbol || ''} · Reorder {material.reorderLevel ?? material.reorderQuantity ?? 0} {base?.symbol || ''}</td>
+                      <td className="py-3 text-xs text-slate-600">
+                        Min {material.minimumStockLevel ?? material.minStockThreshold ?? 0} {base?.symbol || ''}
+                        {' · Reorder '}{material.reorderLevel ?? material.reorderQuantity ?? 0} {base?.symbol || ''}
+                        {Number(material.maxStockLevel) > 0 && <> · Desired {material.maxStockLevel} {base?.symbol || ''}</>}
+                      </td>
                       <td className="py-3"><Badge variant={material.isActive ? 'active' : 'default'}>{material.isActive ? 'Active' : 'Inactive'}</Badge></td>
                       {canManage && <td className="py-3 text-right"><div className="flex justify-end gap-2">
                         <Button size="sm" variant="outline" icon={Pencil} onClick={() => openEditMaterial(material)}>Edit</Button>
@@ -726,6 +746,19 @@ export const RawMaterialMasterPage = () => {
             <Select label="Category" required value={materialForm.categoryId} onChange={(event) => setMaterialCategory(event.target.value)} options={[{ label: 'Choose category', value: '' }, ...categories.filter((entry) => entry.isActive || entry._id === materialForm.categoryId).map((entry) => ({ label: entry.name, value: entry._id }))]} />
             <Select label="Subcategory" value={materialForm.subcategoryId} disabled={!materialForm.categoryId} onChange={(event) => setMaterialForm({ ...materialForm, subcategoryId: event.target.value })} options={[{ label: 'No subcategory', value: '' }, ...subcategories.filter((entry) => entry.isActive || entry._id === materialForm.subcategoryId).map((entry) => ({ label: entry.name, value: entry._id }))]} />
             <Input label="Storage type" value={materialForm.storageType} onChange={(event) => setMaterialForm({ ...materialForm, storageType: event.target.value })} placeholder="Ambient, chilled, frozen..." />
+            <Select
+              label="Preferred supplier"
+              value={materialForm.preferredSupplierId}
+              onChange={(event) => setMaterialForm({ ...materialForm, preferredSupplierId: event.target.value })}
+              options={[
+                { label: 'Choose when reviewing the purchase order', value: '' },
+                ...vendors.filter((vendor) => vendor.status === 'active'
+                  || vendor._id === materialForm.preferredSupplierId).map((vendor) => ({
+                  label: `${vendor.name}${vendor.status === 'active' ? '' : ' (inactive)'}`,
+                  value: vendor._id
+                }))
+              ]}
+            />
             <label className="flex items-center gap-2 self-end pb-3 text-sm"><input type="checkbox" checked={materialForm.isActive} onChange={(event) => setMaterialForm({ ...materialForm, isActive: event.target.checked })} /> Active material</label>
           </div>
           <Input label="Description" value={materialForm.description} onChange={(event) => setMaterialForm({ ...materialForm, description: event.target.value })} />
@@ -843,8 +876,32 @@ export const RawMaterialMasterPage = () => {
                 ]}
               />
             </div>
+            <div className="grid grid-cols-2 items-end gap-2 sm:col-span-2">
+              <Input
+                label="Desired stock level"
+                type="number"
+                min="0"
+                step="any"
+                value={materialForm.desiredStockLevel}
+                onChange={(event) => setMaterialForm((current) => ({ ...current, desiredStockLevel: event.target.value }))}
+              />
+              <Select
+                label="Unit"
+                value={materialForm.desiredStockUnitId}
+                onChange={(event) => changeThresholdUnit('desiredStockLevel', 'desiredStockUnitId', event.target.value)}
+                options={[
+                  { label: 'Select unit', value: '' },
+                  ...materialForm.supportedUnits.filter((entry) => entry.isActive !== false).flatMap((entry) => {
+                    const unit = units.find((candidate) => unitId(candidate) === String(entry.unitId));
+                    return unit && !isPackageUnit(unit)
+                      ? [{ label: `${unit.name} (${unit.symbol})`, value: unitId(unit) }]
+                      : [];
+                  })
+                ]}
+              />
+            </div>
             <p className="text-xs text-orvelle-muted sm:col-span-2">
-              Choose a selected purchase unit for each threshold. Values are converted and stored in {baseUnit?.symbol || 'the base unit'}.
+              Desired stock controls automatic reorder quantities. Values are converted and stored in {baseUnit?.symbol || 'the base unit'}.
             </p>
           </div>
           {!units.length && <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Units are not provisioned yet. Contact an administrator to configure inventory units.</div>}

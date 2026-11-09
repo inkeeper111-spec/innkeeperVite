@@ -79,6 +79,7 @@ const navGroups = [
       { to: '/inventory/raw-materials', label: 'Raw Materials', icon: Boxes, roles: ['hotel_admin', 'restaurant_staff', 'housekeeping_staff', 'maintenance_staff', 'super_admin'] },
       { to: '/inventory/stock', label: 'Stock & Verification', icon: ArrowLeftRight, roles: ['hotel_admin', 'restaurant_staff', 'housekeeping_staff', 'maintenance_staff', 'super_admin'] },
       { to: '/inventory/recipes', label: 'Recipe Management', icon: UtensilsCrossed, roles: ['hotel_admin', 'restaurant_staff', 'super_admin'] },
+      { to: '/inventory/production', label: 'Food Production & Closing', icon: CookingPot, roles: ['hotel_admin', 'restaurant_staff', 'super_admin'] },
     ],
   },
   {
@@ -145,6 +146,7 @@ const moduleByPath = {
   '/inventory/raw-materials': 'inventory',
   '/inventory/raw-material-categories': 'inventory',
   '/inventory/recipes': 'inventory',
+  '/inventory/production': 'inventory',
   '/maintenance': 'maintenance',
   '/expenses': 'expenses',
   '/staff': 'staff',
@@ -173,6 +175,7 @@ const permissionByPath = {
   '/inventory/raw-materials': 'inventory.view',
   '/inventory/raw-material-categories': 'inventory.view',
   '/inventory/recipes': 'inventory.view',
+  '/inventory/production': 'inventory.view',
   '/maintenance': 'maintenance.view',
   '/expenses': 'expenses.view',
   '/staff': 'staff_directory.view',

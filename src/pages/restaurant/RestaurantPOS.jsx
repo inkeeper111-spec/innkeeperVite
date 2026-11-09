@@ -801,12 +801,20 @@ export const RestaurantPOS = () => {
                   <button
                     key={item._id}
                     onClick={() => addToCart(item)}
-                    className="p-4 bg-white rounded-xl border border-slate-200/80 hover:border-brand-500 hover:shadow-md transition-all text-left flex flex-col justify-between group h-36"
+                    disabled={item.fulfillmentSource === 'batch_production' && Number(item.availablePreparedPortions || 0) <= 0}
+                    className="p-4 bg-white rounded-xl border border-slate-200/80 hover:border-brand-500 hover:shadow-md transition-all text-left flex flex-col justify-between group h-36 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <div>
                       <h4 className="font-bold text-slate-900 text-xs line-clamp-1 group-hover:text-brand-600 transition-colors">
                         {item.name}
                       </h4>
+                      {item.fulfillmentSource === 'batch_production' && (
+                        <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-800 ring-1 ring-amber-200">
+                          {Number(item.availablePreparedPortions || 0) > 0
+                            ? `From bulk production · ${Number(item.availablePreparedPortions)} available`
+                            : 'Bulk production depleted'}
+                        </span>
+                      )}
                       <p className="text-[11px] text-slate-400 line-clamp-2 mt-1">
                         {item.description}
                       </p>
@@ -911,6 +919,9 @@ export const RestaurantPOS = () => {
                       <div className="min-w-0 flex-1 pr-1">
                         <p className="font-semibold text-slate-800 truncate">{i.name}</p>
                         <p className="text-[11px] text-slate-400">{formatCurrency(i.price)} each</p>
+                        {i.fulfillmentSource === 'batch_production' && (
+                          <p className="text-[10px] font-semibold text-amber-700">Fulfilled from bulk production</p>
+                        )}
                       </div>
 
                       <div className="flex shrink-0 items-center gap-2">
@@ -1317,7 +1328,12 @@ export const RestaurantPOS = () => {
 
                             return (
                               <tr key={`${order._id}-${index}`} className="border-b border-slate-50 text-xs">
-                                <td className="py-3 pr-3 font-semibold text-slate-800">{item.name}</td>
+                                <td className="py-3 pr-3 font-semibold text-slate-800">
+                                  {item.name}
+                                  {item.fulfillmentSource === 'batch_production' && (
+                                    <span className="mt-1 block text-[10px] font-semibold text-amber-700">From bulk production</span>
+                                  )}
+                                </td>
                                 <td className="px-2 py-3 text-right text-slate-600">{item.quantity}</td>
                                 <td className="px-2 py-3 text-right">
                                   {editing ? (
@@ -1589,6 +1605,11 @@ export const RestaurantPOS = () => {
                               <div key={idx} className="flex justify-between text-xs">
                                 <span className="text-slate-800 font-medium">
                                   {it.quantity}x {it.name}
+                                  {it.fulfillmentSource === 'batch_production' && (
+                                    <span className="ml-1 rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-800 ring-1 ring-amber-200">
+                                      Bulk production
+                                    </span>
+                                  )}
                                 </span>
                                 <span className="text-slate-400 font-mono">{formatCurrency(it.amount)}</span>
                               </div>

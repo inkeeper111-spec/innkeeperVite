@@ -9,6 +9,7 @@ export const Modal = ({
   subtitle,
   children,
   maxWidth = 'max-w-xl',
+  maxHeight = 'max-h-[100dvh] sm:max-h-[calc(100dvh-3rem)]',
   footer,
   closeOnEscape = true
 }) => {
@@ -49,7 +50,7 @@ export const Modal = ({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`relative z-10 my-0 flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-orvelle-border bg-white shadow-2xl transition-all sm:my-6 sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl ${maxWidth}`}
+        className={`relative z-10 my-0 flex w-full flex-col overflow-hidden rounded-t-2xl border border-orvelle-border bg-white shadow-2xl transition-all sm:my-6 sm:rounded-2xl ${maxHeight} ${maxWidth}`}
       >
         {/* Header */}
         <div className="flex flex-none items-start justify-between gap-3 border-b border-orvelle-border/60 bg-orvelle-ivory/70 px-4 py-4 sm:px-6 sm:py-5">

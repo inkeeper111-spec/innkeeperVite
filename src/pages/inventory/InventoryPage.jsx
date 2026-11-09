@@ -163,6 +163,8 @@ export const InventoryPage = () => {
   const [isVendorHistoryOpen, setIsVendorHistoryOpen] = useState(false);
   const [isVendorPaymentOpen, setIsVendorPaymentOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState(null);
+  const [selectedAutomaticPO, setSelectedAutomaticPO] = useState(null);
+  const [automaticPOReviewForm, setAutomaticPOReviewForm] = useState({ vendorId: '', quantity: '' });
   const [selectedItemForMove, setSelectedItemForMove] = useState(null);
 
   const [itemForm, setItemForm] = useState({
@@ -227,15 +229,21 @@ export const InventoryPage = () => {
     description: '',
     servingSize: '1 serving',
     preparationTimeMinutes: 0,
+    productionMode: 'made_to_order',
+    expectedProductionYield: 1,
+    expectedPreparationLossPercent: 0,
     ingredients: [{ itemId: '', quantity: 1, unit: '', optional: false, substituteItemId: '', substituteQuantity: '', substituteUnit: '' }]
   });
   const [transferForm, setTransferForm] = useState({
     itemId: '',
     quantity: 1,
     unit: '',
+    transferMode: 'location',
     fromLocation: 'Main Store',
     toLocation: 'Kitchen Store',
-    department: ''
+    department: '',
+    fromDepartment: 'Kitchen',
+    toDepartment: 'Restaurant'
   });
   const [adjustmentForm, setAdjustmentForm] = useState({
     itemId: '',
@@ -1022,6 +1030,34 @@ export const InventoryPage = () => {
     }
   };
 
+  const openAutomaticPOReview = (po) => {
+    const line = po.items?.[0];
+    setSelectedAutomaticPO(po);
+    setAutomaticPOReviewForm({
+      vendorId: po.vendorId?._id || po.vendorId || '',
+      quantity: line?.quantity ?? ''
+    });
+  };
+
+  const handleReviewAutomaticPO = async (event, approve = false) => {
+    event.preventDefault();
+    if (!selectedAutomaticPO) return;
+    try {
+      await api.patch(`/inventory/purchase-orders/${selectedAutomaticPO._id}/review`, {
+        vendorId: automaticPOReviewForm.vendorId,
+        quantity: Number(automaticPOReviewForm.quantity)
+      });
+      if (approve) {
+        await api.patch(`/inventory/purchase-orders/${selectedAutomaticPO._id}/approve`);
+      }
+      setSelectedAutomaticPO(null);
+      setMessage(approve ? 'Automatic reorder approved and submitted to the supplier.' : 'Automatic reorder review saved.');
+      fetchInventory();
+    } catch (error) {
+      showApiErrorToast(error, approve ? 'Could not approve automatic reorder' : 'Could not save automatic reorder review');
+    }
+  };
+
   const handleCreateDepartmentRequest = async (e) => {
     e.preventDefault();
     try {
@@ -1072,6 +1108,9 @@ export const InventoryPage = () => {
         description: '',
         servingSize: '1 serving',
         preparationTimeMinutes: 0,
+        productionMode: 'made_to_order',
+        expectedProductionYield: 1,
+        expectedPreparationLossPercent: 0,
         ingredients: [{ itemId: '', quantity: 1, unit: '', optional: false, substituteItemId: '', substituteQuantity: '', substituteUnit: '' }]
       });
       setMessage('Recipe version saved. Historical consumption remains unchanged.');
@@ -1089,6 +1128,9 @@ export const InventoryPage = () => {
       description: recipe.description || '',
       servingSize: recipe.servingSize || '1 serving',
       preparationTimeMinutes: recipe.preparationTimeMinutes || 0,
+      productionMode: recipe.productionMode || 'made_to_order',
+      expectedProductionYield: recipe.expectedProductionYield || 1,
+      expectedPreparationLossPercent: recipe.expectedPreparationLossPercent || 0,
       ingredients: recipe.ingredients.map((ingredient) => {
         const substitute = ingredient.substitutions?.[0];
         return {
@@ -1124,7 +1166,9 @@ export const InventoryPage = () => {
         idempotencyKey: `transfer-${Date.now()}`
       });
       setIsTransferOpen(false);
-      setMessage('Stock transfer recorded at both locations.');
+      setMessage(transferForm.transferMode === 'department'
+        ? 'Stock transfer recorded between departments.'
+        : 'Stock transfer recorded at both locations.');
       fetchInventory();
     } catch (err) {
       showApiErrorToast(err, 'Stock transfer failed');
@@ -2099,7 +2143,10 @@ export const InventoryPage = () => {
                       <p className="text-xs text-slate-600">
                         Available {formatInventoryQuantity(suggestion.availableStock, suggestion)}
                         {' / Threshold '}
-                        {formatInventoryQuantity(suggestion.minStockThreshold, suggestion)}
+                        {formatInventoryQuantity(suggestion.reorderLevel || suggestion.minStockThreshold, suggestion)}
+                        {Number(suggestion.maxStockLevel) > 0 && (
+                          <> · Desired {formatInventoryQuantity(suggestion.maxStockLevel, suggestion)}</>
+                        )}
                         {' · On order '}
                         {formatInventoryQuantity(suggestion.pendingPurchaseQuantity, suggestion)}
                         {' · Suggested '}
@@ -2138,15 +2185,28 @@ export const InventoryPage = () => {
                     {purchaseOrders.map((po) => (
                       <tr key={po._id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3 font-mono font-bold text-slate-900">{po.poNumber}</td>
-                        <td className="py-3 font-semibold text-slate-800">{po.vendorId?.name || 'Vendor'}</td>
+                        <td className="py-3 font-semibold text-slate-800">{po.vendorId?.name || (po.autoGenerated ? 'Select supplier' : 'Vendor')}</td>
                         <td className="py-3 font-black text-slate-900">{formatCurrency(po.totalAmount)}</td>
                         <td className="py-3">
-                          <Badge variant={po.status}>{po.status}</Badge>
+                          {po.autoGenerated ? (
+                            <div className="flex flex-col items-start gap-1">
+                              <Badge variant="active">Auto Generated</Badge>
+                              <Badge variant={po.status === 'draft' ? 'pending_approval' : po.status}>
+                                {po.status === 'draft' ? 'Pending Review' : po.status}
+                              </Badge>
+                            </div>
+                          ) : <Badge variant={po.status}>{po.status}</Badge>}
                         </td>
                         <td className="py-3 text-slate-500">{dayjs(po.createdAt).format('YYYY-MM-DD')}</td>
                         <td className="py-3 text-right">
                           <div className="flex justify-end gap-2">
-                            {canManageInventory && ['draft', 'pending_approval'].includes(po.status) && (
+                            {canManageInventory && po.autoGenerated && ['draft', 'pending_approval'].includes(po.status) && (
+                              <Button size="sm" variant="outline" onClick={() => openAutomaticPOReview(po)}>
+                                Review
+                              </Button>
+                            )}
+                            {canManageInventory && ['draft', 'pending_approval'].includes(po.status)
+                              && (!po.autoGenerated || po.status === 'pending_approval') && (
                               <Button size="sm" variant="success" onClick={() => handleApprovePurchaseOrder(po._id)}>
                                 Approve
                               </Button>
@@ -2203,7 +2263,9 @@ export const InventoryPage = () => {
                     <td className="capitalize">{movement.movementType.replace(/_/g, ' ')}</td>
                     <td>{movement.enteredQuantity ?? movement.quantity} {movement.enteredUnit || movement.baseUnit || movement.itemId?.baseUnit || movement.itemId?.unit}</td>
                     <td>{movement.location}{movement.destinationLocation ? ` → ${movement.destinationLocation}` : ''}</td>
-                    <td>{movement.department || '—'}</td>
+                    <td>{movement.sourceDepartment && movement.destinationDepartment
+                      ? `${movement.sourceDepartment} → ${movement.destinationDepartment}`
+                      : movement.department || '—'}</td>
                     <td>{movement.referenceNumber || '—'}</td>
                     <td>{movement.recordedBy?.name || '—'}</td>
                   </tr>
@@ -2351,7 +2413,7 @@ export const InventoryPage = () => {
           )}
           <Card
             title="Restaurant Recipes"
-            subtitle="Recipe versions retain their ingredient history and estimated costs"
+            subtitle="Recipe versions retain ingredient history and show yield-aware cost and profit estimates"
             action={canManageInventory ? (
               <Button size="sm" icon={PlusCircle} onClick={() => {
                 setEditingRecipe(null);
@@ -2361,6 +2423,9 @@ export const InventoryPage = () => {
                   description: '',
                   servingSize: '1 serving',
                   preparationTimeMinutes: 0,
+                  productionMode: 'made_to_order',
+                  expectedProductionYield: 1,
+                  expectedPreparationLossPercent: 0,
                   ingredients: [{ itemId: '', quantity: 1, unit: '', optional: false, substituteItemId: '', substituteQuantity: '', substituteUnit: '' }]
                 });
                 setIsRecipeOpen(true);
@@ -2368,22 +2433,34 @@ export const InventoryPage = () => {
             ) : null}
           >
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px] text-left text-xs">
-              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Recipe / menu item</th><th className="pb-3">Version</th><th className="pb-3">Ingredients</th><th className="pb-3 text-right">Recipe cost</th><th className="pb-3 text-right">Selling price</th><th className="pb-3 text-right">Est. gross profit / food cost</th><th className="pb-3">Status</th><th className="pb-3 text-right">Actions</th></tr></thead>
+            <table className="w-full min-w-[1250px] text-left text-xs">
+              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Recipe / menu item</th><th className="pb-3">Version</th><th className="pb-3">Ingredients</th><th className="pb-3 text-right">Cost / serving</th><th className="pb-3 text-right">Selling price / serving &amp; prep loss</th><th className="pb-3 text-right">Estimated gross profit</th><th className="pb-3">Status</th><th className="pb-3 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {recipes.map((recipe) => (
                   <tr key={recipe._id}>
                     <td className="py-3">
                       <p className="font-semibold">{recipe.recipeName || recipe.menuItemId?.name || 'Recipe'}</p>
-                      <p className="text-slate-500">{recipe.menuItemId?.name || 'Menu item'} · {recipe.servingSize || '1 serving'}</p>
+                      <p className="text-slate-500">
+                        {recipe.menuItemId?.name || 'Menu item'} · {recipe.servingSize || '1 serving'}
+                        {' · '}{recipe.productionMode === 'batch_production' ? 'Bulk production' : 'Made to order'}
+                      </p>
                       {recipe.preparationTimeMinutes > 0 && <p className="text-slate-400">{recipe.preparationTimeMinutes} min prep</p>}
                     </td>
                     <td>v{recipe.version}</td>
                     <td>{recipe.ingredients.map((ingredient) => `${ingredient.itemId?.name || 'Item'} ${ingredient.quantity} ${ingredient.unit}${ingredient.optional ? ' (optional)' : ''}`).join(', ')}</td>
                     <td className="text-right">{formatCurrency(recipe.estimatedRecipeCost || 0)}<span className="block text-slate-400">per serving</span></td>
-                    <td className="text-right">{formatCurrency(recipe.sellingPrice || 0)}</td>
                     <td className="text-right">
-                      <span className={recipe.estimatedGrossProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}>{formatCurrency(recipe.estimatedGrossProfit || 0)}</span>
+                      {formatCurrency(recipe.sellingPrice || 0)}
+                      <span className="block text-slate-400">per serving</span>
+                      <span className="block text-slate-500">{Number(recipe.expectedPreparationLossPercent || 0)}% expected prep loss</span>
+                    </td>
+                    <td className="text-right">
+                      <span className={recipe.estimatedGrossProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                        {formatCurrency(recipe.estimatedGrossProfit || 0)} per serving
+                      </span>
+                      <span className={`block ${recipe.estimatedProfitWhole >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        {formatCurrency(recipe.estimatedProfitWhole || 0)} for {recipe.expectedProductionYield || 1} {Number(recipe.expectedProductionYield || 1) === 1 ? 'serving' : 'servings'}
+                      </span>
                       <span className="block text-slate-500">{recipe.foodCostPercent == null ? '—' : `${recipe.foodCostPercent.toFixed(1)}% food cost`}</span>
                     </td>
                     <td><Badge variant={recipe.isActive ? 'active' : 'inactive'}>{recipe.isActive ? 'Active' : 'Inactive'}</Badge></td>
@@ -3655,6 +3732,49 @@ export const InventoryPage = () => {
         </form>
       </Modal>
 
+      <Modal
+        isOpen={Boolean(selectedAutomaticPO)}
+        onClose={() => setSelectedAutomaticPO(null)}
+        title="Review automatic reorder"
+        subtitle="Confirm the supplier and quantity before the order is submitted."
+      >
+        <form onSubmit={handleReviewAutomaticPO} className="space-y-4">
+          <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+            {selectedAutomaticPO?.items?.[0]?.itemName}
+            {' · '}{selectedAutomaticPO?.items?.[0]?.unit || ''}
+          </div>
+          <Select
+            label="Supplier"
+            required
+            value={automaticPOReviewForm.vendorId}
+            onChange={(event) => setAutomaticPOReviewForm((current) => ({ ...current, vendorId: event.target.value }))}
+            options={[
+              { label: 'Choose supplier', value: '' },
+              ...vendors.filter((vendor) => vendor.status === 'active').map((vendor) => ({
+                label: vendor.name,
+                value: vendor._id
+              }))
+            ]}
+          />
+          <Input
+            label={`Order quantity (${selectedAutomaticPO?.items?.[0]?.unit || 'purchase unit'})`}
+            type="number"
+            min="0.00000001"
+            step="any"
+            required
+            value={automaticPOReviewForm.quantity}
+            onChange={(event) => setAutomaticPOReviewForm((current) => ({ ...current, quantity: event.target.value }))}
+          />
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="secondary" onClick={() => setSelectedAutomaticPO(null)}>Cancel</Button>
+            <Button type="submit" variant="outline">Save review</Button>
+            <Button type="button" variant="success" onClick={(event) => handleReviewAutomaticPO(event, true)}>
+              Approve &amp; submit
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
       <Modal isOpen={isReceivingOpen} onClose={() => setIsReceivingOpen(false)} title={`Receive ${selectedPO?.poNumber || 'Purchase Order'}`} subtitle="Only accepted goods will update on-hand stock">
         <form onSubmit={handleReceivePO} className="space-y-4">
           <div className="space-y-3">
@@ -3721,34 +3841,117 @@ export const InventoryPage = () => {
         </form>
       </Modal>
 
-      <Modal isOpen={isRecipeOpen} onClose={() => setIsRecipeOpen(false)} title={editingRecipe ? 'Edit Recipe' : 'Create Recipe'} subtitle="Saving creates a new version and keeps historical order costs unchanged">
-        <form onSubmit={handleSaveRecipe} className="space-y-5">
-          <Select label="Menu item" searchable searchPlaceholder="Search menu items..." required value={recipeForm.menuItemId} onChange={(e) => {
-            const menuItem = menuItems.find((entry) => entry._id === e.target.value);
-            setRecipeForm({
-              ...recipeForm,
-              menuItemId: e.target.value,
-              recipeName: recipeForm.recipeName || menuItem?.name || ''
-            });
-          }} options={[{ label: 'Choose menu item', value: '' }, ...menuItems.map((menuItem) => ({ label: menuItem.name, value: menuItem._id }))]} />
-          <Input label="Recipe name" required value={recipeForm.recipeName} onChange={(event) => setRecipeForm({ ...recipeForm, recipeName: event.target.value })} />
-          <label className="block text-sm font-medium text-slate-700">
-            Description
-            <textarea
-              value={recipeForm.description}
-              onChange={(event) => setRecipeForm({ ...recipeForm, description: event.target.value })}
-              rows={2}
-              className="mt-1 w-full rounded-xl border border-orvelle-border bg-white px-3 py-2 text-sm"
-            />
-          </label>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input label="Serving size" required value={recipeForm.servingSize} onChange={(event) => setRecipeForm({ ...recipeForm, servingSize: event.target.value })} />
-            <Input label="Preparation time (minutes)" type="number" min="0" step="1" value={recipeForm.preparationTimeMinutes} onChange={(event) => setRecipeForm({ ...recipeForm, preparationTimeMinutes: event.target.value })} />
-          </div>
+      <Modal
+        isOpen={isRecipeOpen}
+        onClose={() => setIsRecipeOpen(false)}
+        title={editingRecipe ? 'Edit Recipe' : 'Create Recipe'}
+        subtitle="Saving creates a new version and keeps historical order costs unchanged"
+        maxWidth="max-w-6xl"
+        maxHeight="max-h-[100dvh] sm:max-h-[calc(100dvh-2rem)]"
+        footer={(
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full sm:w-auto"
+              onClick={() => {
+                setIsRecipeOpen(false);
+                setEditingRecipe(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="inventory-recipe-form"
+              className="w-full sm:w-auto"
+            >
+              {editingRecipe ? 'Save new version' : 'Create recipe'}
+            </Button>
+          </>
+        )}
+      >
+        <form id="inventory-recipe-form" onSubmit={handleSaveRecipe} className="space-y-6">
+          <section className="rounded-2xl border border-orvelle-border/70 bg-gradient-to-br from-white to-orvelle-ivory/50 p-4 shadow-sm sm:p-5">
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold text-orvelle-primary">Recipe details</h4>
+              <p className="mt-1 text-xs text-orvelle-muted">Choose the menu item, then define the serving and production workflow.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Select label="Menu item" searchable searchPlaceholder="Search menu items..." required value={recipeForm.menuItemId} onChange={(e) => {
+                const menuItem = menuItems.find((entry) => entry._id === e.target.value);
+                setRecipeForm({
+                  ...recipeForm,
+                  menuItemId: e.target.value,
+                  recipeName: recipeForm.recipeName || menuItem?.name || ''
+                });
+              }} options={[{ label: 'Choose menu item', value: '' }, ...menuItems.map((menuItem) => ({ label: menuItem.name, value: menuItem._id }))]} />
+              <Input label="Recipe name" required value={recipeForm.recipeName} onChange={(event) => setRecipeForm({ ...recipeForm, recipeName: event.target.value })} />
+              <label className="block text-sm font-medium text-slate-700 md:col-span-2">
+                Description
+                <textarea
+                  value={recipeForm.description}
+                  onChange={(event) => setRecipeForm({ ...recipeForm, description: event.target.value })}
+                  rows={3}
+                  className="mt-1 w-full rounded-xl border border-orvelle-border bg-white px-3 py-2.5 text-sm shadow-sm transition focus:border-orvelle-champagne focus:outline-none focus:ring-2 focus:ring-orvelle-champagne/20"
+                />
+              </label>
+            </div>
+          </section>
 
-          <div className="space-y-3">
-            {recipeForm.ingredients.map((ingredient, index) => (
-              <div key={index} className="rounded-xl border border-orvelle-border bg-orvelle-ivory/30 p-4">
+          <section className="rounded-2xl border border-orvelle-border/70 bg-white p-4 shadow-sm sm:p-5">
+            <h4 className="mb-4 text-sm font-semibold text-orvelle-primary">Serving & production</h4>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <Input label="Serving size" required value={recipeForm.servingSize} onChange={(event) => setRecipeForm({ ...recipeForm, servingSize: event.target.value })} />
+              <Input label="Preparation time (minutes)" type="number" min="0" step="1" value={recipeForm.preparationTimeMinutes} onChange={(event) => setRecipeForm({ ...recipeForm, preparationTimeMinutes: event.target.value })} />
+              <Select
+                label="Production workflow"
+                value={recipeForm.productionMode}
+                onChange={(event) => setRecipeForm({ ...recipeForm, productionMode: event.target.value })}
+                options={[
+                  { label: 'Made to order (existing workflow)', value: 'made_to_order' },
+                  { label: 'Bulk production with prepared portions', value: 'batch_production' }
+                ]}
+              />
+              <Input
+                label="Expected recipe yield (portions)"
+                type="number"
+                min="0.00000001"
+                step="any"
+                value={recipeForm.expectedProductionYield}
+                onChange={(event) => setRecipeForm({ ...recipeForm, expectedProductionYield: event.target.value })}
+              />
+              <Input
+                label="Expected preparation loss (%)"
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                value={recipeForm.expectedPreparationLossPercent}
+                onChange={(event) => setRecipeForm({ ...recipeForm, expectedPreparationLossPercent: event.target.value })}
+              />
+            </div>
+          </section>
+
+          <section className="space-y-4 rounded-2xl border border-orvelle-border/70 bg-orvelle-ivory/25 p-4 shadow-sm sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h4 className="text-sm font-semibold text-orvelle-primary">Ingredients</h4>
+                <p className="mt-1 text-xs text-orvelle-muted">Set quantities per serving and any optional substitutes.</p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => setRecipeForm({ ...recipeForm, ingredients: [...recipeForm.ingredients, { itemId: '', quantity: 1, unit: '', optional: false, substituteItemId: '', substituteQuantity: '', substituteUnit: '' }] })}
+              >
+                + Add ingredient
+              </Button>
+            </div>
+            <div className="space-y-3">
+              {recipeForm.ingredients.map((ingredient, index) => (
+                <div key={index} className="rounded-xl border border-orvelle-border/80 bg-white p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
                 {/* Header with ingredient number and remove button */}
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-wider text-orvelle-muted">Ingredient {index + 1}</span>
@@ -3803,19 +4006,10 @@ export const InventoryPage = () => {
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-
-          <Button type="button" size="sm" variant="outline" onClick={() => setRecipeForm({ ...recipeForm, ingredients: [...recipeForm.ingredients, { itemId: '', quantity: 1, unit: '', optional: false, substituteItemId: '', substituteQuantity: '', substituteUnit: '' }] })}>+ Add ingredient</Button>
-
-          <div className="flex justify-end gap-2 border-t border-orvelle-border/40 pt-4">
-            <Button type="button" variant="secondary" onClick={() => {
-              setIsRecipeOpen(false);
-              setEditingRecipe(null);
-            }}>Cancel</Button>
-            <Button type="submit">{editingRecipe ? 'Save new version' : 'Create recipe'}</Button>
-          </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </form>
       </Modal>
 
@@ -3829,12 +4023,42 @@ export const InventoryPage = () => {
             <Input label="Quantity" type="number" min="0.00000001" step="any" required value={transferForm.quantity} onChange={(e) => setTransferForm({ ...transferForm, quantity: e.target.value })} />
             <Select label="Unit" searchable searchPlaceholder="Search supported units..." required value={transferForm.unit} onChange={(e) => setTransferForm({ ...transferForm, unit: e.target.value })} options={unitChoicesForItem(items.find((item) => item._id === transferForm.itemId), units)} />
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {['fromLocation', 'toLocation'].map((field) => (
-              <Select key={field} label={field === 'fromLocation' ? 'From location' : 'To location'} value={transferForm[field]} onChange={(e) => setTransferForm({ ...transferForm, [field]: e.target.value })} options={['Main Store', 'Kitchen Store', 'Restaurant Store', 'Housekeeping Store', 'Maintenance Store', 'Minibar Store'].map((location) => ({ label: location, value: location }))} />
-            ))}
-          </div>
-          <Input label="Department" value={transferForm.department} onChange={(e) => setTransferForm({ ...transferForm, department: e.target.value })} />
+          <Select
+            label="Transfer type"
+            value={transferForm.transferMode}
+            onChange={(e) => setTransferForm({ ...transferForm, transferMode: e.target.value })}
+            options={[
+              { label: 'Between locations', value: 'location' },
+              { label: 'Between departments', value: 'department' }
+            ]}
+          />
+          {transferForm.transferMode === 'department' ? (
+            <>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {['fromDepartment', 'toDepartment'].map((field) => (
+                  <Select
+                    key={field}
+                    label={field === 'fromDepartment' ? 'From department' : 'To department'}
+                    value={transferForm[field]}
+                    onChange={(e) => setTransferForm({ ...transferForm, [field]: e.target.value })}
+                    options={['Kitchen', 'Restaurant', 'Housekeeping', 'Maintenance', 'Minibar'].map((name) => ({ label: name, value: name }))}
+                  />
+                ))}
+              </div>
+              <p className="text-xs text-slate-500">
+                Department transfers use the matching department stock locations and preserve batch details.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {['fromLocation', 'toLocation'].map((field) => (
+                  <Select key={field} label={field === 'fromLocation' ? 'From location' : 'To location'} value={transferForm[field]} onChange={(e) => setTransferForm({ ...transferForm, [field]: e.target.value })} options={['Main Store', 'Kitchen Store', 'Restaurant Store', 'Housekeeping Store', 'Maintenance Store', 'Minibar Store'].map((location) => ({ label: location, value: location }))} />
+                ))}
+              </div>
+              <Input label="Department" value={transferForm.department} onChange={(e) => setTransferForm({ ...transferForm, department: e.target.value })} />
+            </>
+          )}
           <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setIsTransferOpen(false)}>Cancel</Button><Button type="submit">Confirm transfer</Button></div>
         </form>
       </Modal>
