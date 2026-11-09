@@ -62,6 +62,7 @@ export const LandingPage = () => (
         <nav className="flex items-center gap-3 sm:gap-6" aria-label="Main navigation">
           <a href="#platform" className="hidden text-sm font-medium text-[#716359] transition hover:text-[#3b241a] sm:inline">Platform</a>
           <a href="#how-it-works" className="hidden text-sm font-medium text-[#716359] transition hover:text-[#3b241a] md:inline">How it works</a>
+          <a href="#management" className="hidden text-sm font-medium text-[#716359] transition hover:text-[#3b241a] md:inline">Management</a>
           <Link to="/login" className="px-2 py-2 text-sm font-semibold text-[#4c392d] transition hover:text-[#a96f20]">Sign in</Link>
           <Link
             to="/register"
@@ -206,6 +207,35 @@ export const LandingPage = () => (
               </div>
               <h3 className="mt-6 text-base font-bold text-[#3b2b21]">{title}</h3>
               <p className="mt-2 text-sm leading-6 text-[#817469]">{description}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section id="management" className="scroll-mt-8 border-y border-[#ece3d8] bg-white/60 px-5 py-20 sm:px-8 sm:py-24 lg:px-12">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#a5793e] sm:text-xs">Management</p>
+          <h2 className="mt-4 font-serif text-4xl leading-tight tracking-[-0.035em] text-[#3d291e] sm:text-5xl">
+            Meet the people behind Nestnn.
+          </h2>
+        </div>
+        <div className="mx-auto mt-10 grid max-w-3xl gap-6 sm:grid-cols-2 sm:gap-8">
+          {[
+            { name: 'Ranjith Kumar Raja', image: '/ranjith-kumar-raja.jpg', imagePosition: 'center 30%' },
+            { name: 'S Thenmozhi', image: '/s-thenmozhi.jpg', imagePosition: 'center 30%' }
+          ].map(({ name, image, imagePosition }) => (
+            <article key={name} className="overflow-hidden rounded-[24px] border border-[#e9dfd2] bg-white shadow-[0_10px_30px_rgba(59,36,26,0.06)]">
+              <img
+                src={image}
+                alt={name}
+                className="h-72 w-full object-cover sm:h-80"
+                style={{ objectPosition: imagePosition }}
+              />
+              <div className="px-5 py-4 text-center">
+                <h3 className="text-base font-bold text-[#3b2b21]">{name}</h3>
+              </div>
             </article>
           ))}
         </div>
