@@ -2432,51 +2432,181 @@ export const InventoryPage = () => {
               }}>Add Recipe</Button>
             ) : null}
           >
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1250px] text-left text-xs">
-              <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Recipe / menu item</th><th className="pb-3">Version</th><th className="pb-3">Ingredients</th><th className="pb-3 text-right">Cost / serving</th><th className="pb-3 text-right">Selling price / serving &amp; prep loss</th><th className="pb-3 text-right">Estimated gross profit</th><th className="pb-3">Status</th><th className="pb-3 text-right">Actions</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">
+          <div className="space-y-3">
+            <div className="hidden lg:block">
+              <div className="divide-y divide-slate-100">
                 {recipes.map((recipe) => (
-                  <tr key={recipe._id}>
-                    <td className="py-3">
-                      <p className="font-semibold">{recipe.recipeName || recipe.menuItemId?.name || 'Recipe'}</p>
-                      <p className="text-slate-500">
+                  <article key={recipe._id} className="space-y-3 py-4">
+                    <div className="grid grid-cols-12 items-start gap-3">
+                      <div className="col-span-4 min-w-0">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Recipe / menu item</p>
+                        <p className="mt-1 break-words font-semibold">{recipe.recipeName || recipe.menuItemId?.name || 'Recipe'}</p>
+                        <p className="break-words text-slate-500">
+                          {recipe.menuItemId?.name || 'Menu item'} · {recipe.servingSize || '1 serving'}
+                          {' · '}{recipe.productionMode === 'batch_production' ? 'Bulk production' : 'Made to order'}
+                        </p>
+                        {recipe.preparationTimeMinutes > 0 && <p className="text-slate-400">{recipe.preparationTimeMinutes} min prep</p>}
+                      </div>
+                      <div className="col-span-1 min-w-0">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Version</p>
+                        <p className="mt-1">v{recipe.version}</p>
+                      </div>
+                      <div className="col-span-3 min-w-0">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Ingredients</p>
+                        <p className="mt-1 break-words">{recipe.ingredients.map((ingredient) => `${ingredient.itemId?.name || 'Item'} ${ingredient.quantity} ${ingredient.unit}${ingredient.optional ? ' (optional)' : ''}`).join(', ')}</p>
+                      </div>
+                      <div className="col-span-2 min-w-0 text-right">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Total recipe cost</p>
+                        <p className="mt-1 break-words">{recipe.totalRecipeCost == null ? 'Cost Pending' : formatCurrency(recipe.totalRecipeCost)}</p>
+                        <p className="text-slate-400">full recipe</p>
+                      </div>
+                      <div className="col-span-2 min-w-0 text-right">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Cost / serving</p>
+                        <p className="mt-1 break-words">{recipe.costPerServing == null ? 'Cost Pending' : formatCurrency(recipe.costPerServing)}</p>
+                        <p className="text-slate-400">usable serving</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-12 items-start gap-3 border-t border-slate-100 pt-3">
+                      <div className="col-span-2 min-w-0">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Selling price / serving</p>
+                        <p className="mt-1 break-words">{recipe.sellingPrice == null ? 'Cost Pending' : formatCurrency(recipe.sellingPrice)}</p>
+                      </div>
+                      <div className="col-span-3 min-w-0">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Expected preparation loss</p>
+                        <p className="mt-1">{Number(recipe.expectedPreparationLossPercent || 0)}%</p>
+                        <p className="break-words text-slate-500">
+                          {recipe.expectedPreparationLossQuantity == null
+                            ? 'Cost Pending'
+                            : `${recipe.expectedPreparationLossQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${recipe.expectedPreparationLossQuantity === 1 ? 'serving' : 'servings'} lost`}
+                        </p>
+                        <p className="break-words text-slate-400">
+                          {recipe.expectedUsableQuantity == null
+                            ? 'Usable yield pending'
+                            : `${recipe.expectedUsableQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} usable ${recipe.expectedUsableQuantity === 1 ? 'serving' : 'servings'}`}
+                        </p>
+                      </div>
+                      <div className="col-span-3 min-w-0">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Estimated gross profit</p>
+                        <p className={`mt-1 break-words ${recipe.estimatedGrossProfit == null
+                          ? 'text-slate-500'
+                          : recipe.estimatedGrossProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {recipe.estimatedGrossProfit == null
+                            ? 'Cost Pending'
+                            : `${formatCurrency(recipe.estimatedGrossProfit)} / serving`}
+                        </p>
+                        <p className={`break-words ${recipe.estimatedProfitWhole == null
+                          ? 'text-slate-500'
+                          : recipe.estimatedProfitWhole >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {recipe.estimatedProfitWhole == null
+                            ? 'Cost Pending'
+                            : `${formatCurrency(recipe.estimatedProfitWhole)} total estimated`}
+                        </p>
+                      </div>
+                      <div className="col-span-1 min-w-0">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Food cost</p>
+                        <p className="mt-1 break-words">{recipe.foodCostPercent == null ? 'Cost Pending' : `${recipe.foodCostPercent.toFixed(1)}%`}</p>
+                      </div>
+                      <div className="col-span-1 min-w-0">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Status</p>
+                        <div className="mt-1"><Badge variant={recipe.isActive ? 'active' : 'inactive'}>{recipe.isActive ? 'Active' : 'Inactive'}</Badge></div>
+                      </div>
+                      <div className="col-span-2 min-w-0">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Actions</p>
+                        {canManageInventory && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            <Button size="sm" variant="outline" icon={Pencil} onClick={() => handleEditRecipe(recipe)}>Edit</Button>
+                            <Button size="sm" variant="outline" onClick={() => handleRecipeStatusChange(recipe)}>{recipe.isActive ? 'Deactivate' : 'Activate'}</Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3 lg:hidden">
+              {recipes.map((recipe) => (
+                <article key={recipe._id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words font-semibold">{recipe.recipeName || recipe.menuItemId?.name || 'Recipe'}</p>
+                      <p className="break-words text-xs text-slate-500">
                         {recipe.menuItemId?.name || 'Menu item'} · {recipe.servingSize || '1 serving'}
                         {' · '}{recipe.productionMode === 'batch_production' ? 'Bulk production' : 'Made to order'}
                       </p>
-                      {recipe.preparationTimeMinutes > 0 && <p className="text-slate-400">{recipe.preparationTimeMinutes} min prep</p>}
-                    </td>
-                    <td>v{recipe.version}</td>
-                    <td>{recipe.ingredients.map((ingredient) => `${ingredient.itemId?.name || 'Item'} ${ingredient.quantity} ${ingredient.unit}${ingredient.optional ? ' (optional)' : ''}`).join(', ')}</td>
-                    <td className="text-right">{formatCurrency(recipe.estimatedRecipeCost || 0)}<span className="block text-slate-400">per serving</span></td>
-                    <td className="text-right">
-                      {formatCurrency(recipe.sellingPrice || 0)}
-                      <span className="block text-slate-400">per serving</span>
-                      <span className="block text-slate-500">{Number(recipe.expectedPreparationLossPercent || 0)}% expected prep loss</span>
-                    </td>
-                    <td className="text-right">
-                      <span className={recipe.estimatedGrossProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
-                        {formatCurrency(recipe.estimatedGrossProfit || 0)} per serving
-                      </span>
-                      <span className={`block ${recipe.estimatedProfitWhole >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                        {formatCurrency(recipe.estimatedProfitWhole || 0)} for {recipe.expectedProductionYield || 1} {Number(recipe.expectedProductionYield || 1) === 1 ? 'serving' : 'servings'}
-                      </span>
-                      <span className="block text-slate-500">{recipe.foodCostPercent == null ? '—' : `${recipe.foodCostPercent.toFixed(1)}% food cost`}</span>
-                    </td>
-                    <td><Badge variant={recipe.isActive ? 'active' : 'inactive'}>{recipe.isActive ? 'Active' : 'Inactive'}</Badge></td>
-                    <td className="text-right">
-                      {canManageInventory && (
-                        <div className="inline-flex gap-1">
-                          <Button size="sm" variant="outline" icon={Pencil} onClick={() => handleEditRecipe(recipe)}>Edit</Button>
-                          <Button size="sm" variant="outline" onClick={() => handleRecipeStatusChange(recipe)}>{recipe.isActive ? 'Deactivate' : 'Activate'}</Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {!recipes.length && <tr><td colSpan="8" className="py-10 text-center text-slate-400">No recipes configured.</td></tr>}
-              </tbody>
-            </table>
+                      {recipe.preparationTimeMinutes > 0 && <p className="text-xs text-slate-400">{recipe.preparationTimeMinutes} min prep</p>}
+                    </div>
+                    <Badge variant={recipe.isActive ? 'active' : 'inactive'}>{recipe.isActive ? 'Active' : 'Inactive'}</Badge>
+                  </div>
+                  <div className="mt-3 border-t border-slate-100 pt-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Version {recipe.version} · Ingredients</p>
+                    <p className="mt-1 break-words text-xs">
+                      {recipe.ingredients.map((ingredient) => `${ingredient.itemId?.name || 'Item'} ${ingredient.quantity} ${ingredient.unit}${ingredient.optional ? ' (optional)' : ''}`).join(', ')}
+                    </p>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-slate-100 pt-3 text-xs">
+                    <div className="min-w-0">
+                      <dt className="text-slate-400">Total recipe cost</dt>
+                      <dd className="mt-0.5 break-words font-medium">{recipe.totalRecipeCost == null ? 'Cost Pending' : formatCurrency(recipe.totalRecipeCost)}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-slate-400">Cost / usable serving</dt>
+                      <dd className="mt-0.5 break-words font-medium">{recipe.costPerServing == null ? 'Cost Pending' : formatCurrency(recipe.costPerServing)}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-slate-400">Selling price / serving</dt>
+                      <dd className="mt-0.5 break-words font-medium">{recipe.sellingPrice == null ? 'Cost Pending' : formatCurrency(recipe.sellingPrice)}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-slate-400">Food cost</dt>
+                      <dd className="mt-0.5 break-words font-medium">{recipe.foodCostPercent == null ? 'Cost Pending' : `${recipe.foodCostPercent.toFixed(1)}%`}</dd>
+                    </div>
+                    <div className="col-span-2 min-w-0">
+                      <dt className="text-slate-400">Expected preparation loss</dt>
+                      <dd className="mt-0.5 break-words font-medium">{Number(recipe.expectedPreparationLossPercent || 0)}%</dd>
+                      <dd className="break-words text-slate-500">
+                        {recipe.expectedPreparationLossQuantity == null
+                          ? 'Cost Pending'
+                          : `${recipe.expectedPreparationLossQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${recipe.expectedPreparationLossQuantity === 1 ? 'serving' : 'servings'} lost`}
+                      </dd>
+                      <dd className="break-words text-slate-400">
+                        {recipe.expectedUsableQuantity == null
+                          ? 'Usable yield pending'
+                          : `${recipe.expectedUsableQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} usable ${recipe.expectedUsableQuantity === 1 ? 'serving' : 'servings'}`}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-slate-400">Estimated gross profit / serving</dt>
+                      <dd className={`mt-0.5 break-words font-medium ${recipe.estimatedGrossProfit == null
+                        ? 'text-slate-500'
+                        : recipe.estimatedGrossProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        {recipe.estimatedGrossProfit == null
+                          ? 'Cost Pending'
+                          : formatCurrency(recipe.estimatedGrossProfit)}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-slate-400">Total estimated gross profit</dt>
+                      <dd className={`mt-0.5 break-words font-medium ${recipe.estimatedProfitWhole == null
+                        ? 'text-slate-500'
+                        : recipe.estimatedProfitWhole >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        {recipe.estimatedProfitWhole == null
+                          ? 'Cost Pending'
+                          : formatCurrency(recipe.estimatedProfitWhole)}
+                      </dd>
+                    </div>
+                  </dl>
+                  {canManageInventory && (
+                    <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+                      <Button size="sm" variant="outline" icon={Pencil} onClick={() => handleEditRecipe(recipe)}>Edit</Button>
+                      <Button size="sm" variant="outline" onClick={() => handleRecipeStatusChange(recipe)}>{recipe.isActive ? 'Deactivate' : 'Activate'}</Button>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+            {!recipes.length && <p className="py-10 text-center text-sm text-slate-400">No recipes configured.</p>}
           </div>
           </Card>
         </div>
