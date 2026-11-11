@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ClipboardList, CookingPot, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -53,6 +54,10 @@ export const ProductionPage = () => {
   const selectedRecipe = useMemo(
     () => recipes.find((recipe) => String(recipe._id) === String(form.recipeId)),
     [form.recipeId, recipes]
+  );
+  const recipesById = useMemo(
+    () => new Map(recipes.map((recipe) => [String(recipe._id), recipe])),
+    [recipes]
   );
   const batchRecipes = useMemo(
     () => recipes.filter((recipe) => recipe.isActive && recipe.productionMode === 'batch_production'),
@@ -248,41 +253,6 @@ export const ProductionPage = () => {
         ))}
       </div>
 
-      {canViewFinancials && (
-        <Card title="Production financial summary" subtitle="Bulk-production revenue is recognized after the restaurant bill is paid.">
-          {batches.some((batch) => (
-            !batch.isTransferBatch
-            && Number(batch.productionCost) === 0
-            && (batch.ingredients || []).some((ingredient) => Number(ingredient.actualQuantity) > 0)
-          )) && (
-            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              One or more batches have zero recorded production cost. Check the raw-material batch costs; gross profit will be overstated until ingredient costs are recorded.
-            </div>
-          )}
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              ['Production cost', totals.productionCost],
-              ['Raw material wastage', totals.rawMaterialWastageCost],
-              ['Sales revenue', totals.salesRevenue],
-              ['Gross profit on sold portions', totals.grossProfit],
-              ['Prepared-food wastage cost', totals.wastageCost],
-              ['Complimentary cost', totals.complimentaryCost],
-              ['Staff consumption cost', totals.staffConsumptionCost],
-              ['Remaining inventory value', totals.remainingInventoryValue],
-              ['Food cost % of sales', `${numeric(totals.foodCostPercent)}%`],
-              ['Raw material wastage %', `${numeric(totals.rawMaterialWastagePercent)}%`]
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-lg bg-orvelle-ivory p-3">
-                <p className="text-xs text-orvelle-muted">{label}</p>
-                <p className="mt-1 font-semibold text-orvelle-primary">
-                  {label.includes('%') ? value : currency(value, formatCurrency)}
-                </p>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
       <Card
         title="Batch-production products"
         subtitle="Active menu recipes configured for bulk production appear here. Select a product to record a production batch."
@@ -318,8 +288,11 @@ export const ProductionPage = () => {
                   </p>
                   {canViewFinancials && (
                     <p className="mt-2 text-xs text-orvelle-muted">
-                      Selling price: {currency(recipe.sellingPrice, formatCurrency)} / portion
-                      {' · '}Estimated cost: {currency(recipe.estimatedRecipeCost, formatCurrency)} / portion
+                      Total recipe cost: {currency(recipe.totalRecipeCost, formatCurrency)}
+                      {' · '}Cost / serving: {currency(recipe.costPerServing, formatCurrency)}
+                      {' · '}Selling price / serving: {currency(recipe.sellingPrice, formatCurrency)}
+                      {' · '}Estimated gross profit: {currency(recipe.estimatedGrossProfit, formatCurrency)} / serving
+                      {' · '}Food cost: {numeric(recipe.foodCostPercent).toFixed(1)}%
                     </p>
                   )}
                 </div>
@@ -386,6 +359,24 @@ export const ProductionPage = () => {
                   Expected yield {selectedRecipe.expectedProductionYield || 1} · preparation loss {selectedRecipe.expectedPreparationLossPercent || 0}% · serving {selectedRecipe.servingSize || '1 serving'}
                 </p>
               </div>
+              {canViewFinancials && (
+                <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
+                  {[
+                    ['Total recipe cost', selectedRecipe.totalRecipeCost],
+                    ['Cost / serving', selectedRecipe.costPerServing],
+                    ['Selling price / serving', selectedRecipe.sellingPrice],
+                    ['Estimated gross profit / serving', selectedRecipe.estimatedGrossProfit],
+                    ['Food cost', `${numeric(selectedRecipe.foodCostPercent).toFixed(1)}%`]
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <p className="text-xs text-orvelle-muted">{label}</p>
+                      <p className="font-medium text-orvelle-primary">
+                        {typeof value === 'string' ? value : currency(value, formatCurrency)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -399,7 +390,7 @@ export const ProductionPage = () => {
 
       <Card
         title="Production batches"
-        subtitle="Portions are reserved when ordered, marked sold when served, and revenue is recorded when the bill is paid. Available excludes portions reserved for open orders."
+        subtitle="Recipe cost and pricing estimates match Recipe Management. Available portions exclude quantities reserved for open orders."
         action={
           <div className="flex gap-2">
             <Input aria-label="From date" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
@@ -411,7 +402,7 @@ export const ProductionPage = () => {
           <div className="py-8 text-center text-sm text-orvelle-muted">No production batches in this date range.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
+            <PaginatedTable tableClassName="w-full min-w-[1320px] text-left text-sm">
               <thead className="text-xs uppercase text-orvelle-muted">
                 <tr>
                   <th className="px-3 py-2">Batch / production</th>
@@ -420,15 +411,16 @@ export const ProductionPage = () => {
                   <th className="px-3 py-2">Sold</th>
                   <th className="px-3 py-2">Wasted</th>
                   <th className="px-3 py-2">Available</th>
-                  {canViewFinancials && <th className="px-3 py-2">Production cost / portion cost</th>}
-                  {canViewFinancials && <th className="px-3 py-2">Revenue / profit</th>}
+                  {canViewFinancials && <th className="px-3 py-2">Recipe cost / serving price</th>}
                   <th className="px-3 py-2">Use by / location</th>
                   <th className="px-3 py-2">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-orvelle-border/70">
-                {batches.map((batch) => (
-                  <tr key={batch._id}>
+                {batches.map((batch) => {
+                  const recipe = recipesById.get(String(batch.recipeId));
+                  return (
+                    <tr key={batch._id}>
                     <td className="px-3 py-3">
                       <p className="font-medium text-orvelle-primary">{batch.menuItemName}</p>
                       <p className="text-xs text-orvelle-muted">{batch.batchNumber} · {dayjs(batch.productionDate).format('DD MMM YYYY')} · {batch.productionMethod === 'actual_consumption' ? 'Actual use' : 'Recipe based'}</p>
@@ -440,13 +432,54 @@ export const ProductionPage = () => {
                     <td className="px-3 py-3"><Badge variant={numeric(batch.availableQuantity) > 0 ? 'available' : 'default'}>{quantity(batch.availableQuantity)}</Badge></td>
                     {canViewFinancials && (
                       <td className="px-3 py-3">
-                        {currency(batch.productionCost, formatCurrency)}
-                        <p className="text-xs text-orvelle-muted">
-                          {currency(batch.costPerPortion, formatCurrency)} / portion
-                        </p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <p className="text-[10px] uppercase text-orvelle-muted">Total recipe cost</p>
+                            <p className="font-medium text-orvelle-primary">
+                              {recipe?.totalRecipeCost == null ? 'Cost pending' : currency(recipe.totalRecipeCost, formatCurrency)}
+                            </p>
+                            <p className="text-xs text-orvelle-muted">full recipe</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] uppercase text-orvelle-muted">Cost / serving</p>
+                            <p className="font-medium text-orvelle-primary">
+                              {recipe?.costPerServing == null ? 'Cost pending' : currency(recipe.costPerServing, formatCurrency)}
+                            </p>
+                            <p className="text-xs text-orvelle-muted">usable serving</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-3 border-t border-orvelle-border/70 pt-3 text-xs sm:grid-cols-4">
+                          <div>
+                            <p className="text-[10px] uppercase text-orvelle-muted">Selling price / serving</p>
+                            <p className="mt-1 font-medium text-orvelle-primary">
+                              {recipe?.sellingPrice == null ? '—' : currency(recipe.sellingPrice, formatCurrency)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase text-orvelle-muted">Expected preparation loss</p>
+                            <p className="mt-1 font-medium text-orvelle-primary">
+                              {recipe ? `${numeric(recipe.expectedPreparationLossPercent)}%` : '—'}
+                            </p>
+                            {recipe && <p className="text-orvelle-muted">{quantity(recipe.expectedPreparationLossQuantity)} servings lost</p>}
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase text-orvelle-muted">Estimated gross profit</p>
+                            <p className="mt-1 font-medium text-emerald-700">
+                              {recipe?.estimatedGrossProfit == null ? '—' : `${currency(recipe.estimatedGrossProfit, formatCurrency)} / serving`}
+                            </p>
+                            {recipe?.estimatedProfitWhole != null && (
+                              <p className="text-orvelle-muted">{currency(recipe.estimatedProfitWhole, formatCurrency)} total estimated</p>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase text-orvelle-muted">Food cost</p>
+                            <p className="mt-1 font-medium text-orvelle-primary">
+                              {recipe?.foodCostPercent == null ? '—' : `${numeric(recipe.foodCostPercent).toFixed(1)}%`}
+                            </p>
+                          </div>
+                        </div>
                       </td>
                     )}
-                    {canViewFinancials && <td className="px-3 py-3">{currency(batch.salesRevenue, formatCurrency)} / {currency(batch.grossProfit, formatCurrency)}</td>}
                     <td className="px-3 py-3">{batch.expiryDate ? dayjs(batch.expiryDate).format('DD MMM YYYY') : 'No use-by'}<p className="text-xs text-orvelle-muted">{batch.location}</p></td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-2">
@@ -467,10 +500,11 @@ export const ProductionPage = () => {
                           )}
                       </div>
                     </td>
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         )}
       </Card>
@@ -481,7 +515,7 @@ export const ProductionPage = () => {
             <p className="py-6 text-center text-sm text-orvelle-muted">No ingredient consumption recorded in this period.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <PaginatedTable tableClassName="w-full min-w-[760px] text-left text-sm">
                 <thead className="text-xs uppercase text-orvelle-muted">
                   <tr><th className="px-3 py-2">Raw material</th><th className="px-3 py-2">Theoretical</th><th className="px-3 py-2">Actual used</th><th className="px-3 py-2">Additional wastage</th><th className="px-3 py-2">Consumption cost</th><th className="px-3 py-2">Wastage cost</th></tr>
                 </thead>
@@ -497,7 +531,7 @@ export const ProductionPage = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
           )}
         </Card>
@@ -508,7 +542,7 @@ export const ProductionPage = () => {
           <div className="flex items-center justify-center gap-2 py-6 text-sm text-orvelle-muted"><ClipboardList className="h-4 w-4" />No movements recorded.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <PaginatedTable tableClassName="w-full min-w-[760px] text-left text-sm">
               <thead className="text-xs uppercase text-orvelle-muted"><tr><th className="px-3 py-2">Time</th><th className="px-3 py-2">Item / batch</th><th className="px-3 py-2">Movement</th><th className="px-3 py-2">Quantity</th><th className="px-3 py-2">Reference / reason</th></tr></thead>
               <tbody className="divide-y divide-orvelle-border/70">
                 {movements.map((movement) => {
@@ -524,7 +558,7 @@ export const ProductionPage = () => {
                   );
                 })}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         )}
       </Card>

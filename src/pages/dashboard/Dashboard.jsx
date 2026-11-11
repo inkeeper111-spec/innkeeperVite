@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
@@ -305,7 +306,7 @@ export const Dashboard = () => {
             }
           >
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[620px] text-left text-xs">
+              <PaginatedTable tableClassName="w-full min-w-[620px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Reference</th>
@@ -338,7 +339,7 @@ export const Dashboard = () => {
                     ))
                   )}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
           </Card>
         </div>

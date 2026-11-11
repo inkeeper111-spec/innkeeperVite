@@ -28,6 +28,19 @@ import { StaffPage } from './pages/staff/StaffPage';
 import { RolesResponsibilitiesPage } from './pages/staff/RolesResponsibilitiesPage';
 import { MyAttendancePage } from './pages/staff/MyAttendancePage';
 import LeaveRequestsPage from './pages/staff/LeaveRequestsPage';
+import PayrollDashboardPage from './pages/payroll/PayrollDashboardPage';
+import GlobalConfigurationPage from './pages/payroll/GlobalConfigurationPage';
+import StatutoryDeductionsPage from './pages/payroll/StatutoryDeductionsPage';
+import WeekoffPage from './pages/payroll/WeekoffPage';
+import HolidaysPage, { HolidayUploadLogsPage } from './pages/payroll/HolidaysPage';
+import LeaveConfigurationPage from './pages/payroll/LeaveConfigurationPage';
+import EmployeesPage, { StaffUploadLogsPage } from './pages/payroll/EmployeesPage';
+import AdvancePaymentsPage from './pages/payroll/AdvancePaymentsPage';
+import AttendancePage from './pages/payroll/AttendancePage';
+import PayrollRunPage from './pages/payroll/PayrollRunPage';
+import PayslipsPage from './pages/payroll/PayslipsPage';
+import FileConfigurationPage from './pages/payroll/FileConfigurationPage';
+import PayrollReportsPage from './pages/payroll/PayrollReportsPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
 import { AIAssistantPage } from './pages/dashboard/AIAssistantPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
@@ -112,6 +125,22 @@ const ProtectedRoute = ({
     '/maintenance': 'maintenance.view',
     '/expenses': 'expenses.view',
     '/staff': 'staff_directory.view',
+    '/payroll': 'staff_directory.view',
+    '/payroll/dashboard': 'staff_directory.view',
+    '/payroll/global-configuration': 'staff_directory.view',
+    '/payroll/statutory-deductions': 'staff_directory.view',
+    '/payroll/weekoff': 'staff_directory.view',
+    '/payroll/employees': 'staff_directory.view',
+    '/payroll/employees/upload-logs': 'staff_directory.view',
+    '/payroll/holidays': 'staff_directory.view',
+    '/payroll/holidays/upload-logs': 'staff_directory.view',
+    '/payroll/leave-configuration': 'staff_directory.view',
+    '/payroll/advance-payments': 'staff_directory.view',
+    '/payroll/attendance': 'staff_directory.view',
+    '/payroll/run': 'staff_directory.view',
+    '/payroll/payslips': 'staff_directory.view',
+    '/payroll/file-configuration': 'staff_directory.view',
+    '/payroll/reports': 'staff_directory.view',
     '/roles-responsibilities': 'roles_responsibilities.view',
     '/leave-management': 'leave.view',
     '/my-leave': 'leave.view',
@@ -212,6 +241,23 @@ export const App = () => {
         <Route path="/expenses" element={<ExpensesPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />
         <Route path="/staff" element={<StaffPage />} />
+        <Route path="/payroll" element={<Navigate to="/payroll/dashboard" replace />} />
+        <Route path="/payroll/dashboard" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><PayrollDashboardPage /></ProtectedRoute>} />
+        <Route path="/payroll/global-configuration" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><GlobalConfigurationPage /></ProtectedRoute>} />
+        <Route path="/payroll/statutory-deductions" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><StatutoryDeductionsPage /></ProtectedRoute>} />
+        <Route path="/payroll/weekoff" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><WeekoffPage /></ProtectedRoute>} />
+        <Route path="/payroll/employees" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><EmployeesPage /></ProtectedRoute>} />
+        <Route path="/payroll/employees/upload-logs" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><StaffUploadLogsPage /></ProtectedRoute>} />
+        <Route path="/payroll/holidays" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><HolidaysPage /></ProtectedRoute>} />
+        <Route path="/payroll/holidays/upload-logs" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><HolidayUploadLogsPage /></ProtectedRoute>} />
+        <Route path="/payroll/leave-configuration" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><LeaveConfigurationPage /></ProtectedRoute>} />
+        <Route path="/payroll/advance-payments" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><AdvancePaymentsPage /></ProtectedRoute>} />
+        <Route path="/payroll/attendance" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><AttendancePage /></ProtectedRoute>} />
+        <Route path="/payroll/run" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><PayrollRunPage /></ProtectedRoute>} />
+        <Route path="/payroll/payslips" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><PayslipsPage /></ProtectedRoute>} />
+        <Route path="/payroll/payslips/:employeeId" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><PayslipsPage /></ProtectedRoute>} />
+        <Route path="/payroll/file-configuration" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><FileConfigurationPage /></ProtectedRoute>} />
+        <Route path="/payroll/reports" element={<ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']}><PayrollReportsPage /></ProtectedRoute>} />
         <Route
           path="/roles-responsibilities"
           element={

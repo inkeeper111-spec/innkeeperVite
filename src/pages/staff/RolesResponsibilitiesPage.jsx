@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Check, KeyRound, RotateCcw, Save, Search, ShieldCheck, UserRound } from 'lucide-react';
 import api from '../../api/axios';
@@ -202,7 +203,7 @@ export const RolesResponsibilitiesPage = () => {
 
               <Card className="!p-0">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[42rem] text-left text-sm">
+                  <PaginatedTable tableClassName="w-full min-w-[42rem] text-left text-sm">
                     <thead>
                       <tr className="border-b border-orvelle-border/70 bg-orvelle-ivory/70 text-[11px] font-bold uppercase tracking-wider text-orvelle-muted">
                         <th className="px-5 py-3.5">Module</th>
@@ -240,7 +241,7 @@ export const RolesResponsibilitiesPage = () => {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </PaginatedTable>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-orvelle-border/60 px-5 py-3 text-xs text-orvelle-muted">
                   <span><Check className="mr-1 inline h-3.5 w-3.5 text-orvelle-success" />Checked permissions are allowed.</span>

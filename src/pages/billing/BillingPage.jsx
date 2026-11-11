@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useState, useEffect } from 'react';
 import api, { showApiErrorToast } from '../../api/axios';
 import { Card } from '../../components/ui/Card';
@@ -251,7 +252,7 @@ export const BillingPage = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] text-left text-xs">
+                <PaginatedTable tableClassName="w-full min-w-[900px] text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                       <th className="pb-3">Invoice #</th>
@@ -309,7 +310,7 @@ export const BillingPage = () => {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             )}
           </Card>
@@ -326,7 +327,7 @@ export const BillingPage = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left text-xs">
+              <PaginatedTable tableClassName="w-full min-w-[850px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Transaction Ref</th>
@@ -376,7 +377,7 @@ export const BillingPage = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
           )}
         </Card>
@@ -461,7 +462,7 @@ export const BillingPage = () => {
 
             {/* Line Items Table */}
             <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[560px] text-left text-xs">
+              <PaginatedTable tableClassName="w-full min-w-[560px] text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px]">
                   <tr>
                     <th className="py-2.5 px-3">Description</th>
@@ -482,7 +483,7 @@ export const BillingPage = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
 
             {/* Calculations Breakdown */}

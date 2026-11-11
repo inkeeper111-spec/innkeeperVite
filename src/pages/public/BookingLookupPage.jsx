@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import api from '../../api/axios';
@@ -154,7 +155,7 @@ export const BookingLookupPage = () => {
                   Itemized Charges ({data.invoice.invoiceNumber})
                 </h4>
                 <div className="table-scroll overflow-x-auto rounded-xl border border-slate-200 text-xs">
-                  <table className="w-full min-w-[420px] text-left">
+                  <PaginatedTable tableClassName="w-full min-w-[420px] text-left">
                     <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px]">
                       <tr>
                         <th className="py-2 px-3">Item</th>
@@ -171,7 +172,7 @@ export const BookingLookupPage = () => {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </PaginatedTable>
                 </div>
 
                 <div className="flex justify-end pt-2 text-xs">

@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useState, useEffect } from 'react';
 import api, { showApiErrorToast } from '../../api/axios';
 import { Card } from '../../components/ui/Card';
@@ -284,7 +285,7 @@ export const FrontDesk = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-left text-xs">
+            <PaginatedTable tableClassName="w-full min-w-[820px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Reference</th>
@@ -372,7 +373,7 @@ export const FrontDesk = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         )}
       </Card>

@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api/axios';
 import { Card } from '../../components/ui/Card';
@@ -351,7 +352,7 @@ export const StaffPage = () => {
         <Card>
           {loading ? <LoadingSpinner text="Loading staff records..." /> : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left text-xs">
+              <PaginatedTable tableClassName="w-full min-w-[850px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Employee</th>
@@ -391,7 +392,7 @@ export const StaffPage = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
           )}
         </Card>
@@ -414,7 +415,7 @@ export const StaffPage = () => {
 
           <Card>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[780px] text-left text-xs">
+              <PaginatedTable tableClassName="w-full min-w-[780px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Employee</th>
@@ -476,7 +477,7 @@ export const StaffPage = () => {
                     );
                   })}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
           </Card>
         </>
@@ -513,7 +514,7 @@ export const StaffPage = () => {
           ) : (
             <Card>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1000px] text-left text-xs">
+                <PaginatedTable tableClassName="w-full min-w-[1000px] text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                       <th className="pb-3">Employee</th>
@@ -568,7 +569,7 @@ export const StaffPage = () => {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             </Card>
           )}
@@ -598,7 +599,7 @@ export const StaffPage = () => {
               <div className="py-12 text-center text-slate-400 text-xs">No salary records yet. Process your first payroll run.</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1000px] text-left text-xs">
+                <PaginatedTable tableClassName="w-full min-w-[1000px] text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                       <th className="pb-3">Employee</th>
@@ -644,7 +645,7 @@ export const StaffPage = () => {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             )}
           </Card>
@@ -686,7 +687,7 @@ export const StaffPage = () => {
             </div>
           </form>
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-left text-xs">
+          <PaginatedTable tableClassName="w-full min-w-[600px] text-left text-xs">
             <thead>
               <tr className="text-slate-400 uppercase border-b border-slate-100">
                 <th className="pb-2">Employee</th>
@@ -705,7 +706,7 @@ export const StaffPage = () => {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </PaginatedTable>
           </div>
         </Card>
       )}
@@ -717,7 +718,7 @@ export const StaffPage = () => {
             <div className="py-12 text-center text-slate-400 text-xs">No shifts scheduled yet.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[650px] text-left text-xs">
+              <PaginatedTable tableClassName="w-full min-w-[650px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Staff Member</th>
@@ -738,7 +739,7 @@ export const StaffPage = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
           )}
         </Card>

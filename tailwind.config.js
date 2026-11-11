@@ -87,6 +87,8 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['"Cormorant Garamond"', 'Georgia', 'serif'],
+        landing: ['Manrope', 'system-ui', 'sans-serif'],
       }
     },
   },

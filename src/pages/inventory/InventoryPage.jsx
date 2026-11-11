@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useState, useEffect } from 'react';
 import api, { showApiErrorToast } from '../../api/axios';
 import { Card } from '../../components/ui/Card';
@@ -1738,14 +1739,14 @@ export const InventoryPage = () => {
           {!!dashboard?.expiringProducts?.length && (
             <Card title="Expiring Products" subtitle="Accepted batches expiring within 30 days">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-sm">
+                <PaginatedTable tableClassName="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-sm">
                   <thead><tr className="border-b text-xs uppercase text-slate-400"><th className="pb-2">Item</th><th className="pb-2">Batch</th><th className="pb-2">Quantity</th><th className="pb-2">Expiry</th></tr></thead>
                   <tbody className="divide-y">
                     {dashboard.expiringProducts.map((batch, index) => (
                       <tr key={`${batch.item}-${index}`}><td className="py-2 font-semibold">{batch.item}</td><td>{batch.batchNumber || '—'}</td><td>{batch.quantity}</td><td>{dayjs(batch.expiryDate).format('MMM D, YYYY')}</td></tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             </Card>
           )}
@@ -1821,7 +1822,7 @@ export const InventoryPage = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] table-fixed break-words whitespace-normal text-left text-xs">
+              <PaginatedTable tableClassName="w-full min-w-[900px] table-fixed break-words whitespace-normal text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Item Name</th>
@@ -2084,7 +2085,7 @@ export const InventoryPage = () => {
                     );
                   })}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
           )}
           {inventoryPages > 1 && (
@@ -2170,7 +2171,7 @@ export const InventoryPage = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
+                <PaginatedTable tableClassName="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                       <th className="pb-3">PO Number</th>
@@ -2243,7 +2244,7 @@ export const InventoryPage = () => {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             )}
           </Card>
@@ -2253,7 +2254,7 @@ export const InventoryPage = () => {
       {activeTab === 'ledger' && (
         <Card title="Stock Movement Ledger" subtitle="Auditable inventory movements across locations">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
+            <PaginatedTable tableClassName="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
               <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Date</th><th className="pb-3">Item</th><th className="pb-3">Movement</th><th className="pb-3">Quantity</th><th className="pb-3">Location</th><th className="pb-3">Department</th><th className="pb-3">Reference</th><th className="pb-3">Recorded by</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {ledger.map((movement) => (
@@ -2272,7 +2273,7 @@ export const InventoryPage = () => {
                 ))}
                 {!ledger.length && <tr><td colSpan="8" className="py-10 text-center text-slate-400">No inventory movements recorded yet.</td></tr>}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         </Card>
       )}
@@ -2284,7 +2285,7 @@ export const InventoryPage = () => {
           action={canManageInventory && <Button size="sm" icon={ClipboardList} onClick={() => openStockVerification()}>Record Verification</Button>}
         >
           <div className="overflow-x-auto">
-            <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
+            <PaginatedTable tableClassName="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
               <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Material</th><th className="pb-3">Location</th><th className="pb-3">Expected</th><th className="pb-3">Actual usable</th><th className="pb-3">Unrecorded consumption</th><th className="pb-3">Wasted</th><th className="pb-3">Consumed profitably / gain</th><th className="pb-3">Period</th><th className="pb-3">Verified by</th><th className="pb-3">Status</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {verifications.map((verification) => (
@@ -2311,7 +2312,7 @@ export const InventoryPage = () => {
                 ))}
                 {!verifications.length && <tr><td colSpan="10" className="py-10 text-center text-slate-400">No physical stock verifications recorded yet.</td></tr>}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
           {!!dashboard?.pendingVerificationItems?.length && (
             <div className="mt-5 border-t border-slate-100 pt-4">
@@ -2331,7 +2332,7 @@ export const InventoryPage = () => {
       {activeTab === 'requests' && (
         <Card title="Department Stock Requests" subtitle="Requests are approved and issued against available store stock">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
+            <PaginatedTable tableClassName="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
               <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Department</th><th className="pb-3">Requested items</th><th className="pb-3">Requested by</th><th className="pb-3">Status</th><th className="pb-3">Date</th><th className="pb-3 text-right">Action</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {departmentRequests.map((request) => (
@@ -2353,7 +2354,7 @@ export const InventoryPage = () => {
                 ))}
                 {!departmentRequests.length && <tr><td colSpan="6" className="py-10 text-center text-slate-400">No department requests recorded.</td></tr>}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         </Card>
       )}
@@ -2361,7 +2362,7 @@ export const InventoryPage = () => {
       {activeTab === 'adjustments' && (
         <Card title="Stock Adjustments & Wastage" subtitle="Authorized adjustments update stock immediately; wastage shows its batch and time">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] table-fixed break-words whitespace-normal text-left text-xs">
+            <PaginatedTable tableClassName="w-full min-w-[1100px] table-fixed break-words whitespace-normal text-left text-xs">
               <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Logged at</th><th className="pb-3">Item</th><th className="pb-3">Batch</th><th className="pb-3">Quantity</th><th className="pb-3">Reason</th><th className="pb-3">Department</th><th className="pb-3">Reported / logged by</th><th className="pb-3">Status</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {adjustmentRows.map(({ id, entry, movement, quantity, unit, batchNumber, loggedAt }) => {
@@ -2389,7 +2390,7 @@ export const InventoryPage = () => {
                 })}
                 {!adjustmentRows.length && <tr><td colSpan="8" className="py-10 text-center text-slate-400">No adjustments reported.</td></tr>}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         </Card>
       )}
@@ -2634,7 +2635,7 @@ export const InventoryPage = () => {
             ) : (
               <form onSubmit={handleMinibarReconciliation} className="space-y-4">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
+                  <PaginatedTable tableClassName="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
                     <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Product</th><th className="pb-3">Available</th><th className="pb-3">Unit</th><th className="pb-3">Consumed</th><th className="pb-3">Complimentary</th><th className="pb-3">Damaged</th><th className="pb-3">Missing</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                       {minibarData.stock.map((entry) => (
@@ -2665,7 +2666,7 @@ export const InventoryPage = () => {
                       ))}
                       {!minibarData.stock.length && <tr><td colSpan="7" className="py-8 text-center text-slate-400">No minibar products are assigned to this room.</td></tr>}
                     </tbody>
-                  </table>
+                  </PaginatedTable>
                 </div>
                 <div className="flex justify-end"><Button type="submit" disabled={!minibarData.stock.length}>Save reconciliation</Button></div>
               </form>
@@ -2812,7 +2813,7 @@ export const InventoryPage = () => {
               </div>
               <Card title="Menu Item Profitability" subtitle="Net sales compared with recorded recipe ingredient costs">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[700px] text-left text-xs">
+                  <PaginatedTable tableClassName="w-full min-w-[700px] text-left text-xs">
                     <thead>
                       <tr className="border-b border-slate-100 uppercase text-slate-400">
                         <th className="pb-3">Menu item</th>
@@ -2840,7 +2841,7 @@ export const InventoryPage = () => {
                         <tr><td colSpan="6" className="py-8 text-center text-slate-500">No settled, recipe-costed restaurant sales in this period.</td></tr>
                       )}
                     </tbody>
-                  </table>
+                  </PaginatedTable>
                 </div>
               </Card>
             </div>
@@ -2908,7 +2909,7 @@ export const InventoryPage = () => {
             <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
               <Card title="Vendor-wise Purchase Expenses">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <PaginatedTable tableClassName="w-full text-left text-xs">
                     <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-2">Vendor</th><th className="pb-2">Receipts</th><th className="pb-2 text-right">Purchase value</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                       {(report[0].vendorBreakdown || []).map((vendor) => (
@@ -2916,12 +2917,12 @@ export const InventoryPage = () => {
                       ))}
                       {!report[0].vendorBreakdown?.length && <tr><td colSpan="3" className="py-5 text-center text-slate-400">No purchases in this period.</td></tr>}
                     </tbody>
-                  </table>
+                  </PaginatedTable>
                 </div>
               </Card>
               <Card title="Raw Material Expenses">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <PaginatedTable tableClassName="w-full text-left text-xs">
                     <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-2">Material</th><th className="pb-2">Purchased</th><th className="pb-2">Consumed</th><th className="pb-2">Wasted</th><th className="pb-2 text-right">Purchase value</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                       {(report[0].itemBreakdown || []).map((entry) => (
@@ -2935,14 +2936,14 @@ export const InventoryPage = () => {
                       ))}
                       {!report[0].itemBreakdown?.length && <tr><td colSpan="5" className="py-5 text-center text-slate-400">No raw material transactions in this period.</td></tr>}
                     </tbody>
-                  </table>
+                  </PaginatedTable>
                 </div>
               </Card>
             </div>
             </>
           )}
           {reportType !== 'financial' && reportType !== 'profit-loss' && <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
+            <PaginatedTable tableClassName="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
               <thead><tr className="border-b border-slate-100 uppercase text-slate-400"><th className="pb-3">Date / Name</th><th className="pb-3">Item / Reference</th><th className="pb-3">Type / Quantity</th><th className="pb-3">Department / Vendor</th><th className="pb-3 text-right">Value</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {report.map((row, index) => (
@@ -2956,7 +2957,7 @@ export const InventoryPage = () => {
                 ))}
                 {!report.length && <tr><td colSpan="5" className="py-8 text-center text-slate-400">Choose filters and run a report.</td></tr>}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>}
         </Card>
       )}

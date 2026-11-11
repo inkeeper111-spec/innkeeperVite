@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useEffect, useState } from 'react';
 import api from '../../api/axios';
 import { Card } from '../../components/ui/Card';
@@ -188,7 +189,7 @@ export const MyAttendancePage = () => {
       <div className="grid grid-cols-1 gap-6">
         <Card title="This month" subtitle="Clock records and approved leave">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-left text-xs">
+            <PaginatedTable tableClassName="w-full min-w-[560px] text-left text-xs">
               <thead>
                 <tr className="text-slate-400 uppercase border-b border-slate-100">
                   <th className="pb-2">Date</th>
@@ -209,7 +210,7 @@ export const MyAttendancePage = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         </Card>
       </div>

@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronDown, FolderPlus, Pencil, Plus, Search, ToggleLeft, ToggleRight } from 'lucide-react';
@@ -615,7 +616,7 @@ export const RawMaterialMasterPage = () => {
           action={<div className="relative w-full sm:w-64"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search raw materials" placeholder="Search materials..." className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm focus:border-amber-500 focus:outline-none" /></div>}
         >
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <PaginatedTable tableClassName="w-full min-w-[760px] text-left text-sm">
               <thead><tr className="border-b border-slate-100 text-xs uppercase text-slate-400"><th className="pb-3">Material</th><th className="pb-3">Category</th><th className="pb-3">Base unit</th><th className="pb-3">Purchase units</th><th className="pb-3">Stock settings</th><th className="pb-3">Status</th>{canManage && <th className="pb-3 text-right">Actions</th>}</tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {visibleMaterials.map((material) => {
@@ -678,7 +679,7 @@ export const RawMaterialMasterPage = () => {
                           </div>
                         ) : batches.length ? (
                           <div className="overflow-x-auto">
-                            <table className="w-full min-w-[600px] text-left text-sm">
+                            <PaginatedTable tableClassName="w-full min-w-[600px] text-left text-sm">
                               <thead>
                                 <tr className="border-b border-slate-200 text-xs uppercase text-slate-400">
                                   <th className="pb-2 pr-3">Batch number</th>
@@ -704,7 +705,7 @@ export const RawMaterialMasterPage = () => {
                                   </tr>
                                 ))}
                               </tbody>
-                            </table>
+                            </PaginatedTable>
                           </div>
                         ) : (
                           <p className="text-sm text-slate-500">No batches recorded for this raw material.</p>
@@ -715,7 +716,7 @@ export const RawMaterialMasterPage = () => {
                 })}
                 {!visibleMaterials.length && <tr><td colSpan={canManage ? 7 : 6} className="py-10 text-center text-slate-400">No raw materials match your search.</td></tr>}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         </Card>
       )}

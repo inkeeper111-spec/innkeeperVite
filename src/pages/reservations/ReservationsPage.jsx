@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../../api/axios';
 import { Card } from '../../components/ui/Card';
@@ -421,7 +422,7 @@ export const ReservationsPage = () => {
               <div className="py-6 text-center text-slate-400 text-xs">No pending reservation requests.</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] text-left text-xs">
+                <PaginatedTable tableClassName="w-full min-w-[900px] text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                       <th className="pb-3">Reference</th>
@@ -499,7 +500,7 @@ export const ReservationsPage = () => {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             )}
           </div>
@@ -547,7 +548,7 @@ export const ReservationsPage = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px] text-left text-xs">
+            <PaginatedTable tableClassName="w-full min-w-[1040px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                   <th className="pb-3">Reference</th>
@@ -659,7 +660,7 @@ export const ReservationsPage = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         )}
         {!loading && pagination.pages > 0 && (

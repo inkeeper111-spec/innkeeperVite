@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useState, useEffect } from 'react';
 import api, { showApiErrorToast } from '../../api/axios';
 import { Card } from '../../components/ui/Card';
@@ -1304,7 +1305,7 @@ export const RestaurantPOS = () => {
                       </div>
                     </div>
                     <div className="mt-3 hidden overflow-x-auto sm:block">
-                      <table className="w-full min-w-[520px] text-left">
+                      <PaginatedTable tableClassName="w-full min-w-[520px] text-left">
                         <thead>
                           <tr className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                             <th className="pb-2 pr-3">Item</th>
@@ -1371,7 +1372,7 @@ export const RestaurantPOS = () => {
                             );
                           })}
                         </tbody>
-                      </table>
+                      </PaginatedTable>
                     </div>
 
                     <div className="ml-auto mt-4 w-full max-w-xs space-y-2 text-xs">

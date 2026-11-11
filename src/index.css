@@ -54,6 +54,79 @@ textarea {
   textarea {
     font-size: 16px;
   }
+
+  .responsive-data-table-frame {
+    overflow: visible;
+  }
+
+  .responsive-data-table {
+    display: block;
+    min-width: 0 !important;
+    table-layout: auto;
+  }
+
+  .table-scroll .responsive-data-table {
+    width: 100%;
+  }
+
+  .responsive-data-table thead {
+    display: none;
+  }
+
+  .responsive-data-table tbody {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .responsive-data-table tbody tr {
+    background: linear-gradient(145deg, #ffffff 0%, #fdfbf7 100%);
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+    box-shadow: 0 5px 16px rgba(58, 39, 24, 0.055);
+    display: block;
+    overflow: hidden;
+    padding: 0.3rem 0.9rem;
+  }
+
+  .responsive-data-table tbody tr:hover {
+    background: #ffffff;
+    box-shadow: 0 8px 20px rgba(58, 39, 24, 0.09);
+  }
+
+  .responsive-data-table tbody td {
+    align-items: start;
+    border-bottom: 1px solid rgba(229, 217, 200, 0.58);
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: minmax(6.5rem, 38%) minmax(0, 1fr);
+    overflow-wrap: anywhere;
+    padding: 0.7rem 0.05rem;
+    text-align: left !important;
+    white-space: normal !important;
+  }
+
+  .responsive-data-table tbody td:last-child {
+    border-bottom: 0;
+  }
+
+  .responsive-data-table tbody td::before {
+    color: var(--color-text-secondary);
+    content: attr(data-label);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.045em;
+    line-height: 1.45;
+    text-transform: uppercase;
+  }
+
+  .responsive-data-table-pagination {
+    gap: 0.75rem;
+    padding-top: 1rem;
+  }
+
+  .responsive-data-table-pagination > span {
+    white-space: nowrap;
+  }
 }
 
 button,
@@ -83,6 +156,79 @@ canvas {
 .table-scroll table th,
 .table-scroll table td {
   vertical-align: middle;
+}
+
+.responsive-data-table-frame {
+  width: 100%;
+  max-width: 100%;
+}
+
+.responsive-data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--color-text);
+}
+
+.responsive-data-table thead th {
+  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(180deg, #fcfaf6 0%, #f7f1e7 100%);
+  color: var(--color-text-secondary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  line-height: 1.35;
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+  vertical-align: middle;
+}
+
+.responsive-data-table tbody tr {
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.responsive-data-table tbody tr:hover {
+  background-color: #fcfaf6;
+}
+
+.responsive-data-table tbody td {
+  border-bottom: 1px solid rgba(229, 217, 200, 0.72);
+  vertical-align: middle;
+}
+
+.responsive-data-table-pagination {
+  align-items: center;
+  border-top: 1px solid rgba(229, 217, 200, 0.8);
+  color: var(--color-text-secondary);
+  display: flex;
+  font-size: 0.75rem;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+  padding: 0.85rem 0.25rem 0.15rem;
+}
+
+.responsive-data-table-page-button {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.65rem;
+  color: var(--color-primary);
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+  width: 2rem;
+}
+
+.responsive-data-table-page-button:not(:disabled):hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+.responsive-data-table-page-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 @keyframes toast-enter {

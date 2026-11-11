@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
 import { AlertTriangle, CheckCircle2, Plus, RefreshCw } from 'lucide-react';
@@ -299,7 +300,7 @@ const LeaveRequestsPage = ({ management = false }) => {
               ))}
             </div>
             <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[900px] text-left text-xs">
+            <PaginatedTable tableClassName="w-full min-w-[900px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 uppercase">
                   {isAdmin && <th className="pb-3">Employee / ID</th>}
@@ -340,7 +341,7 @@ const LeaveRequestsPage = ({ management = false }) => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </PaginatedTable>
             </div>
           </>
         )}
