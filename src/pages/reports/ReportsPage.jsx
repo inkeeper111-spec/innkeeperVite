@@ -124,6 +124,26 @@ export const ReportsPage = () => {
           ))}
         </div>
       </Card>
+
+      <Card title="Restaurant Sales by Dining Type" subtitle="Menu item sales for the current reporting period">
+        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {[
+            { key: 'ac', label: 'AC Dining' },
+            { key: 'nonAc', label: 'Non-AC Dining' }
+          ].map(({ key, label }) => {
+            const sales = data?.restaurantSales?.[key] || {};
+            return (
+              <div key={key} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+                <p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(sales.salesAmount || 0)}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {sales.orderCount || 0} orders · {sales.itemCount || 0} items
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
     </div>
   );
 };

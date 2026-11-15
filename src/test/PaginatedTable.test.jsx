@@ -31,4 +31,30 @@ describe('PaginatedTable', () => {
     expect(screen.getByText('11–11 of 11')).toBeInTheDocument();
     expect(screen.getByText('Guest 11')).toBeInTheDocument();
   });
+
+  it('keeps expanded detail rows together with their parent when grouped pagination is enabled', () => {
+    const { container } = render(
+      <PaginatedTable groupRows>
+        <thead>
+          <tr><th>Item</th></tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: 11 }, (_, index) => (
+            <React.Fragment key={index}>
+              <tr><td>Item {index + 1}</td></tr>
+              <tr><td>Details {index + 1}</td></tr>
+            </React.Fragment>
+          ))}
+        </tbody>
+      </PaginatedTable>
+    );
+
+    const table = container.querySelector('table');
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(20);
+    expect(screen.getByText('1–10 of 11')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(screen.getByText('Item 11')).toBeInTheDocument();
+    expect(screen.getByText('Details 11')).toBeInTheDocument();
+  });
 });

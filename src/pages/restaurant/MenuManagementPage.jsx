@@ -45,7 +45,10 @@ export const MenuManagementPage = () => {
     description: '',
     categoryId: '',
     price: '',
-    taxRate: 5,
+    nonAcPricingEnabled: true,
+    acPricingEnabled: false,
+    acPrice: '',
+    taxPercent: 5,
     isAvailable: true,
     preparationTime: 15,
     tags: ''
@@ -111,7 +114,8 @@ export const MenuManagementPage = () => {
     setEditingItem(null);
     setItemForm({
       name: '', description: '', categoryId: categories[0]?._id || '',
-      price: '', taxRate: 5, isAvailable: true, preparationTime: 15, tags: ''
+      price: '', nonAcPricingEnabled: true, acPricingEnabled: false, acPrice: '',
+      taxPercent: 5, isAvailable: true, preparationTime: 15, tags: ''
     });
     setError('');
     setIsItemModalOpen(true);
@@ -123,8 +127,11 @@ export const MenuManagementPage = () => {
       name: item.name,
       description: item.description || '',
       categoryId: item.categoryId?._id || item.categoryId || '',
-      price: item.price,
-      taxRate: item.taxRate ?? 5,
+      price: item.nonAcPrice ?? item.price,
+      nonAcPricingEnabled: item.nonAcPricingEnabled !== false,
+      acPricingEnabled: item.acPricingEnabled === true,
+      acPrice: item.acPrice ?? '',
+      taxPercent: item.taxPercent ?? item.taxRate ?? 5,
       isAvailable: item.isAvailable,
       preparationTime: item.preparationTime ?? 15,
       tags: (item.tags || []).join(', ')
@@ -138,8 +145,12 @@ export const MenuManagementPage = () => {
     setError('');
     const payload = {
       ...itemForm,
-      price: Number(itemForm.price),
-      taxRate: Number(itemForm.taxRate),
+      price: itemForm.price !== ''
+        ? Number(itemForm.price)
+        : (Number(itemForm.acPrice) || 0),
+      nonAcPrice: itemForm.nonAcPricingEnabled ? Number(itemForm.price) : undefined,
+      acPrice: itemForm.acPricingEnabled ? Number(itemForm.acPrice) : undefined,
+      taxPercent: Number(itemForm.taxPercent),
       preparationTime: Number(itemForm.preparationTime),
       tags: itemForm.tags ? itemForm.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
     };
@@ -289,7 +300,8 @@ export const MenuManagementPage = () => {
                     <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                       <th className="pb-3">Item Name</th>
                       <th className="pb-3">Category</th>
-                      <th className="pb-3">Price</th>
+                      <th className="pb-3">Non-AC Price</th>
+                      <th className="pb-3">AC Price</th>
                       <th className="pb-3">Tax</th>
                       <th className="pb-3">Prep Time</th>
                       <th className="pb-3">Availability</th>
@@ -308,8 +320,17 @@ export const MenuManagementPage = () => {
                             {item.categoryId?.name || '—'}
                           </span>
                         </td>
-                        <td className="py-3.5 font-black text-slate-900">{formatCurrency(item.price)}</td>
-                        <td className="py-3.5 text-slate-500">{item.taxRate ?? 5}%</td>
+                        <td className="py-3.5 font-black text-slate-900">
+                          {item.nonAcPricingEnabled === false
+                            ? <span className="font-medium text-slate-400">Disabled</span>
+                            : formatCurrency(item.nonAcPrice ?? item.price)}
+                        </td>
+                        <td className="py-3.5 font-black text-slate-900">
+                          {item.acPricingEnabled === true
+                            ? formatCurrency(item.acPrice)
+                            : <span className="font-medium text-slate-400">Disabled</span>}
+                        </td>
+                        <td className="py-3.5 text-slate-500">{item.taxPercent ?? item.taxRate ?? 5}%</td>
                         <td className="py-3.5 text-slate-500">{item.preparationTime ?? 15} min</td>
                         <td className="py-3.5">
                           <button
@@ -471,15 +492,51 @@ export const MenuManagementPage = () => {
               ))}
             </Select>
             <Input
-              label={`Price (${currencySymbol})`}
+              label={`Non-AC Price (${currencySymbol})`}
               type="number"
               step="0.01"
-              required
+              min="0"
+              required={itemForm.nonAcPricingEnabled}
+              disabled={!itemForm.nonAcPricingEnabled}
               value={itemForm.price}
               onChange={(e) => setItemForm({ ...itemForm, price: e.target.value })}
               placeholder="0.00"
             />
           </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={itemForm.nonAcPricingEnabled}
+                onChange={(e) => setItemForm({ ...itemForm, nonAcPricingEnabled: e.target.checked })}
+                className="rounded border-slate-300 text-brand-600"
+              />
+              Enable Non-AC pricing
+            </label>
+            <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={itemForm.acPricingEnabled}
+                onChange={(e) => setItemForm({ ...itemForm, acPricingEnabled: e.target.checked })}
+                className="rounded border-slate-300 text-brand-600"
+              />
+              Enable AC pricing
+            </label>
+          </div>
+
+          {itemForm.acPricingEnabled && (
+            <Input
+              label={`AC Price (${currencySymbol})`}
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              value={itemForm.acPrice}
+              onChange={(e) => setItemForm({ ...itemForm, acPrice: e.target.value })}
+              placeholder="0.00"
+            />
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
@@ -487,8 +544,8 @@ export const MenuManagementPage = () => {
               type="number"
               min="0"
               max="100"
-              value={itemForm.taxRate}
-              onChange={(e) => setItemForm({ ...itemForm, taxRate: e.target.value })}
+              value={itemForm.taxPercent}
+              onChange={(e) => setItemForm({ ...itemForm, taxPercent: e.target.value })}
             />
             <Input
               label="Prep Time (minutes)"

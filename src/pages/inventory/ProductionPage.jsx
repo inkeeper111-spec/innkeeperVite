@@ -1,6 +1,18 @@
 import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ClipboardList, CookingPot, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  ClipboardList,
+  CookingPot,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
+  X,
+  XCircle
+} from 'lucide-react';
 import dayjs from 'dayjs';
 import api, { showApiErrorToast } from '../../api/axios';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,6 +24,7 @@ import { Input } from '../../components/ui/Input';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { Select } from '../../components/ui/Select';
 import { useNavigate } from 'react-router-dom';
+import { useStorageLocations } from './useStorageLocations';
 
 const createRequestKey = () => globalThis.crypto?.randomUUID?.()
   || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -25,6 +38,7 @@ export const ProductionPage = () => {
   const { user } = useAuth();
   const { formatCurrency } = useCurrency();
   const canViewFinancials = ['hotel_admin', 'super_admin'].includes(user?.role);
+  const canManageMenuPrices = user?.role === 'hotel_admin';
   const [recipes, setRecipes] = useState([]);
   const [batches, setBatches] = useState([]);
   const [totals, setTotals] = useState({});
@@ -38,8 +52,10 @@ export const ProductionPage = () => {
     recipeId: '',
     productionQuantity: '',
     location: 'Kitchen Store',
+    locationId: '',
     rawMaterialLocation: 'Main Store',
-    productionDate: dayjs().format('YYYY-MM-DD'),
+    rawMaterialLocationId: '',
+    productionDate: dayjs().format('YYYY-MM-DDTHH:mm'),
     expiryDate: ''
   });
   const [requestKey, setRequestKey] = useState('');
@@ -48,8 +64,29 @@ export const ProductionPage = () => {
   const [closingForm, setClosingForm] = useState({ quantity: '', reason: '' });
   const [closingRequestKey, setClosingRequestKey] = useState('');
   const [transferBatch, setTransferBatch] = useState(null);
-  const [transferForm, setTransferForm] = useState({ quantity: '', destinationLocation: '', notes: '' });
+  const [transferForm, setTransferForm] = useState({ quantity: '', destinationLocation: '', destinationLocationId: '', notes: '' });
   const [transferRequestKey, setTransferRequestKey] = useState('');
+  const [priceBatch, setPriceBatch] = useState(null);
+  const [priceForm, setPriceForm] = useState({ acPrice: '', nonAcPrice: '' });
+  const [savingPrice, setSavingPrice] = useState(false);
+  const { storageLocations, storageLocationOptions, storageLocationById } = useStorageLocations();
+
+  useEffect(() => {
+    if (!storageLocations.length) return;
+    setForm((current) => {
+      const productionLocation = storageLocations.find((entry) => (
+        entry.locationName.toLocaleLowerCase() === String(current.location || 'Kitchen Store').toLocaleLowerCase()
+      )) || storageLocations[0];
+      const rawLocation = storageLocations.find((entry) => (
+        entry.locationName.toLocaleLowerCase() === String(current.rawMaterialLocation || 'Main Store').toLocaleLowerCase()
+      )) || storageLocations[0];
+      return {
+        ...current,
+        locationId: current.locationId || String(productionLocation._id),
+        rawMaterialLocationId: current.rawMaterialLocationId || String(rawLocation._id)
+      };
+    });
+  }, [storageLocations]);
 
   const selectedRecipe = useMemo(
     () => recipes.find((recipe) => String(recipe._id) === String(form.recipeId)),
@@ -144,6 +181,8 @@ export const ProductionPage = () => {
     try {
       await api.post('/inventory/production', {
         ...form,
+        productionDate: new Date(form.productionDate).toISOString(),
+        expiryDate: form.expiryDate ? new Date(form.expiryDate).toISOString() : null,
         idempotencyKey: activeRequestKey,
         productionMethod: 'recipe_based',
         productionQuantity: Number(form.productionQuantity),
@@ -218,6 +257,41 @@ export const ProductionPage = () => {
     }
   };
 
+  const openPriceEditor = (batch, recipe) => {
+    const menuItem = recipe?.menuItemId;
+    if (!menuItem || typeof menuItem !== 'object') {
+      showApiErrorToast(new Error('Menu pricing details are unavailable for this batch.'), 'Unable to edit menu prices.');
+      return;
+    }
+    setPriceBatch({ batch, menuItem });
+    setPriceForm({
+      acPrice: menuItem.acPrice == null ? '' : String(menuItem.acPrice),
+      nonAcPrice: String(menuItem.nonAcPrice ?? menuItem.price ?? '')
+    });
+  };
+
+  const submitMenuPrice = async (event) => {
+    event.preventDefault();
+    if (!priceBatch) return;
+    const { menuItem } = priceBatch;
+    const updates = {};
+    if (menuItem.acPricingEnabled === true) updates.acPrice = Number(priceForm.acPrice);
+    if (menuItem.nonAcPricingEnabled !== false) updates.nonAcPrice = Number(priceForm.nonAcPrice);
+    if (Object.keys(updates).length === 0 || Object.values(updates).some((price) => !Number.isFinite(price) || price < 0)) {
+      return;
+    }
+    setSavingPrice(true);
+    try {
+      await api.patch(`/restaurant/items/${menuItem._id}`, updates);
+      setPriceBatch(null);
+      await loadProductionData();
+    } catch (requestError) {
+      showApiErrorToast(requestError, 'Unable to update menu prices.');
+    } finally {
+      setSavingPrice(false);
+    }
+  };
+
   const metricCards = [
     ['Portions produced', totals.acceptedQuantity, ''],
     ['Reserved for open orders', totals.reservedQuantity, ''],
@@ -287,13 +361,26 @@ export const ProductionPage = () => {
                     {recipe.expectedPreparationLossPercent || 0}% expected preparation loss · {recipe.ingredients.filter((ingredient) => !ingredient.optional).length} ingredients
                   </p>
                   {canViewFinancials && (
-                    <p className="mt-2 text-xs text-orvelle-muted">
-                      Total recipe cost: {currency(recipe.totalRecipeCost, formatCurrency)}
-                      {' · '}Cost / serving: {currency(recipe.costPerServing, formatCurrency)}
-                      {' · '}Selling price / serving: {currency(recipe.sellingPrice, formatCurrency)}
-                      {' · '}Estimated gross profit: {currency(recipe.estimatedGrossProfit, formatCurrency)} / serving
-                      {' · '}Food cost: {numeric(recipe.foodCostPercent).toFixed(1)}%
-                    </p>
+                    <div className="mt-3 space-y-2 text-xs">
+                      <p className="text-orvelle-muted">
+                        Recipe cost: {currency(recipe.totalRecipeCost, formatCurrency)} total
+                        {' · '}{currency(recipe.costPerServing, formatCurrency)} / serving
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {[
+                          ['AC', recipe.diningTypePricing?.ac],
+                          ['Non-AC', recipe.diningTypePricing?.nonAc]
+                        ].filter(([, pricing]) => pricing?.enabled).map(([label, pricing]) => (
+                          <div key={label} className="rounded-lg bg-orvelle-ivory/70 px-3 py-2 text-orvelle-primary">
+                            <p className="font-semibold">{label}</p>
+                            <p>Selling price: {pricing.sellingPrice == null ? '—' : currency(pricing.sellingPrice, formatCurrency)}</p>
+                            <p className="text-emerald-700">
+                              Gross profit: {pricing.estimatedGrossProfit == null ? '—' : `${currency(pricing.estimatedGrossProfit, formatCurrency)} / serving`}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
                 <Button
@@ -345,10 +432,35 @@ export const ProductionPage = () => {
               ]}
             />
             <Input label="Production portions" required type="number" min="0.00000001" step="any" value={form.productionQuantity} onChange={(event) => setForm({ ...form, productionQuantity: event.target.value })} helperText="Accepted portions will match this quantity." />
-            <Input label="Kitchen location" required value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} />
-            <Input label="Raw material stock location" required value={form.rawMaterialLocation} onChange={(event) => setForm({ ...form, rawMaterialLocation: event.target.value })} helperText="Inventory batches are deducted from this location." />
-            <Input label="Production date" required type="date" value={form.productionDate} onChange={(event) => setForm({ ...form, productionDate: event.target.value })} />
-            <Input label="Use-by date" type="date" value={form.expiryDate} onChange={(event) => setForm({ ...form, expiryDate: event.target.value })} />
+            <Select
+              label="Kitchen location"
+              searchable
+              required
+              value={form.locationId}
+              onChange={(event) => {
+                const selected = storageLocationById(event.target.value);
+                setForm({ ...form, locationId: event.target.value, location: selected?.locationName || '' });
+              }}
+              options={storageLocationOptions}
+            />
+            <Select
+              label="Raw material stock location"
+              searchable
+              required
+              value={form.rawMaterialLocationId}
+              onChange={(event) => {
+                const selected = storageLocationById(event.target.value);
+                setForm({
+                  ...form,
+                  rawMaterialLocationId: event.target.value,
+                  rawMaterialLocation: selected?.locationName || ''
+                });
+              }}
+              options={storageLocationOptions}
+              helperText="Inventory batches are deducted from this location."
+            />
+            <Input label="Production date and time" required type="datetime-local" value={form.productionDate} onChange={(event) => setForm({ ...form, productionDate: event.target.value })} />
+            <Input label="Use-by date and time" type="datetime-local" value={form.expiryDate} onChange={(event) => setForm({ ...form, expiryDate: event.target.value })} />
           </div>
 
           {selectedRecipe && (
@@ -392,7 +504,7 @@ export const ProductionPage = () => {
         title="Production batches"
         subtitle="Recipe cost and pricing estimates match Recipe Management. Available portions exclude quantities reserved for open orders."
         action={
-          <div className="flex gap-2">
+          <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-2">
             <Input aria-label="From date" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
             <Input aria-label="To date" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
           </div>
@@ -402,16 +514,13 @@ export const ProductionPage = () => {
           <div className="py-8 text-center text-sm text-orvelle-muted">No production batches in this date range.</div>
         ) : (
           <div className="overflow-x-auto">
-            <PaginatedTable tableClassName="w-full min-w-[1320px] text-left text-sm">
+            <PaginatedTable tableClassName="w-full min-w-[980px] text-left text-sm">
               <thead className="text-xs uppercase text-orvelle-muted">
                 <tr>
-                  <th className="px-3 py-2">Batch / production</th>
-                  <th className="px-3 py-2">Portions</th>
-                  <th className="px-3 py-2">Reserved</th>
-                  <th className="px-3 py-2">Sold</th>
-                  <th className="px-3 py-2">Wasted</th>
-                  <th className="px-3 py-2">Available</th>
-                  {canViewFinancials && <th className="px-3 py-2">Recipe cost / serving price</th>}
+                  <th className="px-3 py-2">Batch / product</th>
+                  <th className="px-3 py-2">Production date / time</th>
+                  <th className="px-3 py-2">Portion summary</th>
+                  {canViewFinancials && <th className="px-3 py-2">Cost & selling prices</th>}
                   <th className="px-3 py-2">Use by / location</th>
                   <th className="px-3 py-2">Actions</th>
                 </tr>
@@ -421,82 +530,117 @@ export const ProductionPage = () => {
                   const recipe = recipesById.get(String(batch.recipeId));
                   return (
                     <tr key={batch._id}>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 align-top">
                       <p className="font-medium text-orvelle-primary">{batch.menuItemName}</p>
-                      <p className="text-xs text-orvelle-muted">{batch.batchNumber} · {dayjs(batch.productionDate).format('DD MMM YYYY')} · {batch.productionMethod === 'actual_consumption' ? 'Actual use' : 'Recipe based'}</p>
+                      <p className="text-xs text-orvelle-muted">{batch.batchNumber}</p>
                     </td>
-                    <td className="px-3 py-3">{quantity(batch.acceptedQuantity)}</td>
-                    <td className="px-3 py-3">{quantity(batch.reservedQuantity)}</td>
-                    <td className="px-3 py-3">{quantity(batch.soldQuantity)}</td>
-                    <td className="px-3 py-3">{quantity(batch.wastedQuantity)}</td>
-                    <td className="px-3 py-3"><Badge variant={numeric(batch.availableQuantity) > 0 ? 'available' : 'default'}>{quantity(batch.availableQuantity)}</Badge></td>
+                    <td className="px-3 py-3 align-top">
+                      <p className="text-orvelle-primary">{dayjs(batch.productionDate).format('DD MMM YYYY')}</p>
+                      <p className="text-xs text-orvelle-muted">{dayjs(batch.productionDate).format('hh:mm A')} · {batch.productionMethod === 'actual_consumption' ? 'Actual use' : 'Recipe based'}</p>
+                    </td>
+                    <td className="px-3 py-3 align-top">
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
+                        {[
+                          ['Produced', batch.acceptedQuantity],
+                          ['Reserved', batch.reservedQuantity],
+                          ['Sold', batch.soldQuantity],
+                          ['Wasted', batch.wastedQuantity]
+                        ].map(([label, value]) => (
+                          <div key={label}>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-orvelle-muted">{label}</p>
+                            <p className="font-medium text-orvelle-primary">{quantity(value)}</p>
+                          </div>
+                        ))}
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-orvelle-muted">Available</p>
+                          <Badge variant={numeric(batch.availableQuantity) > 0 ? 'available' : 'default'}>{quantity(batch.availableQuantity)}</Badge>
+                        </div>
+                      </div>
+                    </td>
                     {canViewFinancials && (
-                      <td className="px-3 py-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <p className="text-[10px] uppercase text-orvelle-muted">Total recipe cost</p>
-                            <p className="font-medium text-orvelle-primary">
-                              {recipe?.totalRecipeCost == null ? 'Cost pending' : currency(recipe.totalRecipeCost, formatCurrency)}
-                            </p>
-                            <p className="text-xs text-orvelle-muted">full recipe</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-[10px] uppercase text-orvelle-muted">Cost / serving</p>
-                            <p className="font-medium text-orvelle-primary">
-                              {recipe?.costPerServing == null ? 'Cost pending' : currency(recipe.costPerServing, formatCurrency)}
-                            </p>
-                            <p className="text-xs text-orvelle-muted">usable serving</p>
-                          </div>
+                      <td className="px-3 py-3 align-top">
+                        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 text-xs">
+                          <p><span className="text-orvelle-muted">Recipe total:</span> <b className="text-orvelle-primary">{recipe?.totalRecipeCost == null ? 'Cost pending' : currency(recipe.totalRecipeCost, formatCurrency)}</b></p>
+                          <p><span className="text-orvelle-muted">Cost / serving:</span> <b className="text-orvelle-primary">{recipe?.costPerServing == null ? 'Cost pending' : currency(recipe.costPerServing, formatCurrency)}</b></p>
                         </div>
-                        <div className="mt-3 grid grid-cols-2 gap-3 border-t border-orvelle-border/70 pt-3 text-xs sm:grid-cols-4">
-                          <div>
-                            <p className="text-[10px] uppercase text-orvelle-muted">Selling price / serving</p>
-                            <p className="mt-1 font-medium text-orvelle-primary">
-                              {recipe?.sellingPrice == null ? '—' : currency(recipe.sellingPrice, formatCurrency)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase text-orvelle-muted">Expected preparation loss</p>
-                            <p className="mt-1 font-medium text-orvelle-primary">
-                              {recipe ? `${numeric(recipe.expectedPreparationLossPercent)}%` : '—'}
-                            </p>
-                            {recipe && <p className="text-orvelle-muted">{quantity(recipe.expectedPreparationLossQuantity)} servings lost</p>}
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase text-orvelle-muted">Estimated gross profit</p>
-                            <p className="mt-1 font-medium text-emerald-700">
-                              {recipe?.estimatedGrossProfit == null ? '—' : `${currency(recipe.estimatedGrossProfit, formatCurrency)} / serving`}
-                            </p>
-                            {recipe?.estimatedProfitWhole != null && (
-                              <p className="text-orvelle-muted">{currency(recipe.estimatedProfitWhole, formatCurrency)} total estimated</p>
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase text-orvelle-muted">Food cost</p>
-                            <p className="mt-1 font-medium text-orvelle-primary">
-                              {recipe?.foodCostPercent == null ? '—' : `${numeric(recipe.foodCostPercent).toFixed(1)}%`}
-                            </p>
-                          </div>
+                        <div className="mt-2 grid gap-2 border-t border-orvelle-border/70 pt-2 text-xs sm:grid-cols-2">
+                          {[
+                            ['AC', recipe?.diningTypePricing?.ac],
+                            ['Non-AC', recipe?.diningTypePricing?.nonAc]
+                          ].filter(([, pricing]) => pricing?.enabled).map(([label, pricing]) => (
+                            <div key={label} className="rounded-lg bg-orvelle-ivory/70 px-2.5 py-2">
+                              <p className="font-semibold text-orvelle-primary">{label}</p>
+                              <p>Price {pricing.sellingPrice == null ? '—' : currency(pricing.sellingPrice, formatCurrency)}</p>
+                              <p className="font-medium text-emerald-700">
+                                Profit {pricing.estimatedGrossProfit == null ? '—' : `${currency(pricing.estimatedGrossProfit, formatCurrency)} / serving`}
+                              </p>
+                            </div>
+                          ))}
                         </div>
+                        <p className="mt-2 text-[11px] text-orvelle-muted">
+                          Preparation loss {recipe ? `${numeric(recipe.expectedPreparationLossPercent)}%` : '—'}
+                          {' · '}Food cost {recipe?.foodCostPercent == null ? '—' : `${numeric(recipe.foodCostPercent).toFixed(1)}%`}
+                        </p>
                       </td>
                     )}
-                    <td className="px-3 py-3">{batch.expiryDate ? dayjs(batch.expiryDate).format('DD MMM YYYY') : 'No use-by'}<p className="text-xs text-orvelle-muted">{batch.location}</p></td>
-                    <td className="px-3 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" disabled={numeric(batch.availableQuantity) <= 0} onClick={() => { setClosing(batch); setClosingType('wastage'); setClosingForm({ quantity: '', reason: '' }); setClosingRequestKey(''); }}>
-                          Kitchen close
+                    <td className="px-3 py-3 align-top">
+                      <p className="text-orvelle-primary">{batch.expiryDate ? dayjs(batch.expiryDate).format('DD MMM YYYY') : 'No use-by'}</p>
+                      {batch.expiryDate && <p className="text-xs text-orvelle-muted">{dayjs(batch.expiryDate).format('hh:mm A')}</p>}
+                      <p className="text-xs text-orvelle-muted">{batch.location}</p>
+                    </td>
+                    <td className="px-3 py-3 align-top">
+                      <div className="flex flex-wrap gap-1 sm:min-w-[132px]">
+                        {canManageMenuPrices && recipe?.menuItemId && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="!h-9 !w-9 !p-0"
+                            title={`Edit ${batch.menuItemName} menu prices`}
+                            aria-label={`Edit ${batch.menuItemName} menu prices`}
+                            onClick={() => openPriceEditor(batch, recipe)}
+                          >
+                            <Pencil aria-hidden="true" className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="!h-9 !w-9 !p-0"
+                          disabled={numeric(batch.availableQuantity) <= 0}
+                          title="Record kitchen closing"
+                          aria-label={`Record kitchen closing for ${batch.batchNumber}`}
+                          onClick={() => { setClosing(batch); setClosingType('wastage'); setClosingForm({ quantity: '', reason: '' }); setClosingRequestKey(''); }}
+                        >
+                          <ClipboardList aria-hidden="true" className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="outline" disabled={numeric(batch.availableQuantity) <= 0} onClick={() => {
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="!h-9 !w-9 !p-0"
+                          disabled={numeric(batch.availableQuantity) <= 0}
+                          title="Transfer portions"
+                          aria-label={`Transfer portions from ${batch.batchNumber}`}
+                          onClick={() => {
                           setTransferBatch(batch);
-                          setTransferForm({ quantity: String(batch.availableQuantity), destinationLocation: '', notes: '' });
+                          setTransferForm({ quantity: String(batch.availableQuantity), destinationLocation: '', destinationLocationId: '', notes: '' });
                           setTransferRequestKey('');
-                        }}>
-                          Transfer
+                          }}
+                        >
+                          <ArrowRightLeft aria-hidden="true" className="h-4 w-4" />
                         </Button>
                         {canViewFinancials && !batch.isTransferBatch && numeric(batch.soldQuantity) === 0 && numeric(batch.wastedQuantity) === 0
                           && numeric(batch.complimentaryQuantity) === 0 && numeric(batch.staffConsumptionQuantity) === 0
                           && numeric(batch.transferredOutQuantity) === 0 && (
-                            <Button size="sm" variant="outline" onClick={() => cancelProduction(batch)}>Cancel production</Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="!h-9 !w-9 !p-0"
+                              title="Cancel production"
+                              aria-label={`Cancel production batch ${batch.batchNumber}`}
+                              onClick={() => cancelProduction(batch)}
+                            >
+                              <XCircle aria-hidden="true" className="h-4 w-4" />
+                            </Button>
                           )}
                       </div>
                     </td>
@@ -598,11 +742,72 @@ export const ProductionPage = () => {
                 Move portions of {transferBatch.menuItemName} from {transferBatch.location}. Transfers preserve batch cost and expiry.
               </p>
               <Input label="Transfer quantity" required type="number" min="0.00000001" max={transferBatch.availableQuantity} step="any" value={transferForm.quantity} onChange={(event) => setTransferForm({ ...transferForm, quantity: event.target.value })} />
-              <Input label="Destination location" required value={transferForm.destinationLocation} onChange={(event) => setTransferForm({ ...transferForm, destinationLocation: event.target.value })} />
+              <Select
+                label="Destination location"
+                required
+                searchable
+                value={transferForm.destinationLocationId}
+                onChange={(event) => {
+                  const selected = storageLocationById(event.target.value);
+                  setTransferForm({
+                    ...transferForm,
+                    destinationLocationId: event.target.value,
+                    destinationLocation: selected?.locationName || ''
+                  });
+                }}
+                options={storageLocationOptions.filter((option) => String(option.value) !== String(transferBatch?.locationId?._id || transferBatch?.locationId || ''))}
+              />
               <Input label="Transfer notes" value={transferForm.notes} onChange={(event) => setTransferForm({ ...transferForm, notes: event.target.value })} />
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setTransferBatch(null)}>Cancel</Button>
                 <Button type="submit">Transfer portions</Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+      {priceBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="production-price-title">
+          <Card className="w-full max-w-lg" title="Update menu prices">
+            <form onSubmit={submitMenuPrice} className="space-y-4">
+              <div>
+                <h2 id="production-price-title" className="font-medium text-orvelle-primary">{priceBatch.batch.menuItemName}</h2>
+                <p className="mt-1 text-xs text-orvelle-muted">
+                  Updates apply to future orders. Existing bills and production batch price snapshots remain unchanged.
+                </p>
+              </div>
+              {priceBatch.menuItem.acPricingEnabled === true && (
+                <Input
+                  label="AC price"
+                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={priceForm.acPrice}
+                  onChange={(event) => setPriceForm((current) => ({ ...current, acPrice: event.target.value }))}
+                />
+              )}
+              {priceBatch.menuItem.nonAcPricingEnabled !== false && (
+                <Input
+                  label="Non-AC price"
+                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={priceForm.nonAcPrice}
+                  onChange={(event) => setPriceForm((current) => ({ ...current, nonAcPrice: event.target.value }))}
+                />
+              )}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setPriceBatch(null)}>
+                  <X className="mr-2 h-4 w-4" /> Cancel
+                </Button>
+                <Button type="submit" disabled={savingPrice || (
+                  priceBatch.menuItem.acPricingEnabled !== true
+                  && priceBatch.menuItem.nonAcPricingEnabled === false
+                )}>
+                  <Save className="mr-2 h-4 w-4" /> {savingPrice ? 'Saving…' : 'Save prices'}
+                </Button>
               </div>
             </form>
           </Card>

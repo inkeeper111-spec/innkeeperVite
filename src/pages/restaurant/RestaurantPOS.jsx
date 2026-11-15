@@ -27,12 +27,26 @@ import {
   Archive,
   CalendarDays,
   Filter,
-  Printer
+  Printer,
+  Wind,
+  Sun,
+  Users
 } from 'lucide-react';
 
 const getTableLabel = (table, nameFallback = '') => {
   const name = table?.name?.trim() || nameFallback?.trim();
   return name ? `Table · ${name}` : 'Table';
+};
+
+const getMenuDiningPrice = (item, diningType) => {
+  if (diningType === 'ac') {
+    return item.acPricingEnabled === true && item.acPrice != null && Number.isFinite(Number(item.acPrice))
+      ? Number(item.acPrice)
+      : null;
+  }
+  if (item.nonAcPricingEnabled === false) return null;
+  const price = item.nonAcPrice ?? item.price;
+  return Number.isFinite(Number(price)) ? Number(price) : null;
 };
 
 const getLocalDateValue = (date) => {
@@ -62,6 +76,7 @@ export const RestaurantPOS = () => {
   // Cart State
   const [cart, setCart] = useState([]);
   const [orderType, setOrderType] = useState('dine_in'); // dine_in, room_service, takeaway
+  const [diningType, setDiningType] = useState('non_ac');
   const [selectedTableId, setSelectedTableId] = useState('');
   const [selectedReservationId, setSelectedReservationId] = useState('');
   const [selectedRoomId, setSelectedRoomId] = useState('');
@@ -70,7 +85,9 @@ export const RestaurantPOS = () => {
   const [selectedOrderForFolio, setSelectedOrderForFolio] = useState(null);
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
   const [editingTable, setEditingTable] = useState(null);
-  const [tableForm, setTableForm] = useState({ name: '', capacity: 4, status: 'available' });
+  const [tableForm, setTableForm] = useState({
+    name: '', capacity: 4, status: 'available', diningType: 'non_ac'
+  });
   const [tableError, setTableError] = useState('');
   const [billEdit, setBillEdit] = useState(null);
   const [billSaving, setBillSaving] = useState(false);
@@ -130,12 +147,14 @@ export const RestaurantPOS = () => {
   }, [canManageTables]);
 
   const addToCart = (item) => {
+    const price = getMenuDiningPrice(item, diningType);
+    if (price === null) return;
     setCart((prev) => {
       const existing = prev.find((i) => i._id === item._id);
       if (existing) {
         return prev.map((i) => (i._id === item._id ? { ...i, quantity: i.quantity + 1 } : i));
       }
-      return [...prev, { ...item, quantity: 1 }];
+      return [...prev, { ...item, price, quantity: 1 }];
     });
   };
 
@@ -170,6 +189,7 @@ export const RestaurantPOS = () => {
 
       const payload = {
         orderType,
+        diningType,
         tableId: orderType === 'dine_in' ? selectedTableId : undefined,
         roomId: selectedRoom?.roomId?._id || selectedRoom?.roomId,
         reservationId: selectedResv?._id,
@@ -221,17 +241,19 @@ export const RestaurantPOS = () => {
         await api.patch(`/restaurant/tables/${editingTable._id}`, {
           name: tableForm.name,
           capacity: Number(tableForm.capacity),
-          status: tableForm.status
+          status: tableForm.status,
+          diningType: tableForm.diningType
         });
       } else {
         await api.post('/restaurant/tables', {
           name: tableForm.name,
-          capacity: Number(tableForm.capacity)
+          capacity: Number(tableForm.capacity),
+          diningType: tableForm.diningType
         });
       }
       setIsTableModalOpen(false);
       setEditingTable(null);
-      setTableForm({ name: '', capacity: 4, status: 'available' });
+      setTableForm({ name: '', capacity: 4, status: 'available', diningType: 'non_ac' });
       fetchMenuAndOrders();
     } catch (err) {
       setTableError(err.response?.data?.message || 'Failed to save table.');
@@ -441,6 +463,13 @@ export const RestaurantPOS = () => {
     (i) => selectedCat === 'all' || i.categoryId?._id === selectedCat || i.categoryId === selectedCat
   );
   const activeTables = tables.filter((table) => table.isActive);
+  const tableGroups = [
+    { type: 'ac', label: 'AC Dining', icon: Wind, color: 'sky' },
+    { type: 'non_ac', label: 'Non-AC Dining', icon: Sun, color: 'amber' }
+  ].map((group) => ({
+    ...group,
+    tables: activeTables.filter((table) => (table.diningType || 'non_ac') === group.type)
+  }));
   const occupiedRoomOptions = inHouseReservations.flatMap((reservation) => (
     (reservation.rooms || [])
       .filter((room) => room.roomId?.roomStatus === 'occupied')
@@ -608,7 +637,7 @@ export const RestaurantPOS = () => {
               icon={Plus}
               onClick={() => {
                 setEditingTable(null);
-                setTableForm({ name: '', capacity: 4, status: 'available' });
+                setTableForm({ name: '', capacity: 4, status: 'available', diningType: 'non_ac' });
                 setTableError('');
                 setIsTableModalOpen(true);
               }}
@@ -621,58 +650,110 @@ export const RestaurantPOS = () => {
           ) : tables.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">No tables configured for this restaurant.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {tables.map((table) => {
-                const activeOrder = orders.find((order) => String(order._id) === String(table.activeOrderId));
+            <div className="space-y-5">
+              {[
+                { type: 'ac', label: 'AC Dining', icon: Wind },
+                { type: 'non_ac', label: 'Non-AC Dining', icon: Sun }
+              ].map(({ type, label, icon: DiningIcon }) => {
+                const sectionTables = tables.filter((table) => (table.diningType || 'non_ac') === type);
                 return (
-                  <div key={table._id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4">
-                    <div>
-                      <p className="font-bold text-slate-900">{getTableLabel(table)}</p>
-                      <p className="text-xs capitalize text-slate-500">Capacity {table.capacity} · {table.currentStatus}</p>
+                  <section key={type} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <div className={`flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 ${
+                      type === 'ac' ? 'border-sky-100 bg-sky-50/70' : 'border-amber-100 bg-amber-50/70'
+                    }`}>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                          type === 'ac' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          <DiningIcon className="h-5 w-5" />
+                        </span>
+                        <div>
+                          <h3 className="font-bold text-slate-900">{label}</h3>
+                          <p className="text-xs text-slate-500">Tables configured for {type === 'ac' ? 'air-conditioned' : 'open-air'} seating</p>
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                        {sectionTables.length} tables
+                      </span>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {table.currentStatus === 'occupied' && activeOrder && (
-                        <Button
-                          size="sm"
-                          variant="gold"
-                          icon={Receipt}
-                          onClick={() => {
-                            setSelectedBill(activeOrder);
-                            setBillEdit(null);
-                            setBillError('');
-                            setActiveView('bills');
-                            setShowTableManagement(false);
-                          }}
-                        >
-                          Settle / generate bill
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setEditingTable(table);
-                          setTableForm({
-                            name: table.name || '',
-                            capacity: table.capacity,
-                            status: table.status
-                          });
-                          setTableError('');
-                          setIsTableModalOpen(true);
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={table.isActive ? 'danger' : 'success'}
-                        disabled={table.currentStatus === 'occupied'}
-                        onClick={() => handleToggleTable(table)}
-                      >
-                        {table.isActive ? 'Deactivate' : 'Activate'}
-                      </Button>
-                    </div>
-                  </div>
+                    {sectionTables.length === 0 ? (
+                      <p className="px-5 py-6 text-center text-sm text-slate-400">No {label} tables yet.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                        {sectionTables.map((table) => {
+                          const activeOrder = orders.find((order) => String(order._id) === String(table.activeOrderId));
+                          return (
+                            <div
+                              key={table._id}
+                              className="flex min-w-0 flex-col justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate font-bold text-slate-900">{getTableLabel(table)}</p>
+                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                    <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" />{table.capacity} seats</span>
+                                    <span className="capitalize">{table.currentStatus}</span>
+                                  </div>
+                                </div>
+                                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                                  table.currentStatus === 'occupied'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : table.currentStatus === 'reserved'
+                                      ? 'bg-violet-100 text-violet-800'
+                                      : 'bg-emerald-100 text-emerald-800'
+                                }`}>
+                                  {table.currentStatus}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {table.currentStatus === 'occupied' && activeOrder && (
+                                  <Button
+                                    size="sm"
+                                    variant="gold"
+                                    icon={Receipt}
+                                    onClick={() => {
+                                      setSelectedBill(activeOrder);
+                                      setBillEdit(null);
+                                      setBillError('');
+                                      setActiveView('bills');
+                                      setShowTableManagement(false);
+                                    }}
+                                  >
+                                    View bill
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditingTable(table);
+                                    setTableForm({
+                                      name: table.name || '',
+                                      capacity: table.capacity,
+                                      status: table.status,
+                                      diningType: table.diningType || 'non_ac'
+                                    });
+                                    setTableError('');
+                                    setIsTableModalOpen(true);
+                                  }}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant={table.isActive ? 'danger' : 'success'}
+                                  disabled={table.currentStatus === 'occupied'}
+                                  onClick={() => handleToggleTable(table)}
+                                >
+                                  {table.isActive ? 'Deactivate' : 'Activate'}
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
                 );
               })}
             </div>
@@ -684,7 +765,13 @@ export const RestaurantPOS = () => {
             {['dine_in', 'room_service', 'takeaway'].map((type) => (
               <button
                 key={type}
-                onClick={() => setOrderType(type)}
+                onClick={() => {
+                  if (type === orderType) return;
+                  if (cart.length > 0 && !window.confirm('Changing order type will clear the current ticket. Continue?')) return;
+                  clearCart();
+                  setSelectedTableId('');
+                  setOrderType(type);
+                }}
                 className={`rounded-lg py-2 text-[11px] font-bold capitalize transition-all ${
                   orderType === type ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
                 }`}
@@ -693,6 +780,31 @@ export const RestaurantPOS = () => {
               </button>
             ))}
           </div>
+
+          {orderType !== 'dine_in' && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-slate-600">Dining type:</span>
+              {[
+                { value: 'ac', label: 'AC' },
+                { value: 'non_ac', label: 'Non-AC' }
+              ].map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={diningType === value}
+                  disabled={cart.length > 0}
+                  onClick={() => setDiningType(value)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                    diningType === value
+                      ? 'border-brand-600 bg-brand-600 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-brand-400'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {showTableFloor ? (
             <Card>
@@ -707,8 +819,32 @@ export const RestaurantPOS = () => {
               ) : activeTables.length === 0 ? (
                 <p className="py-8 text-center text-sm text-rose-600">No active restaurant tables are configured.</p>
               ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {activeTables.map((table) => {
+                <div className="space-y-5">
+                  {tableGroups.map(({ type, label, icon: DiningIcon, tables: sectionTables }) => (
+                    <section key={type} className={`overflow-hidden rounded-2xl border ${
+                      type === 'ac' ? 'border-sky-200 bg-sky-50/40' : 'border-amber-200 bg-amber-50/40'
+                    }`}>
+                      <div className="flex items-center justify-between gap-3 border-b border-inherit px-4 py-3 sm:px-5">
+                        <div className="flex items-center gap-3">
+                          <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                            type === 'ac' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            <DiningIcon className="h-5 w-5" />
+                          </span>
+                          <div>
+                            <h3 className="font-bold text-slate-900">{label}</h3>
+                            <p className="text-xs text-slate-500">Choose a table to load its matching menu prices</p>
+                          </div>
+                        </div>
+                        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                          {sectionTables.length}
+                        </span>
+                      </div>
+                      {sectionTables.length === 0 ? (
+                        <p className="px-5 py-6 text-center text-sm text-slate-400">No {label} tables available.</p>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                          {sectionTables.map((table) => {
                     const occupied = table.currentStatus === 'occupied';
                     const reserved = table.currentStatus === 'reserved';
                     return (
@@ -716,25 +852,46 @@ export const RestaurantPOS = () => {
                         key={table._id}
                         type="button"
                         disabled={reserved}
-                        onClick={() => setSelectedTableId(table._id)}
-                        className={`rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                        onClick={() => {
+                          const existingOrder = orders.find((order) => String(order._id) === String(table.activeOrderId));
+                          setDiningType(existingOrder?.diningType
+                            || existingOrder?.items?.[0]?.diningType
+                            || table.diningType
+                            || 'non_ac');
+                          setSelectedTableId(table._id);
+                        }}
+                        className={`group rounded-2xl border bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 ${
                           occupied
-                            ? 'border-amber-300 bg-amber-50 hover:border-amber-500 hover:shadow-md'
-                            : 'border-slate-200 bg-white hover:border-brand-500 hover:shadow-md'
+                            ? 'border-amber-300 hover:border-amber-500'
+                            : 'border-slate-200 hover:border-brand-500'
                         }`}
                       >
-                        <span className="block text-lg font-black text-slate-900">
-                          {getTableLabel(table)}
+                        <span className="flex items-start justify-between gap-3">
+                          <span className="min-w-0">
+                            <span className="block truncate text-lg font-black text-slate-900">{getTableLabel(table)}</span>
+                            <span className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                              <Users className="h-3.5 w-3.5" /> {table.capacity} seats
+                            </span>
+                          </span>
+                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                            occupied ? 'bg-amber-100 text-amber-800'
+                              : reserved ? 'bg-violet-100 text-violet-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                          }`}>{table.currentStatus}</span>
                         </span>
-                        <span className="mt-1 block text-xs capitalize text-slate-500">
-                          {table.currentStatus} · {table.capacity} seats
-                        </span>
-                        <span className={`mt-3 block text-xs font-bold ${occupied ? 'text-amber-800' : 'text-brand-700'}`}>
-                          {occupied ? 'Open menu and add more items' : reserved ? 'Reserved' : 'Open menu'}
+                        <span className={`mt-4 flex items-center justify-between border-t pt-3 text-xs font-bold ${
+                          type === 'ac' ? 'border-sky-100 text-sky-800' : 'border-amber-100 text-amber-800'
+                        }`}>
+                          {occupied ? 'Add items to this table' : reserved ? 'Currently reserved' : 'Start an order'}
+                          <span aria-hidden="true" className="text-base transition-transform group-hover:translate-x-1">→</span>
                         </span>
                       </button>
                     );
                   })}
+                        </div>
+                      )}
+                    </section>
+                  ))}
                 </div>
               )}
             </Card>
@@ -750,8 +907,8 @@ export const RestaurantPOS = () => {
                   </p>
                   <p className="text-xs text-slate-500">
                     {openTableOrder
-                      ? `Bill #${openTableOrder.orderNumber} is open. Add another round whenever you need to.`
-                      : 'Choose items and send them to this table. You can add more after the first round.'}
+                      ? `AC / Non-AC: ${diningType === 'ac' ? 'AC' : 'Non-AC'} · Bill #${openTableOrder.orderNumber} is open. Add another round whenever you need to.`
+                      : `${diningType === 'ac' ? 'AC' : 'Non-AC'} pricing · Choose items and send them to this table.`}
                   </p>
                 </div>
                 <Button
@@ -798,11 +955,14 @@ export const RestaurantPOS = () => {
               <LoadingSpinner text="Loading culinary menu..." />
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {filteredItems.map((item) => (
+                {filteredItems.map((item) => {
+                  const itemPrice = getMenuDiningPrice(item, diningType);
+                  return (
                   <button
                     key={item._id}
                     onClick={() => addToCart(item)}
-                    disabled={item.fulfillmentSource === 'batch_production' && Number(item.availablePreparedPortions || 0) <= 0}
+                    disabled={itemPrice === null
+                      || (item.fulfillmentSource === 'batch_production' && Number(item.availablePreparedPortions || 0) <= 0)}
                     className="p-4 bg-white rounded-xl border border-slate-200/80 hover:border-brand-500 hover:shadow-md transition-all text-left flex flex-col justify-between group h-36 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <div>
@@ -823,14 +983,15 @@ export const RestaurantPOS = () => {
 
                     <div className="flex items-center justify-between w-full pt-2 border-t border-slate-100">
                       <span className="font-black text-slate-900 text-sm">
-                        {formatCurrency(item.price)}
+                        {itemPrice === null ? 'Not priced' : formatCurrency(itemPrice)}
                       </span>
                       <span className="w-6 h-6 rounded-lg bg-brand-50 group-hover:bg-brand-600 text-brand-600 group-hover:text-white flex items-center justify-center transition-colors">
                         <Plus className="w-3.5 h-3.5" />
                       </span>
                     </div>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1201,6 +1362,7 @@ export const RestaurantPOS = () => {
                           <div className="space-y-1 border-b border-dashed border-slate-400 py-3">
                             <p className="flex justify-between gap-2"><span>Bill</span><span>#{order.orderNumber}</span></p>
                             <p className="flex justify-between gap-2"><span>Opened</span><span>{new Date(order.createdAt).toLocaleString()}</span></p>
+                            <p className="flex justify-between gap-2"><span>Dining</span><span>{(order.diningType || order.items[0]?.diningType) === 'ac' ? 'AC' : 'Non-AC'}</span></p>
                             <p className="flex justify-between gap-2"><span>Payment</span><span>{order.paymentStatus === 'paid' ? `Paid · ${order.paymentMethod || 'cash'}` : 'Transferred to folio'}</span></p>
                           </div>
                           <div className="space-y-3 border-b border-dashed border-slate-400 py-3">
@@ -1712,6 +1874,18 @@ export const RestaurantPOS = () => {
             value={tableForm.capacity}
             onChange={(e) => setTableForm({ ...tableForm, capacity: e.target.value })}
           />
+          <Select
+            label="Dining Area"
+            value={tableForm.diningType}
+            disabled={editingTable?.currentStatus === 'occupied'}
+            onChange={(e) => setTableForm({ ...tableForm, diningType: e.target.value })}
+          >
+            <option value="ac">AC Dining</option>
+            <option value="non_ac">Non-AC Dining</option>
+          </Select>
+          {editingTable?.currentStatus === 'occupied' && (
+            <p className="text-xs text-slate-500">Dining area is locked while a table has an open order.</p>
+          )}
           {editingTable && (
             <Select
               label="Status"

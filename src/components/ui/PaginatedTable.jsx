@@ -9,14 +9,23 @@ const flattenRows = (children) => Children.toArray(children).flatMap((child) => 
   return child.type === 'tr' ? [child] : [];
 });
 
-export const PaginatedTable = ({ children, tableClassName = '' }) => {
+const flattenRowGroups = (children) => Children.toArray(children).flatMap((child) => {
+  if (!isValidElement(child)) return [];
+  return child.type === React.Fragment || child.type === 'tr' ? [child] : [];
+});
+
+export const PaginatedTable = ({ children, tableClassName = '', groupRows = false }) => {
   const [page, setPage] = useState(1);
   const tableRef = useRef(null);
   const tableChildren = Children.toArray(children);
   const bodyIndex = tableChildren.findIndex((child) => isValidElement(child) && child.type === 'tbody');
   const rows = useMemo(
-    () => bodyIndex < 0 ? [] : flattenRows(tableChildren[bodyIndex].props.children),
-    [bodyIndex, tableChildren]
+    () => bodyIndex < 0
+      ? []
+      : groupRows
+        ? flattenRowGroups(tableChildren[bodyIndex].props.children)
+        : flattenRows(tableChildren[bodyIndex].props.children),
+    [bodyIndex, groupRows, tableChildren]
   );
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);

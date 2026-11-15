@@ -19,9 +19,11 @@ import { GuestsPage } from './pages/guests/GuestsPage';
 import { BillingPage } from './pages/billing/BillingPage';
 import { HousekeepingPage } from './pages/housekeeping/HousekeepingPage';
 import { RestaurantPOS } from './pages/restaurant/RestaurantPOS';
+import { RestaurantBillingPage } from './pages/restaurant/RestaurantBillingPage';
 import { InventoryPage } from './pages/inventory/InventoryPage';
 import { ProductionPage } from './pages/inventory/ProductionPage';
 import { RawMaterialMasterPage } from './pages/inventory/RawMaterialMasterPage';
+import { StorageLocationMasterPage } from './pages/inventory/StorageLocationMasterPage';
 import { ExpensesPage } from './pages/expenses/ExpensesPage';
 import { MaintenancePage } from './pages/maintenance/MaintenancePage';
 import { StaffPage } from './pages/staff/StaffPage';
@@ -113,6 +115,7 @@ const ProtectedRoute = ({
     '/billing': 'billing.view',
     '/housekeeping': 'housekeeping.view',
     '/restaurant': 'restaurant.view',
+    '/restaurant-billing': 'restaurant.view',
     '/menu-management': 'menu_management.view',
     '/inventory': 'inventory.view',
     '/inventory/dashboard': 'inventory.view',
@@ -122,6 +125,7 @@ const ProtectedRoute = ({
     '/inventory/raw-materials': 'inventory.view',
     '/inventory/raw-material-categories': 'inventory.view',
     '/inventory/recipes': 'inventory.view',
+    '/inventory/storage-locations': 'inventory.view',
     '/maintenance': 'maintenance.view',
     '/expenses': 'expenses.view',
     '/staff': 'staff_directory.view',
@@ -226,6 +230,14 @@ export const App = () => {
         <Route path="/billing" element={<BillingPage />} />
         <Route path="/housekeeping" element={<HousekeepingPage />} />
         <Route path="/restaurant" element={<RestaurantPOS />} />
+        <Route
+          path="/restaurant-billing"
+          element={
+            <ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']} strictRoleGate>
+              <RestaurantBillingPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/menu-management" element={<MenuManagementPage />} />
         <Route
           path="/inventory/raw-material-categories"
@@ -237,6 +249,14 @@ export const App = () => {
         />
         <Route path="/inventory/raw-materials" element={<RawMaterialMasterPage />} />
         <Route path="/inventory/production" element={<ProductionPage />} />
+        <Route
+          path="/inventory/storage-locations"
+          element={
+            <ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']} strictRoleGate>
+              <StorageLocationMasterPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/inventory/*" element={<InventoryPage />} />
         <Route path="/expenses" element={<ExpensesPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />

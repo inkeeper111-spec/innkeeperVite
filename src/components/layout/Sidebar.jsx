@@ -30,7 +30,8 @@ import {
   CookingPot,
   HardHat,
   UsersRound,
-  SlidersHorizontal
+  SlidersHorizontal,
+  MapPin
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { NestnnLogo } from '../ui/NestnnLogo';
@@ -62,24 +63,19 @@ const navGroups = [
     ],
   },
   {
-    key: 'fnb',
-    label: 'Food & Beverage',
+    key: 'food-inventory',
+    label: 'Food & Inventory',
     icon: CookingPot,
     items: [
       { to: '/restaurant', label: 'Restaurant POS', icon: UtensilsCrossed, roles: ['hotel_admin', 'restaurant_staff', 'super_admin'] },
+      { to: '/restaurant-billing', label: 'Restaurant Billing', icon: Receipt, roles: ['hotel_admin', 'super_admin'] },
       { to: '/menu-management', label: 'Menu Management', icon: Tag, roles: ['hotel_admin', 'restaurant_staff', 'super_admin'] },
-    ],
-  },
-  {
-    key: 'inventory',
-    label: 'Raw Material Inventory',
-    icon: Boxes,
-    items: [
       { to: '/inventory/dashboard', label: 'Inventory Dashboard', icon: LayoutDashboard, roles: ['hotel_admin', 'restaurant_staff', 'housekeeping_staff', 'maintenance_staff', 'super_admin'] },
       { to: '/inventory/raw-materials', label: 'Raw Materials', icon: Boxes, roles: ['hotel_admin', 'restaurant_staff', 'housekeeping_staff', 'maintenance_staff', 'super_admin'] },
       { to: '/inventory/stock', label: 'Stock & Verification', icon: ArrowLeftRight, roles: ['hotel_admin', 'restaurant_staff', 'housekeeping_staff', 'maintenance_staff', 'super_admin'] },
       { to: '/inventory/recipes', label: 'Recipe Management', icon: UtensilsCrossed, roles: ['hotel_admin', 'restaurant_staff', 'super_admin'] },
       { to: '/inventory/production', label: 'Food Production & Closing', icon: CookingPot, roles: ['hotel_admin', 'restaurant_staff', 'super_admin'] },
+      { to: '/inventory/storage-locations', label: 'Storage Locations', icon: MapPin, roles: ['hotel_admin', 'super_admin'] },
     ],
   },
   {
@@ -150,6 +146,7 @@ const moduleByPath = {
   '/guests': 'guests',
   '/housekeeping': 'housekeeping',
   '/restaurant': 'restaurant',
+  '/restaurant-billing': 'restaurant',
   '/menu-management': 'restaurant',
   '/inventory': 'inventory',
   '/inventory/dashboard': 'inventory',
@@ -160,6 +157,7 @@ const moduleByPath = {
   '/inventory/raw-material-categories': 'inventory',
   '/inventory/recipes': 'inventory',
   '/inventory/production': 'inventory',
+  '/inventory/storage-locations': 'inventory',
   '/maintenance': 'maintenance',
   '/expenses': 'expenses',
   '/staff': 'staff',
@@ -193,6 +191,7 @@ const permissionByPath = {
   '/billing': 'billing.view',
   '/housekeeping': 'housekeeping.view',
   '/restaurant': 'restaurant.view',
+  '/restaurant-billing': 'restaurant.view',
   '/menu-management': 'menu_management.view',
   '/inventory': 'inventory.view',
   '/inventory/dashboard': 'inventory.view',
@@ -203,6 +202,7 @@ const permissionByPath = {
   '/inventory/raw-material-categories': 'inventory.view',
   '/inventory/recipes': 'inventory.view',
   '/inventory/production': 'inventory.view',
+  '/inventory/storage-locations': 'inventory.view',
   '/maintenance': 'maintenance.view',
   '/expenses': 'expenses.view',
   '/staff': 'staff_directory.view',

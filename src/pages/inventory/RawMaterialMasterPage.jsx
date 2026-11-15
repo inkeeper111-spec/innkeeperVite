@@ -12,6 +12,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Select } from '../../components/ui/Select';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUnitConversionFactor, isPackageUnit, supportedUnitConversionFactorToBase } from './inventoryUnits';
+import { useStorageLocations } from './useStorageLocations';
 import dayjs from 'dayjs';
 
 const EMPTY_CATEGORY = { name: '', categoryCode: '', description: '', isActive: true };
@@ -23,6 +24,7 @@ const EMPTY_MATERIAL = {
   description: '',
   storageType: '',
   location: 'Main Store',
+  locationId: '',
   isActive: true,
   minimumStockLevel: 0,
   reorderLevel: 0,
@@ -87,6 +89,7 @@ const normalizeMaterialForm = (material, units = []) => {
     subcategoryId: String(material.subcategoryId?._id || material.subcategoryId || ''),
     baseUnitId,
     location: material.location || 'Main Store',
+    locationId: String(material.locationId?._id || material.locationId || ''),
     minimumStockLevel: factorToBase > 0 ? Number(baseMinimum) / factorToBase : baseMinimum,
     reorderLevel: factorToBase > 0 ? Number(baseReorder) / factorToBase : baseReorder,
     desiredStockLevel: factorToBase > 0
@@ -105,6 +108,7 @@ export const RawMaterialMasterPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const canManage = ['hotel_admin', 'super_admin'].includes(user?.role);
+  const { storageLocations, storageLocationOptions } = useStorageLocations();
   const isCategoriesPage = location.pathname.endsWith('/raw-material-categories');
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
@@ -128,6 +132,21 @@ export const RawMaterialMasterPage = () => {
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [subcategoryModalOpen, setSubcategoryModalOpen] = useState(false);
   const [materialModalOpen, setMaterialModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!storageLocations.length) return;
+    setMaterialForm((current) => {
+      if (current.locationId) return current;
+      const location = storageLocations.find((entry) => (
+        entry.locationName.toLocaleLowerCase() === String(current.location || 'Main Store').toLocaleLowerCase()
+      )) || storageLocations[0];
+      return {
+        ...current,
+        location: location.locationName,
+        locationId: String(location._id)
+      };
+    });
+  }, [storageLocations]);
   const [unitModalOpen, setUnitModalOpen] = useState(false);
   const [unitSaving, setUnitSaving] = useState(false);
   const [unitForm, setUnitForm] = useState({
@@ -265,7 +284,13 @@ export const RawMaterialMasterPage = () => {
 
   const openNewMaterial = () => {
     setEditingMaterial(null);
-    setMaterialForm(EMPTY_MATERIAL);
+    const defaultLocation = storageLocations.find((entry) => entry.locationTypeId?.key === 'main_store')
+      || storageLocations[0];
+    setMaterialForm({
+      ...EMPTY_MATERIAL,
+      locationId: String(defaultLocation?._id || ''),
+      location: defaultLocation?.locationName || ''
+    });
     setMaterialModalOpen(true);
   };
 
@@ -489,6 +514,7 @@ export const RawMaterialMasterPage = () => {
         description: materialForm.description.trim(),
         storageType: materialForm.storageType,
         location: materialForm.location,
+        locationId: materialForm.locationId,
         isActive: Boolean(materialForm.isActive),
         minimumStockLevel: Number(materialForm.minimumStockLevel || 0)
           * thresholdUnitFactor(materialForm.minimumStockUnitId),
@@ -791,7 +817,22 @@ export const RawMaterialMasterPage = () => {
                   })
                 }));
               }} options={[{ label: 'Select', value: '' }, ...validBaseUnits.map((entry) => ({ label: `${entry.name} (${entry.symbol})`, value: unitId(entry) }))]} />
-              <Input label="Storage location" value={materialForm.location} onChange={(event) => setMaterialForm({ ...materialForm, location: event.target.value })} placeholder="Main Store" />
+              <Select
+                label="Storage location"
+                required
+                searchable
+                searchPlaceholder="Search storage locations..."
+                value={materialForm.locationId}
+                onChange={(event) => {
+                  const selected = storageLocations.find((entry) => String(entry._id) === event.target.value);
+                  setMaterialForm({
+                    ...materialForm,
+                    locationId: event.target.value,
+                    location: selected?.locationName || ''
+                  });
+                }}
+                options={storageLocationOptions}
+              />
               <fieldset className="sm:col-span-2">
                 <legend className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-orvelle-primary">
                   Purchase units <span className="text-orvelle-error">*</span>
