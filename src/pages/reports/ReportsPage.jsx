@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { getStaffAccessToken } from '../../auth/staffSession';
 import { useCurrency } from '../../hooks/useCurrency';
 import {
@@ -55,7 +55,7 @@ export const ReportsPage = () => {
       });
   };
 
-  if (loading) return <LoadingSpinner text="Compiling financial reports..." />;
+  if (loading) return <DataSkeleton variant="page" rows={5} columns={5} label="Loading financial reports" />;
 
   return (
     <div className="space-y-6">

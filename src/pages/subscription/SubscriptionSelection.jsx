@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, CreditCard, LoaderCircle, LockKeyhole } from 'lucide-react';
+import { CheckCircle2, CreditCard, LockKeyhole } from 'lucide-react';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import api from '../../api/axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
@@ -180,7 +181,7 @@ export const SubscriptionSelection = () => {
   };
 
   if (loading) {
-    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-slate-500"><LoaderCircle className="mr-2 h-5 w-5 animate-spin" />Loading subscription options...</div>;
+    return <LoadingSpinner text="Loading subscription options..." />;
   }
 
   const registrationStatus = hotel?.registrationStatus || (hotel?.status === 'pending_approval' ? 'pending' : 'approved');

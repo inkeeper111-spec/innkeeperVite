@@ -6,7 +6,6 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { Settings, Building2, User, Key, CheckCircle2 } from 'lucide-react';
 
 export const SettingsPage = () => {

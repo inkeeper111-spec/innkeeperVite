@@ -1,19 +1,17 @@
-import { PaginatedTable } from '../../components/ui/PaginatedTable';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, KeyRound, RotateCcw, Save, Search, ShieldCheck, UserRound } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, RotateCcw, Save, Search, ShieldCheck, UserRound } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 
-const ACTION_LABELS = {
-  view: 'View',
-  create: 'Create',
-  update: 'Edit',
-  delete: 'Delete'
-};
+const ACCESS_LEVELS = [
+  { value: 'view_only', label: 'View only', description: 'Module is visible, but its records are not accessible.' },
+  { value: 'read', label: 'Read', description: 'View module data without making changes.' },
+  { value: 'write', label: 'Write', description: 'Read, create, and edit records. Deletion remains restricted.' }
+];
 
 const roleLabel = (role) => role?.replace(/_/g, ' ');
 
@@ -64,17 +62,6 @@ export const RolesResponsibilitiesPage = () => {
       : getDefault(permissionKey)
   );
 
-  const togglePermission = (permissionKey) => {
-    setPermissionOverrides((current) => ({
-      ...current,
-      [permissionKey]: !(
-        Object.hasOwn(current, permissionKey)
-          ? current[permissionKey]
-          : getDefault(permissionKey)
-      )
-    }));
-  };
-
   const savePermissions = async () => {
     if (!selectedUser) return;
     setSaving(true);
@@ -104,8 +91,32 @@ export const RolesResponsibilitiesPage = () => {
   const resetPermissions = () => {
     setPermissionOverrides({});
   };
+  const getAccessLevel = (moduleKey) => {
+    const view = isAllowed(`${moduleKey}.view`);
+    const read = isAllowed(`${moduleKey}.read`) || (
+      !Object.hasOwn(permissionOverrides, `${moduleKey}.read`) && view
+    );
+    if (!view) return 'none';
+    if (isAllowed(`${moduleKey}.create`) || isAllowed(`${moduleKey}.update`)) return 'write';
+    return read ? 'read' : 'view_only';
+  };
+  const setAccessLevel = (moduleKey, accessLevel) => {
+    const permissions = {
+      none: [],
+      view_only: ['view'],
+      read: ['view', 'read'],
+      write: ['view', 'read', 'create', 'update']
+    }[accessLevel];
+    setPermissionOverrides((current) => {
+      const next = { ...current };
+      ['view', 'read', 'create', 'update', 'delete'].forEach((action) => {
+        next[`${moduleKey}.${action}`] = permissions.includes(action);
+      });
+      return next;
+    });
+  };
 
-  if (loading) return <LoadingSpinner text="Loading team permissions..." />;
+  if (loading) return <DataSkeleton variant="page" rows={6} columns={5} label="Loading team permissions" />;
 
   return (
     <div className="space-y-6">
@@ -201,51 +212,83 @@ export const RolesResponsibilitiesPage = () => {
                 </span>
               </Card>
 
-              <Card className="!p-0">
-                <div className="overflow-x-auto">
-                  <PaginatedTable tableClassName="w-full min-w-[42rem] text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-orvelle-border/70 bg-orvelle-ivory/70 text-[11px] font-bold uppercase tracking-wider text-orvelle-muted">
-                        <th className="px-5 py-3.5">Module</th>
-                        {settings.actions.map((action) => (
-                          <th key={action} className="px-3 py-3.5 text-center">{ACTION_LABELS[action] || action}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-orvelle-border/50">
-                      {settings.modules.map((module) => (
-                        <tr key={module.key} className="hover:bg-orvelle-ivory/40">
-                          <th scope="row" className="px-5 py-3.5 font-semibold text-orvelle-primary">{module.label}</th>
-                          {settings.actions.map((action) => {
-                            const key = `${module.key}.${action}`;
-                            const isCustom = Object.hasOwn(permissionOverrides, key);
-                            return (
-                              <td key={key} className="px-3 py-3.5 text-center">
-                                <label className="inline-flex cursor-pointer items-center justify-center">
-                                  <input
-                                    type="checkbox"
-                                    aria-label={`${ACTION_LABELS[action]} ${module.label}`}
-                                    checked={isAllowed(key)}
-                                    onChange={() => togglePermission(key)}
-                                    className="h-4 w-4 cursor-pointer accent-orvelle-amber"
-                                  />
-                                </label>
-                                {isCustom && (
-                                  <span className="mt-1 block text-[9px] font-bold uppercase tracking-wide text-orvelle-amber">
-                                    Custom
-                                  </span>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </PaginatedTable>
+              <Card
+                title="Module access"
+                subtitle="Switch a module on to grant access, then choose its level. Changes take effect on the employee’s next request."
+              >
+                <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                  {settings.modules.map((module) => {
+                    const accessLevel = getAccessLevel(module.key);
+                    const enabled = accessLevel !== 'none';
+                    const isCustom = ['view', 'read', 'create', 'update', 'delete']
+                      .some((action) => Object.hasOwn(permissionOverrides, `${module.key}.${action}`));
+                    const selectedLevel = ACCESS_LEVELS.find((level) => level.value === accessLevel);
+                    return (
+                      <article
+                        key={module.key}
+                        className={`min-w-0 rounded-2xl border p-4 transition ${
+                          enabled
+                            ? 'border-orvelle-border/80 bg-white shadow-sm'
+                            : 'border-slate-200 bg-slate-50/70'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className={`rounded-xl p-2.5 ${
+                            enabled ? 'bg-orvelle-ivory text-orvelle-primary' : 'bg-slate-100 text-slate-400'
+                          }`}>
+                            {enabled ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="break-words text-sm font-bold text-orvelle-primary">{module.label}</h3>
+                            {isCustom && (
+                              <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-800">
+                                Custom access
+                              </span>
+                            )}
+                          </div>
+                          <label className="inline-flex shrink-0 cursor-pointer items-center gap-2">
+                            <span className="sr-only">{enabled ? 'Disable' : 'Enable'} {module.label}</span>
+                            <input
+                              type="checkbox"
+                              role="switch"
+                              aria-label={`${enabled ? 'Disable' : 'Enable'} ${module.label}`}
+                              checked={enabled}
+                              disabled={saving}
+                              onChange={() => setAccessLevel(module.key, enabled ? 'none' : 'read')}
+                              className="peer sr-only"
+                            />
+                            <span className="relative h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-emerald-600 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-emerald-600 after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-5" />
+                          </label>
+                        </div>
+                        <div className="mt-4">
+                          <label className="mb-1.5 block text-xs font-semibold text-slate-600" htmlFor={`access-${module.key}`}>
+                            Access level
+                          </label>
+                          <select
+                            id={`access-${module.key}`}
+                            aria-label={`${module.label} access level`}
+                            value={accessLevel}
+                            disabled={!enabled || saving}
+                            onChange={(event) => setAccessLevel(module.key, event.target.value)}
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-orvelle-amber focus:ring-2 focus:ring-orvelle-amber/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                          >
+                            <option value="none">Cannot view</option>
+                            {ACCESS_LEVELS.map((level) => (
+                              <option key={level.value} value={level.value}>{level.label}</option>
+                            ))}
+                          </select>
+                          <p className="mt-2 min-h-8 text-xs leading-4 text-slate-500">
+                            {selectedLevel?.description || 'This module is hidden and its API access is blocked.'}
+                          </p>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-orvelle-border/60 px-5 py-3 text-xs text-orvelle-muted">
-                  <span><Check className="mr-1 inline h-3.5 w-3.5 text-orvelle-success" />Checked permissions are allowed.</span>
-                  <span>Permissions are enforced immediately; a page refresh updates navigation.</span>
+                <div className="mt-5 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">
+                  <strong>View only</strong> displays the module in navigation but blocks its records and actions.
+                  <strong className="ml-1">Read</strong> opens module data without editing.
+                  <strong className="ml-1">Write</strong> allows viewing, creating, and editing; deletes still require administrator access.
                 </div>
               </Card>
             </>

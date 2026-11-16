@@ -6,7 +6,6 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { Search, Printer, ArrowLeft, CheckCircle2, Building2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { formatCurrency } from '../../utils/currency';

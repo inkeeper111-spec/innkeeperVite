@@ -8,7 +8,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { DatePicker } from '../../components/ui/DatePicker';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../hooks/useCurrency';
@@ -350,7 +350,7 @@ export const StaffPage = () => {
       {/* ── DIRECTORY TAB ── */}
       {activeTab === 'directory' && (
         <Card>
-          {loading ? <LoadingSpinner text="Loading staff records..." /> : (
+          {loading ? <DataSkeleton rows={6} columns={5} label="Loading staff records" /> : (
             <div className="overflow-x-auto">
               <PaginatedTable tableClassName="w-full min-w-[850px] text-left text-xs">
                 <thead>
@@ -510,7 +510,7 @@ export const StaffPage = () => {
           </div>
 
           {!summary ? (
-            <LoadingSpinner text="Computing monthly summary..." />
+            <DataSkeleton variant="list" rows={4} label="Loading monthly summary" />
           ) : (
             <Card>
               <div className="overflow-x-auto">
@@ -780,6 +780,17 @@ export const StaffPage = () => {
                 { label: 'Receptionist',       value: 'receptionist' },
                 { label: 'Housekeeping Staff',  value: 'housekeeping_staff' },
                 { label: 'Restaurant Staff',    value: 'restaurant_staff' },
+                { label: 'Restaurant Manager',  value: 'restaurant_manager' },
+                { label: 'Cashier',             value: 'cashier' },
+                { label: 'Waiter',              value: 'waiter' },
+                { label: 'Head Chef',           value: 'head_chef' },
+                { label: 'Sous Chef',           value: 'sous_chef' },
+                { label: 'Cook',                value: 'cook' },
+                { label: 'Storekeeper',         value: 'storekeeper' },
+                { label: 'Steward',             value: 'steward' },
+                { label: 'Purchase Manager',     value: 'purchase_manager' },
+                { label: 'Accountant',           value: 'accountant' },
+                { label: 'Host / Receptionist', value: 'restaurant_receptionist' },
                 { label: 'Maintenance Staff',   value: 'maintenance_staff' },
                 { label: 'Hotel Administrator', value: 'hotel_admin' }
               ]} />

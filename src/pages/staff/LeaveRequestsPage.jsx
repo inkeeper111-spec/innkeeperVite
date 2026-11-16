@@ -8,7 +8,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { Modal } from '../../components/ui/Modal';
 import { Select } from '../../components/ui/Select';
 
@@ -174,7 +174,7 @@ const LeaveRequestsPage = ({ management = false }) => {
   };
 
   if (loading && requests.length === 0 && leaveTypes.length === 0) {
-    return <LoadingSpinner text="Loading leave requests..." />;
+    return <DataSkeleton variant="page" rows={5} columns={5} label="Loading leave requests" />;
   }
 
   const decisionDialog = ['reject', 'cancel-approved', 'cancel-pending'].includes(dialog?.action);

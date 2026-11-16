@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { payrollApi } from '../../api/payrollApi';
 import { PageShell } from './components/PayrollShell';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 
 export default function GlobalConfigurationPage() {
   const [form, setForm] = useState({ attendanceCutoffDay: 10, payrollCutoffDay: 10 });
@@ -39,7 +40,7 @@ export default function GlobalConfigurationPage() {
       subtitle="Mandatory cut-off days. Attendance edit and payroll run are allowed only in the next month, days 1 through the cut-off day."
     >
       <Card title="Cut-off Days" subtitle="Both values required before payroll operations">
-        {loading ? <p className="text-sm text-slate-500">Loading…</p> : (
+        {loading ? <DataSkeleton variant="list" rows={2} label="Loading payroll configuration" /> : (
           <form className="grid gap-4 max-w-lg sm:grid-cols-2" onSubmit={save}>
             <Input
               label="Attendance cut-off day"

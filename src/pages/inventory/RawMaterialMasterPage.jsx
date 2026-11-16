@@ -1,13 +1,13 @@
 import { PaginatedTable } from '../../components/ui/PaginatedTable';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, FolderPlus, Pencil, Plus, Search, ToggleLeft, ToggleRight } from 'lucide-react';
+import { ArrowLeft, ChevronDown, FolderPlus, PackageOpen, Pencil, Plus, RefreshCw, Search, ToggleLeft, ToggleRight } from 'lucide-react';
 import api, { showApiErrorToast } from '../../api/axios';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { Modal } from '../../components/ui/Modal';
 import { Select } from '../../components/ui/Select';
 import { useAuth } from '../../contexts/AuthContext';
@@ -107,7 +107,9 @@ export const RawMaterialMasterPage = () => {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const canManage = ['hotel_admin', 'super_admin'].includes(user?.role);
+  const canManage = ['hotel_admin', 'super_admin'].includes(user?.role)
+    || user?.permissions?.['raw_materials.create'] === true
+    || user?.permissions?.['raw_materials.update'] === true;
   const { storageLocations, storageLocationOptions } = useStorageLocations();
   const isCategoriesPage = location.pathname.endsWith('/raw-material-categories');
   const [categories, setCategories] = useState([]);
@@ -119,6 +121,7 @@ export const RawMaterialMasterPage = () => {
   const [batchesByMaterial, setBatchesByMaterial] = useState({});
   const [loadingBatchesByMaterial, setLoadingBatchesByMaterial] = useState({});
   const [batchErrorsByMaterial, setBatchErrorsByMaterial] = useState({});
+  const batchRequestsInFlight = useRef(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -231,18 +234,24 @@ export const RawMaterialMasterPage = () => {
   };
 
   const loadMaterialBatches = async (materialId) => {
+    if (batchRequestsInFlight.current.has(materialId)) return;
+    batchRequestsInFlight.current.add(materialId);
     setLoadingBatchesByMaterial((current) => ({ ...current, [materialId]: true }));
     setBatchErrorsByMaterial((current) => ({ ...current, [materialId]: '' }));
     try {
       const { data } = await api.get('/inventory/batches', { params: { itemId: materialId } });
-      setBatchesByMaterial((current) => ({ ...current, [materialId]: data.data || [] }));
+      if (!Array.isArray(data.data)) {
+        throw new Error('The batch service returned an invalid response.');
+      }
+      setBatchesByMaterial((current) => ({ ...current, [materialId]: data.data }));
     } catch (error) {
       setBatchErrorsByMaterial((current) => ({
         ...current,
-        [materialId]: 'Could not load batch details. Please try again.'
+        [materialId]: error.response?.data?.message || error.message || 'Could not load batch details. Please try again.'
       }));
       showApiErrorToast(error, 'Could not load raw material batches');
     } finally {
+      batchRequestsInFlight.current.delete(materialId);
       setLoadingBatchesByMaterial((current) => ({ ...current, [materialId]: false }));
     }
   };
@@ -253,10 +262,15 @@ export const RawMaterialMasterPage = () => {
       return;
     }
     setExpandedMaterialId(materialId);
+    if (batchRequestsInFlight.current.has(materialId)) return;
     if (!Object.prototype.hasOwnProperty.call(batchesByMaterial, materialId) || batchErrorsByMaterial[materialId]) {
       loadMaterialBatches(materialId);
     }
   };
+
+  useEffect(() => {
+    setExpandedMaterialId('');
+  }, [search]);
 
   useEffect(() => {
     loadMasterData();
@@ -556,7 +570,7 @@ export const RawMaterialMasterPage = () => {
     }
   };
 
-  if (loading) return <LoadingSpinner text="Loading raw material master..." />;
+  if (loading) return <DataSkeleton variant="page" rows={6} columns={5} label="Loading raw material master" />;
 
   return (
     <div className="space-y-5">
@@ -642,7 +656,7 @@ export const RawMaterialMasterPage = () => {
           action={<div className="relative w-full sm:w-64"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search raw materials" placeholder="Search materials..." className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm focus:border-amber-500 focus:outline-none" /></div>}
         >
           <div className="overflow-x-auto">
-            <PaginatedTable tableClassName="w-full min-w-[760px] text-left text-sm">
+            <PaginatedTable groupRows tableClassName="raw-material-master-table w-full min-w-[760px] text-left text-sm">
               <thead><tr className="border-b border-slate-100 text-xs uppercase text-slate-400"><th className="pb-3">Material</th><th className="pb-3">Category</th><th className="pb-3">Base unit</th><th className="pb-3">Purchase units</th><th className="pb-3">Stock settings</th><th className="pb-3">Status</th>{canManage && <th className="pb-3 text-right">Actions</th>}</tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {visibleMaterials.map((material) => {
@@ -650,8 +664,12 @@ export const RawMaterialMasterPage = () => {
                   const batches = batchesByMaterial[material._id] || [];
                   const isExpanded = expandedMaterialId === material._id;
                   const batchPanelId = `raw-material-batches-${material._id}`;
+                  const remainingQuantity = batches.reduce(
+                    (total, batch) => total + (Number(batch.remainingQuantity) || 0),
+                    0
+                  );
                   return <React.Fragment key={material._id}>
-                    <tr>
+                    <tr className={`raw-material-master-row ${isExpanded ? 'is-expanded' : ''}`}>
                       <td className="py-3 pr-3">
                         <div className="flex items-start gap-2">
                           <button
@@ -660,13 +678,24 @@ export const RawMaterialMasterPage = () => {
                             aria-expanded={isExpanded}
                             aria-controls={batchPanelId}
                             aria-label={`${isExpanded ? 'Hide' : 'Show'} batches for ${material.name}`}
-                            className="mt-0.5 rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                            className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg border transition ${
+                              isExpanded
+                                ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                : 'border-transparent text-slate-500 hover:border-slate-200 hover:bg-white hover:text-slate-900'
+                            }`}
                           >
                             <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                           </button>
                           <span className="min-w-0">
                             <span className="font-semibold text-slate-900">{material.name}</span>
                             {material.description && <span className="block max-w-xs truncate text-xs text-slate-500">{material.description}</span>}
+                            <span className="mt-1 block text-[11px] font-medium text-amber-800/75">
+                              {loadingBatchesByMaterial[material._id]
+                                ? 'Loading stock batches…'
+                                : Object.prototype.hasOwnProperty.call(batchesByMaterial, material._id)
+                                  ? `${batches.length} ${batches.length === 1 ? 'batch' : 'batches'} · View details`
+                                  : 'View stock batches'}
+                            </span>
                           </span>
                         </div>
                       </td>
@@ -693,33 +722,70 @@ export const RawMaterialMasterPage = () => {
                         <Button size="sm" variant="ghost" icon={material.isActive ? ToggleRight : ToggleLeft} aria-label={`${material.isActive ? 'Deactivate' : 'Activate'} ${material.name}`} onClick={() => toggleMaterial(material)} />
                       </div></td>}
                     </tr>
-                    {isExpanded && <tr id={batchPanelId}>
-                      <td colSpan={canManage ? 7 : 6} className="bg-slate-50 px-4 py-4">
-                        <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Batch details · {material.name}</h3>
+                    <tr id={batchPanelId} hidden={!isExpanded} className="raw-material-batch-detail">
+                      <td colSpan={canManage ? 7 : 6} className="p-0">
+                        <section className="raw-material-batch-panel rounded-b-2xl border border-t-0 border-amber-100 bg-[linear-gradient(145deg,#fffdfa_0%,#faf6ee_100%)] p-4 sm:p-5">
+                          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-100/80 text-amber-800">
+                                <PackageOpen className="h-5 w-5" aria-hidden="true" />
+                              </span>
+                              <div className="min-w-0">
+                                <h3 className="font-semibold text-slate-900">Stock batches</h3>
+                                <p className="mt-0.5 truncate text-xs text-slate-500">{material.name} · FIFO stock detail</p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                              {Object.prototype.hasOwnProperty.call(batchesByMaterial, material._id)
+                                && !loadingBatchesByMaterial[material._id]
+                                && !batchErrorsByMaterial[material._id] && (
+                                  <>
+                                    <span className="rounded-full border border-amber-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">
+                                      {batches.length} {batches.length === 1 ? 'batch' : 'batches'}
+                                    </span>
+                                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800">
+                                      {new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(remainingQuantity)} {base?.symbol || 'units'} remaining
+                                    </span>
+                                  </>
+                                )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                icon={RefreshCw}
+                                loading={Boolean(loadingBatchesByMaterial[material._id])}
+                                disabled={Boolean(loadingBatchesByMaterial[material._id])}
+                                onClick={() => loadMaterialBatches(material._id)}
+                              >
+                                Refresh
+                              </Button>
+                            </div>
+                          </div>
                         {loadingBatchesByMaterial[material._id] ? (
-                          <p className="text-sm text-slate-500">Loading batches...</p>
+                          <DataSkeleton rows={3} columns={4} label={`Loading batches for ${material.name}`} />
                         ) : batchErrorsByMaterial[material._id] ? (
-                          <div className="flex flex-wrap items-center gap-3 text-sm text-rose-700">
-                            <span>{batchErrorsByMaterial[material._id]}</span>
+                          <div className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <p role="alert" className="text-sm text-rose-800">{batchErrorsByMaterial[material._id]}</p>
                             <Button size="sm" variant="outline" onClick={() => loadMaterialBatches(material._id)}>Retry</Button>
                           </div>
                         ) : batches.length ? (
-                          <div className="overflow-x-auto">
+                          <div className="overflow-x-auto rounded-xl border border-[#eee5d8] bg-white/80">
                             <PaginatedTable tableClassName="w-full min-w-[600px] text-left text-sm">
                               <thead>
                                 <tr className="border-b border-slate-200 text-xs uppercase text-slate-400">
                                   <th className="pb-2 pr-3">Batch number</th>
-                                  <th className="pb-2 pr-3">Quantity</th>
-                                  <th className="pb-2 pr-3">Expiry date</th>
+                                  <th className="pb-2 pr-3">Remaining / received</th>
+                                  <th className="pb-2 pr-3">Expiry</th>
                                   <th className="pb-2">Location</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-200">
                                 {batches.map((batch) => (
-                                  <tr key={batch._id}>
+                                  <tr key={batch._id} className="hover:bg-amber-50/40">
                                     <td className="py-2 pr-3 font-medium text-slate-800">{batch.batchNumber || '—'}</td>
                                     <td className="py-2 pr-3 text-slate-700">
-                                      {new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(Number(batch.remainingQuantity) || 0)} {base?.symbol || ''}
+                                      <span className="font-semibold text-slate-900">
+                                        {new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(Number(batch.remainingQuantity) || 0)} {base?.symbol || ''}
+                                      </span>
                                       <span className="block text-xs text-slate-500">
                                         Received {new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(Number(batch.quantity) || 0)} {base?.symbol || ''}
                                       </span>
@@ -734,10 +800,15 @@ export const RawMaterialMasterPage = () => {
                             </PaginatedTable>
                           </div>
                         ) : (
-                          <p className="text-sm text-slate-500">No batches recorded for this raw material.</p>
+                          <div className="rounded-xl border border-dashed border-amber-200 bg-white/70 px-4 py-8 text-center">
+                            <PackageOpen className="mx-auto h-7 w-7 text-amber-700/50" aria-hidden="true" />
+                            <p className="mt-2 text-sm font-semibold text-slate-700">No stock batches yet</p>
+                            <p className="mt-1 text-xs text-slate-500">Received batches for this material will appear here.</p>
+                          </div>
                         )}
+                        </section>
                       </td>
-                    </tr>}
+                    </tr>
                   </React.Fragment>;
                 })}
                 {!visibleMaterials.length && <tr><td colSpan={canManage ? 7 : 6} className="py-10 text-center text-slate-400">No raw materials match your search.</td></tr>}

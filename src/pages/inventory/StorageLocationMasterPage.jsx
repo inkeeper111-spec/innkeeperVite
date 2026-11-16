@@ -5,13 +5,18 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { Modal } from '../../components/ui/Modal';
 import { Select } from '../../components/ui/Select';
+import { useAuth } from '../../contexts/AuthContext';
 
 const EMPTY_FORM = { locationName: '', locationTypeId: '', description: '' };
 
 export const StorageLocationMasterPage = () => {
+  const { user } = useAuth();
+  const canWrite = ['hotel_admin', 'super_admin'].includes(user?.role)
+    || user?.permissions?.['storage_locations.create'] === true
+    || user?.permissions?.['storage_locations.update'] === true;
   const [types, setTypes] = useState([]);
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -91,7 +96,7 @@ export const StorageLocationMasterPage = () => {
     }
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (loading) return <DataSkeleton variant="page" rows={4} columns={4} label="Loading storage locations" />;
 
   return (
     <div className="space-y-6">
@@ -105,9 +110,11 @@ export const StorageLocationMasterPage = () => {
             Manage hotel storage areas once and select them consistently across stock, purchasing, verification, and production.
           </p>
         </div>
-        <Button onClick={openCreate} disabled={!types.length}>
-          <Plus size={16} className="mr-2" /> Add location
-        </Button>
+        {canWrite && (
+          <Button onClick={openCreate} disabled={!types.length}>
+            <Plus size={16} className="mr-2" /> Add location
+          </Button>
+        )}
       </header>
 
       <Card className="space-y-4 p-4 sm:p-5">
@@ -155,7 +162,7 @@ export const StorageLocationMasterPage = () => {
               <p className="min-h-10 break-words text-sm text-orvelle-muted">
                 {location.description || 'No description provided.'}
               </p>
-              <div className="mt-auto flex flex-wrap justify-end gap-2 border-t border-orvelle-border/60 pt-3">
+              {canWrite && <div className="mt-auto flex flex-wrap justify-end gap-2 border-t border-orvelle-border/60 pt-3">
                 <Button variant="outline" size="sm" onClick={() => openEdit(location)}>
                   <Pencil size={14} className="mr-1.5" /> Edit
                 </Button>
@@ -163,13 +170,13 @@ export const StorageLocationMasterPage = () => {
                   {location.isActive ? <ToggleRight size={15} className="mr-1.5" /> : <ToggleLeft size={15} className="mr-1.5" />}
                   {location.isActive ? 'Deactivate' : 'Activate'}
                 </Button>
-              </div>
+              </div>}
             </Card>
           ))}
         </div>
       )}
 
-      <Modal
+      {canWrite && <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editing ? 'Edit storage location' : 'Add storage location'}
@@ -204,7 +211,7 @@ export const StorageLocationMasterPage = () => {
             <Button type="submit" disabled={saving}>{saving ? 'Saving...' : editing ? 'Save changes' : 'Create location'}</Button>
           </div>
         </form>
-      </Modal>
+      </Modal>}
     </div>
   );
 };

@@ -9,7 +9,18 @@ export const STAFF_ROLES = [
   'hotel_admin',
   'receptionist',
   'restaurant_staff',
+  'restaurant_manager',
+  'cashier',
+  'waiter',
+  'head_chef',
+  'sous_chef',
+  'cook',
   'housekeeping_staff',
+  'restaurant_receptionist',
+  'storekeeper',
+  'steward',
+  'purchase_manager',
+  'accountant',
   'maintenance_staff'
 ];
 

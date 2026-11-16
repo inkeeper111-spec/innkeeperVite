@@ -9,7 +9,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import { Users, PlusCircle, Search, Phone, Mail, MapPin, Eye, CheckCircle2 } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -150,7 +150,7 @@ export const GuestsPage = () => {
       {/* Table */}
       <Card>
         {loading ? (
-          <LoadingSpinner text="Retrieving guest directory..." />
+          <DataSkeleton rows={6} columns={5} label="Loading guest directory" />
         ) : guests.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-xs">
             No guests found matching search query.

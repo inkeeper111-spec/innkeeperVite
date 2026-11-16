@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { NestnnLogo } from './NestnnLogo';
 
 export const Button = ({
   children,
@@ -33,10 +33,14 @@ export const Button = ({
     <button
       className={`${baseStyles} ${variants[variant] || variants.primary} ${sizes[size]} ${className}`}
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
     >
       {loading ? (
-        <Loader2 className="w-4 h-4 animate-spin" />
+        <span className="relative grid h-5 w-5 shrink-0 place-items-center" role="status" aria-label="Loading">
+          <span className="absolute inset-0 rounded-full border-2 border-current/30 border-t-current animate-spin" />
+          <NestnnLogo variant="icon" size="xs" className="!h-3 !w-3 !rounded-full !bg-transparent !p-0" />
+        </span>
       ) : Icon ? (
         <Icon className="w-4 h-4" />
       ) : null}
@@ -44,4 +48,3 @@ export const Button = ({
     </button>
   );
 };
-

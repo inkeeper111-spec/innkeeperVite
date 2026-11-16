@@ -7,6 +7,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { downloadBlob, payrollApi, previousMonth } from '../../api/payrollApi';
 import { PageShell, CutoffBanner, DataTable } from './components/PayrollShell';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 
 const COLORS = ['#059669', '#e11d48', '#7c3aed'];
 
@@ -26,7 +27,7 @@ export default function PayrollDashboardPage() {
     downloadBlob(res.data, `bank-transfer-${month}.xlsx`);
   };
 
-  if (loading) return <PageShell title="Payroll Dashboard"><p className="text-sm text-slate-500">Loading…</p></PageShell>;
+  if (loading) return <PageShell title="Payroll Dashboard"><DataSkeleton variant="page" rows={5} columns={4} label="Loading payroll dashboard" /></PageShell>;
 
   const att = [
     { name: 'Present', value: data?.attendanceChart?.present || 0 },

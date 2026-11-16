@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { payrollApi } from '../../api/payrollApi';
 import { PageShell } from './components/PayrollShell';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 
 const empty = {
   basicPercent: 40,
@@ -40,7 +41,7 @@ export default function StatutoryDeductionsPage() {
   return (
     <PageShell title="Salary Breakdown / Statutory" subtitle="Earnings, deductions, PF, ESI, and Professional Tax (FIXED or SLAB)">
       <Card>
-        {loading ? <p className="text-sm text-slate-500">Loading…</p> : (
+        {loading ? <DataSkeleton variant="list" rows={4} label="Loading statutory deductions" /> : (
           <form className="space-y-6" onSubmit={save}>
             <div className="grid gap-4 sm:grid-cols-3">
               <Input label="Basic %" type="number" value={form.basicPercent}

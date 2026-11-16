@@ -25,10 +25,11 @@ const permissionData = {
     permissionOverrides: {}
   }],
   modules: [{ key: 'rooms', label: 'Rooms & Rates' }],
-  actions: ['view', 'create', 'update', 'delete'],
+  actions: ['view', 'read', 'create', 'update', 'delete'],
   roleDefaults: {
     receptionist: {
       'rooms.view': true,
+      'rooms.read': true,
       'rooms.create': false,
       'rooms.update': false,
       'rooms.delete': false
@@ -48,17 +49,49 @@ describe('RolesResponsibilitiesPage', () => {
   it('shows role defaults and saves a per-user override', async () => {
     render(<RolesResponsibilitiesPage />);
 
-    const viewRooms = await screen.findByRole('checkbox', { name: 'View Rooms & Rates' });
-    expect(viewRooms).toBeChecked();
+    const roomsSwitch = await screen.findByRole('switch', { name: 'Disable Rooms & Rates' });
+    expect(roomsSwitch).toBeChecked();
 
-    fireEvent.click(viewRooms);
-    expect(viewRooms).not.toBeChecked();
+    fireEvent.click(roomsSwitch);
+    expect(roomsSwitch).not.toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: 'Save permissions' }));
 
     await waitFor(() => {
       expect(api.put).toHaveBeenCalledWith(
         '/staff/user-1/permissions',
-        { permissionOverrides: { 'rooms.view': false } },
+        {
+          permissionOverrides: {
+            'rooms.view': false,
+            'rooms.read': false,
+            'rooms.create': false,
+            'rooms.update': false,
+            'rooms.delete': false
+          }
+        },
+        { skipSuccessToast: true }
+      );
+    });
+  });
+
+  it('lets an admin assign read access independently from write access', async () => {
+    render(<RolesResponsibilitiesPage />);
+
+    const accessLevel = await screen.findByRole('combobox', { name: 'Rooms & Rates access level' });
+    fireEvent.change(accessLevel, { target: { value: 'read' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save permissions' }));
+
+    await waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith(
+        '/staff/user-1/permissions',
+        {
+          permissionOverrides: {
+            'rooms.view': true,
+            'rooms.read': true,
+            'rooms.create': false,
+            'rooms.update': false,
+            'rooms.delete': false
+          }
+        },
         { skipSuccessToast: true }
       );
     });

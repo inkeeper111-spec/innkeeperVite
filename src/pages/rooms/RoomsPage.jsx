@@ -6,7 +6,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../hooks/useCurrency';
 import {
@@ -304,7 +304,7 @@ export const RoomsPage = () => {
 
           {/* Rooms Grid */}
           {loading ? (
-            <LoadingSpinner text="Loading rooms..." />
+            <DataSkeleton variant="cards" rows={6} label="Loading rooms" />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {filteredRooms.map((room) => (

@@ -7,7 +7,8 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
+import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../hooks/useCurrency';
 import {
   UtensilsCrossed,
@@ -22,7 +23,11 @@ import {
 } from 'lucide-react';
 
 export const MenuManagementPage = () => {
+  const { user } = useAuth();
   const { currencySymbol, formatCurrency } = useCurrency();
+  const canWriteMenu = ['hotel_admin', 'super_admin'].includes(user?.role)
+    || user?.permissions?.['menu_management.create'] === true
+    || user?.permissions?.['menu_management.update'] === true;
   const [activeTab, setActiveTab] = useState('items'); // 'items' | 'categories'
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
@@ -49,6 +54,8 @@ export const MenuManagementPage = () => {
     acPricingEnabled: false,
     acPrice: '',
     taxPercent: 5,
+    discountType: 'none',
+    discountValue: '',
     isAvailable: true,
     preparationTime: 15,
     tags: ''
@@ -115,7 +122,8 @@ export const MenuManagementPage = () => {
     setItemForm({
       name: '', description: '', categoryId: categories[0]?._id || '',
       price: '', nonAcPricingEnabled: true, acPricingEnabled: false, acPrice: '',
-      taxPercent: 5, isAvailable: true, preparationTime: 15, tags: ''
+      taxPercent: 5, discountType: 'none', discountValue: '',
+      isAvailable: true, preparationTime: 15, tags: ''
     });
     setError('');
     setIsItemModalOpen(true);
@@ -132,6 +140,8 @@ export const MenuManagementPage = () => {
       acPricingEnabled: item.acPricingEnabled === true,
       acPrice: item.acPrice ?? '',
       taxPercent: item.taxPercent ?? item.taxRate ?? 5,
+      discountType: item.discountType || 'none',
+      discountValue: item.discountValue ?? '',
       isAvailable: item.isAvailable,
       preparationTime: item.preparationTime ?? 15,
       tags: (item.tags || []).join(', ')
@@ -151,6 +161,7 @@ export const MenuManagementPage = () => {
       nonAcPrice: itemForm.nonAcPricingEnabled ? Number(itemForm.price) : undefined,
       acPrice: itemForm.acPricingEnabled ? Number(itemForm.acPrice) : undefined,
       taxPercent: Number(itemForm.taxPercent),
+      discountValue: itemForm.discountType === 'none' ? 0 : Number(itemForm.discountValue),
       preparationTime: Number(itemForm.preparationTime),
       tags: itemForm.tags ? itemForm.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
     };
@@ -206,20 +217,22 @@ export const MenuManagementPage = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {activeTab === 'categories' ? (
+          {activeTab === 'categories' && canWriteMenu ? (
             <Button variant="primary" size="sm" icon={PlusCircle} onClick={openNewCat}>
               Add Category
             </Button>
-          ) : (
+          ) : activeTab === 'items' ? (
             <>
               <Button variant="outline" size="sm" icon={Layers} onClick={() => setActiveTab('categories')}>
                 Manage Categories
               </Button>
-              <Button variant="primary" size="sm" icon={PlusCircle} onClick={openNewItem}>
-                Add Menu Item
-              </Button>
+              {canWriteMenu && (
+                <Button variant="primary" size="sm" icon={PlusCircle} onClick={openNewItem}>
+                  Add Menu Item
+                </Button>
+              )}
             </>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -288,7 +301,7 @@ export const MenuManagementPage = () => {
 
           <Card>
             {loading ? (
-              <LoadingSpinner text="Loading menu items..." />
+              <DataSkeleton variant="cards" rows={6} label="Loading menu items" />
             ) : filteredItems.length === 0 ? (
               <div className="py-12 text-center text-slate-400 text-xs">
                 No menu items found. Add your first item to get started.
@@ -302,10 +315,11 @@ export const MenuManagementPage = () => {
                       <th className="pb-3">Category</th>
                       <th className="pb-3">Non-AC Price</th>
                       <th className="pb-3">AC Price</th>
+                      <th className="pb-3">Discount</th>
                       <th className="pb-3">Tax</th>
                       <th className="pb-3">Prep Time</th>
                       <th className="pb-3">Availability</th>
-                      <th className="pb-3 text-right">Actions</th>
+                      {canWriteMenu && <th className="pb-3 text-right">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -330,9 +344,20 @@ export const MenuManagementPage = () => {
                             ? formatCurrency(item.acPrice)
                             : <span className="font-medium text-slate-400">Disabled</span>}
                         </td>
+                        <td className="py-3.5">
+                          {item.discountType === 'percentage' ? (
+                            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                              {Number(item.discountValue || 0)}% off
+                            </span>
+                          ) : item.discountType === 'flat' ? (
+                            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                              {formatCurrency(item.discountValue || 0)} off
+                            </span>
+                          ) : <span className="text-slate-400">—</span>}
+                        </td>
                         <td className="py-3.5 text-slate-500">{item.taxPercent ?? item.taxRate ?? 5}%</td>
                         <td className="py-3.5 text-slate-500">{item.preparationTime ?? 15} min</td>
-                        <td className="py-3.5">
+                        {canWriteMenu && <td className="py-3.5">
                           <button
                             type="button"
                             aria-label={`${item.isAvailable ? 'Mark unavailable' : 'Make available'}: ${item.name}`}
@@ -350,8 +375,8 @@ export const MenuManagementPage = () => {
                               : <><ToggleLeft className="w-3.5 h-3.5" /> Unavailable</>
                             }
                           </button>
-                        </td>
-                        <td className="py-3.5 text-right">
+                        </td>}
+                        {canWriteMenu && <td className="py-3.5 text-right">
                           <Button
                             size="sm"
                             variant="secondary"
@@ -360,7 +385,7 @@ export const MenuManagementPage = () => {
                           >
                             Edit
                           </Button>
-                        </td>
+                        </td>}
                       </tr>
                     ))}
                   </tbody>
@@ -375,7 +400,7 @@ export const MenuManagementPage = () => {
       {activeTab === 'categories' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {loading ? (
-            <div className="col-span-3"><LoadingSpinner text="Loading categories..." /></div>
+            <div className="col-span-3"><DataSkeleton variant="list" rows={3} label="Loading categories" /></div>
           ) : categories.length === 0 ? (
             <div className="col-span-3 py-12 text-center text-slate-400 text-xs bg-white rounded-xl border border-slate-200">
               No categories yet. Add your first category.
@@ -403,9 +428,11 @@ export const MenuManagementPage = () => {
                     <span className="text-xs font-semibold text-slate-600">
                       {itemCount} item{itemCount !== 1 ? 's' : ''}
                     </span>
-                    <Button size="sm" variant="secondary" icon={Pencil} onClick={() => openEditCat(cat)}>
-                      Edit
-                    </Button>
+                    {canWriteMenu && (
+                      <Button size="sm" variant="secondary" icon={Pencil} onClick={() => openEditCat(cat)}>
+                        Edit
+                      </Button>
+                    )}
                   </div>
                 </Card>
               );
@@ -537,6 +564,41 @@ export const MenuManagementPage = () => {
               placeholder="0.00"
             />
           )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Select
+              label="Menu discount"
+              value={itemForm.discountType}
+              onChange={(e) => setItemForm({
+                ...itemForm,
+                discountType: e.target.value,
+                discountValue: e.target.value === 'none' ? '' : itemForm.discountValue
+              })}
+            >
+              <option value="none">No discount</option>
+              <option value="percentage">Percentage</option>
+              <option value="flat">Flat amount</option>
+            </Select>
+            {itemForm.discountType !== 'none' ? (
+              <Input
+                label={itemForm.discountType === 'percentage'
+                  ? 'Discount (%)'
+                  : `Discount per item (${currencySymbol})`}
+                type="number"
+                min="0"
+                max={itemForm.discountType === 'percentage' ? '100' : undefined}
+                step="0.01"
+                required
+                value={itemForm.discountValue}
+                onChange={(e) => setItemForm({ ...itemForm, discountValue: e.target.value })}
+                placeholder={itemForm.discountType === 'percentage' ? '10' : '0.00'}
+              />
+            ) : (
+              <div className="flex items-center rounded-xl bg-slate-50 px-3 text-xs text-slate-500">
+                No automatic discount will be applied to this item.
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input

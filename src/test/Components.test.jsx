@@ -8,6 +8,7 @@ import { Card }           from '../components/ui/Card';
 import { Input }          from '../components/ui/Input';
 import { Modal }          from '../components/ui/Modal';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../components/ui/DataSkeleton';
 import { DatePicker } from '../components/ui/DatePicker';
 import { MonthPicker } from '../components/ui/MonthPicker';
 import { Select } from '../components/ui/Select';
@@ -36,8 +37,9 @@ describe('Button component', () => {
     render(<Button loading>Loading Button</Button>);
     const btn = screen.getByRole('button');
     expect(btn).toBeDisabled();
-    // Lucide Loader2 renders as SVG inside the button
-    expect(btn.querySelector('svg')).not.toBeNull();
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+    expect(btn.querySelector('[aria-label="Loading"]')).not.toBeNull();
+    expect(screen.getByRole('img', { name: 'Nestnn' })).toBeInTheDocument();
   });
 
   it('does not call onClick when disabled', async () => {
@@ -402,10 +404,23 @@ describe('LoadingSpinner component', () => {
   it('renders SVG spinner icon', () => {
     const { container } = render(<LoadingSpinner />);
     expect(container.querySelector('svg')).not.toBeNull();
+    expect(screen.getByRole('img', { name: 'Nestnn' })).toBeInTheDocument();
   });
 
   it('renders without text when text is empty string', () => {
     render(<LoadingSpinner text="" />);
     expect(screen.queryByRole('paragraph')).not.toBeInTheDocument();
+  });
+});
+
+describe('DataSkeleton component', () => {
+  it('renders an accessible table-shaped loading state', () => {
+    render(<DataSkeleton rows={3} columns={4} label="Loading guests" />);
+    expect(screen.getByRole('status', { name: 'Loading guests' })).toBeInTheDocument();
+  });
+
+  it('renders responsive card placeholders', () => {
+    render(<DataSkeleton variant="cards" rows={2} label="Loading rooms" />);
+    expect(screen.getByRole('status', { name: 'Loading rooms' }).children).toHaveLength(2);
   });
 });

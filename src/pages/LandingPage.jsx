@@ -10,7 +10,9 @@ import {
 import { NestnnLogo } from '../components/ui/NestnnLogo';
 
 const HERO_IMG =
-  'https://images.unsplash.com/photo-1611892440504-42a792e38f93?auto=format&fit=crop&w=2400&q=80';
+  'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=2400&q=85';
+const HERO_FALLBACK_IMG =
+  'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=2400&q=85';
 
 const modules = [
   {
@@ -64,6 +66,8 @@ export const LandingPage = () => {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [ready, setReady] = useState(false);
+  const [heroImage, setHeroImage] = useState(HERO_IMG);
+  const [heroFallbackUsed, setHeroFallbackUsed] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -85,7 +89,10 @@ export const LandingPage = () => {
       >
         <div className="mx-auto flex h-[78px] max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-12">
           <Link to="/" className="flex items-center gap-3" aria-label="Nestnn home">
-            <NestnnLogo size="md" className="!h-11 !w-[66px] brightness-110" />
+            <NestnnLogo
+              size="md"
+              className="!h-[58px] !w-[84px] rounded-lg bg-[#f5efe2] p-1.5 shadow-[0_4px_18px_rgba(0,0,0,0.28)]"
+            />
             <span className="hidden border-l border-white/20 pl-3 sm:block">
               <span className="block font-display text-xl leading-none tracking-[0.04em] text-[#e8d5a8]">
                 Nestnn
@@ -169,12 +176,18 @@ export const LandingPage = () => {
       {/* ── Hero (full-bleed) ── */}
       <section id="home" className="relative isolate min-h-[100svh]">
         <img
-          src={HERO_IMG}
+          src={heroImage}
           alt="Luxury hotel suite with warm ambient lighting"
           className="absolute inset-0 h-full w-full object-cover"
+          onError={() => {
+            if (!heroFallbackUsed) {
+              setHeroFallbackUsed(true);
+              setHeroImage(HERO_FALLBACK_IMG);
+            }
+          }}
         />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(12,10,8,0.55)_0%,rgba(12,10,8,0.35)_42%,rgba(12,10,8,0.78)_100%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_40%,rgba(197,160,89,0.12),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(12,10,8,0.38)_0%,rgba(12,10,8,0.2)_42%,rgba(12,10,8,0.72)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_72%_38%,rgba(242,184,99,0.2),transparent_54%)]" />
 
         <div className="relative mx-auto flex min-h-[100svh] max-w-7xl flex-col justify-end px-5 pb-[7.5rem] pt-28 sm:px-8 sm:pb-36 lg:px-12 lg:pb-40">
           <div
@@ -326,28 +339,63 @@ export const LandingPage = () => {
       </section>
 
       {/* ── Leadership ── */}
-      <section className="border-t border-white/5 bg-[#1a1612] px-5 py-20 sm:px-8 sm:py-24 lg:px-12">
-        <div className="mx-auto max-w-7xl">
+      <section className="relative overflow-hidden border-t border-white/5 bg-[#1a1612] px-5 py-20 sm:px-8 sm:py-24 lg:px-12">
+        <div className="pointer-events-none absolute -right-36 top-8 h-96 w-96 rounded-full bg-[#c5a059]/[0.06] blur-3xl" />
+        <div className="relative mx-auto max-w-7xl">
+          <div className="mx-auto max-w-5xl">
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#c5a059]">
             Leadership
           </p>
-          <h2 className="mt-3 font-display text-4xl font-semibold text-[#f0e6d4] sm:text-5xl">
+          <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.025em] text-[#f0e6d4] sm:text-5xl">
             The people behind Nestnn
           </h2>
-          <div className="mt-12 grid gap-8 sm:grid-cols-2 sm:gap-10 lg:max-w-4xl">
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-white/55 sm:text-base">
+            A hands-on team bringing hospitality vision, thoughtful software, and reliable execution together.
+          </p>
+          <div className="mt-10 grid gap-5 sm:grid-cols-2 sm:gap-6 lg:mt-12">
             {[
-              { name: 'Ranjith Kumar Raja', image: '/ranjith-kumar-raja.jpg' },
-              { name: 'S Thenmozhi', image: '/s-thenmozhi.jpg' }
-            ].map(({ name, image }) => (
-              <article key={name}>
-                <img
-                  src={image}
-                  alt={name}
-                  className="aspect-[4/5] w-full object-cover object-[center_28%]"
-                />
-                <h3 className="mt-5 font-display text-2xl text-[#e8d5a8]">{name}</h3>
+              {
+                name: 'Ranjith Kumar Raja',
+                roles: ['AI Developer', 'Software Engineer'],
+                image: '/ranjith-kumar-raja.jpg'
+              },
+              {
+                name: 'S Thenmozhi',
+                roles: ['Visionary', 'Business Analyst', 'Developer', 'Tester'],
+                image: '/s-thenmozhi.jpg'
+              }
+            ].map(({ name, roles, image }, index) => (
+              <article
+                key={name}
+                className="group overflow-hidden rounded-2xl border border-white/[0.09] bg-[#211b16] shadow-[0_18px_50px_rgba(0,0,0,0.18)] transition duration-300 hover:-translate-y-1 hover:border-[#c5a059]/35 hover:shadow-[0_24px_60px_rgba(0,0,0,0.3)]"
+              >
+                <div className="relative overflow-hidden">
+                  <img
+                    src={image}
+                    alt={name}
+                    className="aspect-[4/3] w-full object-cover object-[center_28%] transition duration-700 group-hover:scale-[1.03]"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#17120e]/60 via-transparent to-black/[0.04]" />
+                  <span className="absolute left-5 top-5 rounded-full border border-white/20 bg-black/25 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/90 backdrop-blur-md">
+                    {index === 0 ? 'Technology' : 'Product & Quality'}
+                  </span>
+                </div>
+                <div className="p-5 sm:p-6">
+                  <h3 className="font-display text-2xl text-[#f0e6d4] sm:text-[1.7rem]">{name}</h3>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {roles.map((role) => (
+                      <span
+                        key={role}
+                        className="rounded-full border border-[#c5a059]/20 bg-[#c5a059]/[0.08] px-3 py-1.5 text-xs font-medium text-[#e8d5a8]/90"
+                      >
+                        {role}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               </article>
             ))}
+          </div>
           </div>
         </div>
       </section>

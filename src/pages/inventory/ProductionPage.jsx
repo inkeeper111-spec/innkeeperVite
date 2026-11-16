@@ -21,7 +21,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { Select } from '../../components/ui/Select';
 import { useNavigate } from 'react-router-dom';
 import { useStorageLocations } from './useStorageLocations';
@@ -301,7 +301,7 @@ export const ProductionPage = () => {
     ['Remaining portions', totals.availableQuantity, '']
   ];
 
-  if (loading) return <div className="flex min-h-[50vh] items-center justify-center"><LoadingSpinner /></div>;
+  if (loading) return <DataSkeleton variant="page" rows={6} columns={5} label="Loading production data" />;
 
   return (
     <div className="space-y-6 p-4 sm:p-6">

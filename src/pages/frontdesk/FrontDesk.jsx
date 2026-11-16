@@ -8,7 +8,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { ReservationCheckoutModal } from '../../components/ui/ReservationCheckoutModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../hooks/useCurrency';
@@ -278,7 +278,7 @@ export const FrontDesk = () => {
       {/* List Table */}
       <Card>
         {loading ? (
-          <LoadingSpinner text="Retrieving guest records..." />
+          <DataSkeleton rows={6} columns={5} label="Loading guest records" />
         ) : filteredDisplay.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-xs">
             No reservations found in this queue.

@@ -24,6 +24,7 @@ import { InventoryPage } from './pages/inventory/InventoryPage';
 import { ProductionPage } from './pages/inventory/ProductionPage';
 import { RawMaterialMasterPage } from './pages/inventory/RawMaterialMasterPage';
 import { StorageLocationMasterPage } from './pages/inventory/StorageLocationMasterPage';
+import { ProcurementPage } from './pages/inventory/ProcurementPage';
 import { ExpensesPage } from './pages/expenses/ExpensesPage';
 import { MaintenancePage } from './pages/maintenance/MaintenancePage';
 import { StaffPage } from './pages/staff/StaffPage';
@@ -56,6 +57,8 @@ import { SubscriptionPaymentStatus } from './pages/subscription/SubscriptionPaym
 // Notifications
 import { NotificationsPage } from './pages/notifications/NotificationsPage';
 import { STAFF_ROLES } from './auth/staffSession';
+import { LoadingSpinner } from './components/ui/LoadingSpinner';
+import { KeyRound } from 'lucide-react';
 
 // Menu Management
 import { MenuManagementPage } from './pages/restaurant/MenuManagementPage';
@@ -79,14 +82,20 @@ const getHotelGatePath = (hotel) => {
 };
 
 const getPermissionFallbackPath = (user, currentPath) => {
-  const candidates = {
-    hotel_admin: [['/dashboard', 'dashboard.view']],
-    receptionist: [['/frontdesk', 'frontdesk.view'], ['/reservations', 'reservations.view'], ['/notifications', 'notifications.view']],
-    restaurant_staff: [['/restaurant', 'restaurant.view'], ['/notifications', 'notifications.view']],
-    housekeeping_staff: [['/housekeeping', 'housekeeping.view'], ['/notifications', 'notifications.view']],
-    maintenance_staff: [['/maintenance', 'maintenance.view'], ['/notifications', 'notifications.view']],
-    super_admin: [['/superadmin', null]]
-  }[user.role] || [];
+  const candidates = user.role === 'super_admin'
+    ? [['/superadmin', null]]
+    : [
+      ['/restaurant', 'restaurant_pos.view'],
+      ['/inventory/dashboard', 'inventory_dashboard.view'],
+      ['/inventory/raw-materials', 'raw_materials.view'],
+      ['/inventory/stock', 'stock_verification.view'],
+      ['/housekeeping', 'housekeeping.view'],
+      ['/frontdesk', 'frontdesk.view'],
+      ['/reservations', 'reservations.view'],
+      ['/maintenance', 'maintenance.view'],
+      ['/notifications', 'notifications.view'],
+      ['/dashboard', 'dashboard.view']
+    ];
 
   return candidates.find(([path, permission]) => (
     path !== currentPath && (!permission || user.permissions?.[permission] !== false)
@@ -103,7 +112,7 @@ const ProtectedRoute = ({
   const { user, hotel, loading } = useAuth();
   const location = useLocation();
 
-  if (loading) return null;
+  if (loading) return <LoadingSpinner text="Restoring your workspace..." size="lg" />;
   if (!user) return <Navigate to="/login" replace />;
 
   const permissionForPath = {
@@ -114,18 +123,20 @@ const ProtectedRoute = ({
     '/guests': 'guests.view',
     '/billing': 'billing.view',
     '/housekeeping': 'housekeeping.view',
-    '/restaurant': 'restaurant.view',
-    '/restaurant-billing': 'restaurant.view',
+    '/restaurant': 'restaurant_pos.view',
+    '/restaurant-billing': 'restaurant_billing.view',
     '/menu-management': 'menu_management.view',
-    '/inventory': 'inventory.view',
-    '/inventory/dashboard': 'inventory.view',
-    '/inventory/categories': 'inventory.view',
-    '/inventory/items': 'inventory.view',
-    '/inventory/stock': 'inventory.view',
-    '/inventory/raw-materials': 'inventory.view',
-    '/inventory/raw-material-categories': 'inventory.view',
-    '/inventory/recipes': 'inventory.view',
-    '/inventory/storage-locations': 'inventory.view',
+    '/inventory': 'inventory_dashboard.view',
+    '/inventory/dashboard': 'inventory_dashboard.view',
+    '/inventory/categories': 'raw_materials.view',
+    '/inventory/items': 'raw_materials.view',
+    '/inventory/stock': 'stock_verification.view',
+    '/inventory/raw-materials': 'raw_materials.view',
+    '/inventory/raw-material-categories': 'raw_materials.view',
+    '/inventory/recipes': 'restaurant_recipes.view',
+    '/inventory/production': 'food_production.view',
+    '/inventory/storage-locations': 'storage_locations.view',
+    '/procurement': 'procurement.view',
     '/maintenance': 'maintenance.view',
     '/expenses': 'expenses.view',
     '/staff': 'staff_directory.view',
@@ -165,6 +176,21 @@ const ProtectedRoute = ({
     || (!hasRouteAccess && (strictRoleGate || user.role !== 'super_admin'))) {
     return <Navigate to={deniedPath || getPermissionFallbackPath(user, location.pathname)} replace />;
   }
+  const readPermission = permissionForPath?.replace(/\.view$/, '.read');
+  if (permissionForPath && user.permissions?.[permissionForPath] === true
+    && readPermission && user.permissions[readPermission] === false) {
+    return (
+      <div className="mx-auto max-w-2xl rounded-3xl border border-amber-200 bg-gradient-to-br from-white to-amber-50 p-6 text-center shadow-sm sm:p-10">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-800">
+          <KeyRound className="h-6 w-6" />
+        </div>
+        <h1 className="mt-4 text-xl font-black text-slate-900">View-only module access</h1>
+        <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">
+          This module is visible to you, but its records are restricted. Ask your hotel administrator for Read access if you need to open module data.
+        </p>
+      </div>
+    );
+  }
   if (!skipStatusGate && user.role !== 'super_admin') {
     const gatePath = getHotelGatePath(hotel);
     if (gatePath) {
@@ -177,13 +203,22 @@ const ProtectedRoute = ({
 };
 
 export const App = () => {
-  const { user, hotel } = useAuth();
+  const { user, hotel, loading } = useAuth();
   const loginPath = user?.role === 'super_admin' ? '/superadmin' : getHotelGatePath(hotel)
-    || (user?.role === 'receptionist' ? '/frontdesk'
-      : user?.role === 'restaurant_staff' ? '/restaurant'
+    || (user?.permissions?.['restaurant_pos.view'] ? '/restaurant'
+      : user?.permissions?.['inventory_dashboard.view'] ? '/inventory/dashboard'
+        : user?.role === 'receptionist' ? '/frontdesk'
         : user?.role === 'housekeeping_staff' ? '/housekeeping'
           : user?.role === 'maintenance_staff' ? '/maintenance'
             : '/dashboard');
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <LoadingSpinner text="Preparing your workspace..." size="lg" />
+      </div>
+    );
+  }
 
   return (
     <Routes key={user?.id || user?._id || 'anonymous'}>
@@ -233,7 +268,7 @@ export const App = () => {
         <Route
           path="/restaurant-billing"
           element={
-            <ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']} strictRoleGate>
+            <ProtectedRoute>
               <RestaurantBillingPage />
             </ProtectedRoute>
           }
@@ -242,7 +277,7 @@ export const App = () => {
         <Route
           path="/inventory/raw-material-categories"
           element={
-            <ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']} strictRoleGate>
+            <ProtectedRoute>
               <RawMaterialMasterPage />
             </ProtectedRoute>
           }
@@ -252,11 +287,12 @@ export const App = () => {
         <Route
           path="/inventory/storage-locations"
           element={
-            <ProtectedRoute allowedRoles={['hotel_admin', 'super_admin']} strictRoleGate>
+            <ProtectedRoute>
               <StorageLocationMasterPage />
             </ProtectedRoute>
           }
         />
+        <Route path="/procurement" element={<ProcurementPage />} />
         <Route path="/inventory/*" element={<InventoryPage />} />
         <Route path="/expenses" element={<ExpensesPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />
@@ -298,7 +334,7 @@ export const App = () => {
         <Route
           path="/my-leave"
           element={
-            <ProtectedRoute allowedRoles={['hotel_admin', 'receptionist', 'restaurant_staff', 'housekeeping_staff', 'maintenance_staff']}>
+            <ProtectedRoute allowedRoles={STAFF_ROLES}>
               <LeaveRequestsPage />
             </ProtectedRoute>
           }

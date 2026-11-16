@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import api, { showApiErrorToast } from '../../api/axios';
 import { Modal } from '../../components/ui/Modal';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../hooks/useCurrency';
 import { useNavigate } from 'react-router-dom';
@@ -134,6 +135,7 @@ export const RestaurantBillingPage = () => {
     const rows = (bill.items || []).map((item) => `<tr>
       <td>${escapeHtml(item.name)}</td><td>${Number(item.quantity || 0)}</td>
       <td>${escapeHtml(formatCurrency(item.unitPriceSnapshot ?? item.unitPrice ?? 0))}</td>
+      <td>${escapeHtml(formatCurrency(item.menuDiscountAmount || 0))}</td>
       <td>${escapeHtml(formatCurrency(item.amount || 0))}</td></tr>`).join('');
     const customer = bill.guestName || bill.customerName || '';
     const content = `<!doctype html><html><head><title>${escapeHtml(bill.orderNumber)}</title>
@@ -146,7 +148,7 @@ export const RestaurantBillingPage = () => {
       <p>Table: ${escapeHtml(bill.tableNumber || bill.tableNameSnapshot || bill.tableId?.tableNumber || '—')}
       &nbsp; | &nbsp; Dining: ${escapeHtml(bill.diningType === 'ac' ? 'AC' : 'Non-AC')}
       &nbsp; | &nbsp; Customer: ${escapeHtml(customer || '—')}</p>
-      <table><thead><tr><th>Item</th><th>Qty</th><th>Unit price</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table>
+      <table><thead><tr><th>Item</th><th>Qty</th><th>Unit price</th><th>Item discount</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table>
       <p>Subtotal: ${escapeHtml(formatCurrency(bill.subtotal || 0))}</p>
       <p>Discount: ${escapeHtml(formatCurrency(bill.discountAmount || 0))}</p>
       <p>Tax: ${escapeHtml(formatCurrency(bill.taxAmount || 0))}</p>
@@ -177,11 +179,12 @@ export const RestaurantBillingPage = () => {
       document.text(formatDate(bill.createdAt, timeZone, { dateStyle: 'medium', timeStyle: 'short' }), 14, 24);
       autoTable(document, {
         startY: 31,
-        head: [['Item', 'Qty', 'Unit price', 'Amount']],
+        head: [['Item', 'Qty', 'Unit price', 'Item discount', 'Amount']],
         body: (bill.items || []).map((item) => [
           item.name,
           item.quantity,
           formatCurrency(item.unitPriceSnapshot ?? item.unitPrice ?? 0),
+          formatCurrency(item.menuDiscountAmount || 0),
           formatCurrency(item.amount || 0)
         ])
       });
@@ -487,7 +490,7 @@ export const RestaurantBillingPage = () => {
         <button type="button" onClick={() => setTab('previous')} className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-bold transition sm:flex-none ${tab === 'previous' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>Previous Days’ Bills</button>
       </div>
 
-      {loading && !report ? <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-500">Loading billing history…</div> : null}
+      {loading && !report ? <DataSkeleton rows={6} columns={5} label="Loading billing history" /> : null}
       {report && tab === 'today' && (
         <section className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -585,7 +588,7 @@ export const RestaurantBillingPage = () => {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[['Table', selectedBill.tableNumber || selectedBill.tableNameSnapshot || selectedBill.tableId?.tableNumber || '—'], ['Dining type', selectedBill.diningType === 'ac' ? 'AC' : 'Non-AC'], ['Customer', selectedBill.guestName || selectedBill.customerName || '—'], ['Payment', selectedBill.paymentMethod || selectedBill.paymentStatus || 'unpaid']].map(([label, value]) => <div key={label} className="rounded-xl bg-slate-50 p-3"><small className="block text-xs text-slate-500">{label}</small><b className="mt-1 block text-sm capitalize text-slate-800">{value}</b></div>)}
           </div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[500px] text-sm"><thead><tr className="border-b text-left text-xs uppercase text-slate-500"><th className="py-2">Item</th><th className="py-2">Qty</th><th className="py-2">Price</th><th className="py-2 text-right">Amount</th></tr></thead><tbody>{(selectedBill.items || []).map((item, index) => <tr key={`${item.name}-${index}`} className="border-b border-slate-100"><td className="py-3 font-medium">{item.name}</td><td className="py-3">{item.quantity}</td><td className="py-3">{formatCurrency(item.unitPriceSnapshot ?? item.unitPrice ?? 0)}</td><td className="py-3 text-right font-semibold">{formatCurrency(item.amount || 0)}</td></tr>)}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-sm"><thead><tr className="border-b text-left text-xs uppercase text-slate-500"><th className="py-2">Item</th><th className="py-2">Qty</th><th className="py-2">Price</th><th className="py-2">Item discount</th><th className="py-2 text-right">Amount</th></tr></thead><tbody>{(selectedBill.items || []).map((item, index) => <tr key={`${item.name}-${index}`} className="border-b border-slate-100"><td className="py-3 font-medium">{item.name}</td><td className="py-3">{item.quantity}</td><td className="py-3">{formatCurrency(item.unitPriceSnapshot ?? item.unitPrice ?? 0)}</td><td className="py-3 text-emerald-700">{Number(item.menuDiscountAmount || 0) > 0 ? `−${formatCurrency(item.menuDiscountAmount)}` : '—'}</td><td className="py-3 text-right font-semibold">{formatCurrency(item.amount || 0)}</td></tr>)}</tbody></table></div>
           <div className="ml-auto max-w-xs space-y-2 text-sm"><div className="flex justify-between"><span>Subtotal</span><b>{formatCurrency(selectedBill.subtotal || 0)}</b></div><div className="flex justify-between"><span>Discount</span><b>−{formatCurrency(selectedBill.discountAmount || 0)}</b></div><div className="flex justify-between"><span>Tax</span><b>{formatCurrency(selectedBill.taxAmount || 0)}</b></div><div className="flex justify-between border-t pt-3 text-base"><b>Final amount</b><b>{formatCurrency(selectedBill.totalAmount || 0)}</b></div></div>
           <div className="flex justify-end gap-2"><button type="button" onClick={() => printBill(selectedBill)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold"><Printer className="h-4 w-4" /> Print</button><button type="button" onClick={() => downloadBill(selectedBill)} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white"><Download className="h-4 w-4" /> Download PDF</button></div>
         </div>}

@@ -8,7 +8,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../hooks/useCurrency';
 import {
@@ -66,6 +66,12 @@ export const InventoryPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const canManageInventory = ['hotel_admin', 'super_admin'].includes(user?.role);
+  const canWriteModule = (moduleKey) => canManageInventory
+    || user?.permissions?.[`${moduleKey}.create`] === true
+    || user?.permissions?.[`${moduleKey}.update`] === true;
+  const canReadModule = (moduleKey) => canManageInventory
+    || user?.permissions?.[`${moduleKey}.read`] === true;
+  const canReadRecipes = canManageInventory || user?.permissions?.['restaurant_recipes.read'] === true;
   const {
     storageLocations,
     storageLocationOptions,
@@ -151,14 +157,18 @@ export const InventoryPage = () => {
   const [batchErrorsByItem, setBatchErrorsByItem] = useState({});
   const [preparedFoodBatches, setPreparedFoodBatches] = useState([]);
   const [preparedFoodMovements, setPreparedFoodMovements] = useState([]);
+  const [directInventoryUsage, setDirectInventoryUsage] = useState([]);
   const [preparedFoodBatchesLoading, setPreparedFoodBatchesLoading] = useState(false);
   const [preparedFoodCountOpen, setPreparedFoodCountOpen] = useState(false);
   const [preparedFoodCountSaving, setPreparedFoodCountSaving] = useState(false);
   const [preparedFoodCountError, setPreparedFoodCountError] = useState('');
+  const [preparedFoodCountMode, setPreparedFoodCountMode] = useState('unrecorded_consumption');
+  const [preparedFoodCountTargetType, setPreparedFoodCountTargetType] = useState('batch');
   const [preparedFoodCountForm, setPreparedFoodCountForm] = useState({
     batchId: '',
     actualQuantity: '',
-    reason: ''
+    reason: '',
+    location: 'Main Store'
   });
   const [report, setReport] = useState([]);
   const [verifications, setVerifications] = useState([]);
@@ -341,25 +351,28 @@ export const InventoryPage = () => {
   const fetchInventory = async () => {
     try {
       setLoading(true);
+      const request = (moduleKey, path, config) => (
+        canReadModule(moduleKey) ? api.get(path, config) : Promise.resolve(null)
+      );
       const [itemsRes, vendorsRes, posRes, dashboardRes, ledgerRes, requestsRes, recipesRes, adjustmentsRes, suggestionsRes, unitsRes, verificationsRes, settingsRes] = await Promise.all([
-        api.get('/inventory/items', { params: { page: inventoryPage, limit: 100, includeInactive: canManageInventory ? 'true' : undefined } }),
-        api.get('/inventory/vendors'),
-        api.get('/inventory/purchase-orders'),
-        api.get('/inventory/dashboard'),
-        api.get('/inventory/ledger', { params: { limit: 30 } }),
-        api.get('/inventory/department-requests'),
-        api.get('/inventory/recipes'),
-        api.get('/inventory/adjustments'),
-        api.get('/inventory/reorder-suggestions'),
-        api.get('/inventory/units', { params: canManageInventory ? { includeInactive: true } : {} }),
-        api.get('/inventory/verifications'),
-        api.get('/inventory/settings')
+        request('raw_materials', '/inventory/items', { params: { page: inventoryPage, limit: 100, includeInactive: canManageInventory ? 'true' : undefined } }),
+        request('raw_materials', '/inventory/vendors'),
+        request('raw_materials', '/inventory/purchase-orders'),
+        request('inventory_dashboard', '/inventory/dashboard'),
+        request('stock_verification', '/inventory/ledger', { params: { limit: 30 } }),
+        request('raw_materials', '/inventory/department-requests'),
+        request('restaurant_recipes', '/inventory/recipes'),
+        request('stock_verification', '/inventory/adjustments'),
+        request('raw_materials', '/inventory/reorder-suggestions'),
+        request('raw_materials', '/inventory/units', { params: canManageInventory ? { includeInactive: true } : {} }),
+        request('stock_verification', '/inventory/verifications'),
+        request('inventory', '/inventory/settings')
       ]);
 
-      const rawMaterialsRes = await api.get('/inventory/raw-materials', {
+      const rawMaterialsRes = await request('raw_materials', '/inventory/raw-materials', {
         params: canManageInventory ? { includeInactive: true } : {}
-      }).catch(() => null);
-      if (itemsRes.data.success) {
+      });
+      if (itemsRes?.data.success) {
         const regularItems = itemsRes.data.data || [];
         const rawData = rawMaterialsRes?.data?.data;
         const rawMaterials = rawMaterialsRes?.data?.success
@@ -372,18 +385,18 @@ export const InventoryPage = () => {
         }));
         setItems([...combined.values()]);
       }
-      if (unitsRes.data.success) setUnits(unitsRes.data.data || []);
-      setInventoryPages(itemsRes.data.pagination?.pages || 1);
-      if (vendorsRes.data.success) setVendors(vendorsRes.data.data);
-      if (posRes.data.success) setPurchaseOrders(posRes.data.data);
-      if (dashboardRes.data.success) setDashboard(dashboardRes.data.data);
-      if (ledgerRes.data.success) setLedger(ledgerRes.data.data);
-      if (requestsRes.data.success) setDepartmentRequests(requestsRes.data.data);
-      if (recipesRes.data.success) setRecipes(recipesRes.data.data);
-      if (adjustmentsRes.data.success) setAdjustments(adjustmentsRes.data.data);
-      if (suggestionsRes.data.success) setReorderSuggestions(suggestionsRes.data.data);
-      if (verificationsRes.data.success) setVerifications(verificationsRes.data.data || []);
-      if (settingsRes.data.success) {
+      if (unitsRes?.data.success) setUnits(unitsRes.data.data || []);
+      if (itemsRes?.data.success) setInventoryPages(itemsRes.data.pagination?.pages || 1);
+      if (vendorsRes?.data.success) setVendors(vendorsRes.data.data);
+      if (posRes?.data.success) setPurchaseOrders(posRes.data.data);
+      if (dashboardRes?.data.success) setDashboard(dashboardRes.data.data);
+      if (ledgerRes?.data.success) setLedger(ledgerRes.data.data);
+      if (requestsRes?.data.success) setDepartmentRequests(requestsRes.data.data);
+      if (recipesRes?.data.success) setRecipes(recipesRes.data.data);
+      if (adjustmentsRes?.data.success) setAdjustments(adjustmentsRes.data.data);
+      if (suggestionsRes?.data.success) setReorderSuggestions(suggestionsRes.data.data);
+      if (verificationsRes?.data.success) setVerifications(verificationsRes.data.data || []);
+      if (settingsRes?.data.success) {
         setVerificationIntervalDays(settingsRes.data.data.verificationIntervalDays || 1);
         setRecipeDeductionStage(settingsRes.data.data.recipeDeductionStage || 'prepared');
       }
@@ -543,11 +556,11 @@ export const InventoryPage = () => {
   };
 
   useEffect(() => {
-    if (activeTab !== 'recipes' || !canManageInventory) return;
+    if (activeTab !== 'recipes' || !canReadRecipes) return;
     api.get('/restaurant/menu')
       .then(({ data }) => setMenuItems(data.data?.items || []))
       .catch((err) => showApiErrorToast(err, 'Could not load restaurant menu items'));
-  }, [activeTab, canManageInventory]);
+  }, [activeTab, canReadRecipes]);
 
   useEffect(() => {
     if (activeTab !== 'minibar') return;
@@ -1138,9 +1151,13 @@ export const InventoryPage = () => {
   const loadPreparedFoodBatchHistory = async () => {
     setPreparedFoodBatchesLoading(true);
     try {
-      const { data } = await api.get('/inventory/production', { params: { limit: 500 } });
-      setPreparedFoodBatches(data.data?.batches || []);
-      setPreparedFoodMovements(data.data?.movements || []);
+      const [productionResponse, usageResponse] = await Promise.all([
+        api.get('/inventory/production', { params: { limit: 500 } }),
+        api.get('/inventory/usage', { params: { limit: 1000 } })
+      ]);
+      setPreparedFoodBatches(productionResponse.data.data?.batches || []);
+      setPreparedFoodMovements(productionResponse.data.data?.movements || []);
+      setDirectInventoryUsage(usageResponse.data.data || []);
     } catch (error) {
       showApiErrorToast(error, 'Could not load prepared-food batches');
     } finally {
@@ -1148,7 +1165,10 @@ export const InventoryPage = () => {
     }
   };
 
-  const openPreparedFoodCount = async () => {
+  const openPreparedFoodCount = async (movementType = 'unrecorded_consumption') => {
+    setPreparedFoodCountMode(movementType);
+    setPreparedFoodCountTargetType('batch');
+    setPreparedFoodCountForm({ batchId: '', actualQuantity: '', reason: '', location: 'Main Store' });
     setPreparedFoodCountError('');
     setPreparedFoodCountOpen(true);
     await loadPreparedFoodBatchHistory();
@@ -1156,41 +1176,79 @@ export const InventoryPage = () => {
 
   const submitPreparedFoodCount = async (event) => {
     event.preventDefault();
-    const batch = preparedFoodBatches.find((entry) => String(entry._id) === preparedFoodCountForm.batchId);
     const additionalUsedQuantity = Number(preparedFoodCountForm.actualQuantity);
+    const isBatchUsage = preparedFoodCountTargetType === 'batch';
+    const batch = isBatchUsage
+      ? preparedFoodBatches.find((entry) => String(entry._id) === preparedFoodCountForm.batchId)
+      : null;
+    const rawMaterial = preparedFoodCountTargetType === 'raw_material'
+      ? items.find((entry) => String(entry._id) === preparedFoodCountForm.batchId)
+      : null;
+    const menuRecipe = preparedFoodCountTargetType === 'menu_item'
+      ? recipes.find((entry) => String(entry._id) === preparedFoodCountForm.batchId)
+      : null;
+    const target = batch || rawMaterial || menuRecipe;
     const recordedUsedQuantity = Number(batch?.soldQuantity || 0)
       + Number(batch?.wastedQuantity || 0)
       + Number(batch?.complimentaryQuantity || 0)
       + Number(batch?.unrecordedQuantity || 0)
       + Number(batch?.staffConsumptionQuantity || 0);
-    if (!batch || !String(preparedFoodCountForm.actualQuantity).trim()
+    const maximumQuantity = batch
+      ? Number(batch.availableQuantity || 0)
+      : Number.POSITIVE_INFINITY;
+    if (!target || !String(preparedFoodCountForm.actualQuantity).trim()
       || !Number.isFinite(additionalUsedQuantity)
       || additionalUsedQuantity <= 0
-      || additionalUsedQuantity > Number(batch?.availableQuantity || 0)) {
+      || additionalUsedQuantity > maximumQuantity) {
       setPreparedFoodCountError(
-        `Enter additional portions used greater than zero and up to ${Number(batch?.availableQuantity || 0)} available portions.`
+        isBatchUsage
+          ? `Enter additional portions used greater than zero and up to ${Number(batch?.availableQuantity || 0)} available portions.`
+          : 'Enter a quantity greater than zero.'
       );
       return;
     }
     const reason = preparedFoodCountForm.reason.trim();
     if (!reason) {
-      setPreparedFoodCountError('Enter a reason for the unrecorded prepared-food use.');
+      setPreparedFoodCountError(
+        preparedFoodCountMode === 'complimentary'
+          ? 'Enter a reason for the complimentary serving.'
+          : 'Enter a reason for the unrecorded prepared-food use.'
+      );
       return;
     }
     setPreparedFoodCountSaving(true);
     setPreparedFoodCountError('');
     try {
-      await api.post(`/inventory/production/${batch._id}/movements`, {
-        movementType: 'unrecorded_consumption',
-        quantity: additionalUsedQuantity,
-        reason,
-        notes: `Additional unrecorded prepared-food use: ${additionalUsedQuantity} portion(s). Previously recorded used: ${recordedUsedQuantity}.`,
-        idempotencyKey: globalThis.crypto?.randomUUID?.()
-          || `prepared-count-${batch._id}-${Date.now()}`
-      });
+      if (isBatchUsage) {
+        await api.post(`/inventory/production/${batch._id}/movements`, {
+          movementType: preparedFoodCountMode,
+          quantity: additionalUsedQuantity,
+          reason,
+          notes: preparedFoodCountMode === 'complimentary'
+            ? `Complimentary prepared-food serving: ${additionalUsedQuantity} portion(s). Previously recorded used: ${recordedUsedQuantity}.`
+            : `Additional unrecorded prepared-food use: ${additionalUsedQuantity} portion(s). Previously recorded used: ${recordedUsedQuantity}.`,
+          idempotencyKey: globalThis.crypto?.randomUUID?.()
+            || `prepared-count-${batch._id}-${Date.now()}`
+        });
+      } else {
+        await api.post('/inventory/usage', {
+          usageType: preparedFoodCountMode,
+          targetType: preparedFoodCountTargetType,
+          targetId: rawMaterial?._id || menuRecipe?._id,
+          quantity: additionalUsedQuantity,
+          reason,
+          location: preparedFoodCountForm.location,
+          idempotencyKey: globalThis.crypto?.randomUUID?.()
+            || `direct-usage-${Date.now()}-${Math.random().toString(36).slice(2)}`
+        });
+      }
       setPreparedFoodCountOpen(false);
-      setPreparedFoodCountForm({ batchId: '', actualQuantity: '', reason: '' });
-      setMessage(`Unrecorded prepared-food use recorded for ${batch.menuItemName}.`);
+      setPreparedFoodCountForm({ batchId: '', actualQuantity: '', reason: '', location: 'Main Store' });
+      setMessage(
+        `${preparedFoodCountMode === 'complimentary' ? 'Complimentary use' : 'Unrecorded use'} recorded for ${
+          batch?.menuItemName || rawMaterial?.name || menuRecipe?.menuItemId?.name || 'the selected item'
+        }.`
+      );
       await loadPreparedFoodBatchHistory();
     } catch (error) {
       setPreparedFoodCountError(error.response?.data?.message || 'Could not record prepared-food use.');
@@ -1869,6 +1927,16 @@ export const InventoryPage = () => {
   const movementTrendByDate = new Map(
     (dashboard?.movementTrend || []).map((entry) => [entry._id, entry])
   );
+  const preparedFoodUnrecordedByDate = new Map();
+  preparedFoodMovements
+    .filter((movement) => movement.movementType === 'unrecorded_consumption')
+    .forEach((movement) => {
+      const dateKey = dayjs(movement.createdAt).format('YYYY-MM-DD');
+      preparedFoodUnrecordedByDate.set(
+        dateKey,
+        (preparedFoodUnrecordedByDate.get(dateKey) || 0) + (Number(movement.totalCost) || 0)
+      );
+    });
   const inventoryMovementTrend = Array.from({ length: 14 }, (_, index) => {
     const date = dayjs().startOf('day').subtract(13 - index, 'day');
     const dateKey = date.format('YYYY-MM-DD');
@@ -1877,7 +1945,10 @@ export const InventoryPage = () => {
       date: dateKey,
       incoming: Number(entry.incoming) || 0,
       wastage: Number(entry.wastage) || 0,
-      unrecordedUsage: Number(entry.unrecordedUsage) || 0,
+      unrecordedUsage: (Number(entry.unrecordedUsage) || 0)
+        + (preparedFoodUnrecordedByDate.has(dateKey)
+          ? preparedFoodUnrecordedByDate.get(dateKey)
+          : Number(entry.preparedFoodUnrecordedUsage) || 0),
       recordedUsage: Number(entry.recordedUsage) || 0
     };
   });
@@ -2002,7 +2073,7 @@ export const InventoryPage = () => {
   })();
 
   useEffect(() => {
-    if (activeTab === 'prepared-food') loadPreparedFoodBatchHistory();
+    if (['dashboard', 'prepared-food'].includes(activeTab)) loadPreparedFoodBatchHistory();
   }, [activeTab]);
 
   const preparedFoodBatchById = new Map(
@@ -2025,10 +2096,41 @@ export const InventoryPage = () => {
           cost: Number(ingredient.totalCost || 0) * portionRatio
         }))
       };
-    });
+    })
+    .concat(directInventoryUsage.map((usage) => ({
+      ...usage,
+      directUsage: true,
+      itemName: usage.targetName,
+      menuItemId: { name: usage.targetName },
+      batchNumber: usage.targetType === 'menu_item' ? 'Made-to-order menu item' : 'Direct raw material use',
+      movementType: usage.usageType,
+      quantity: usage.targetQuantity,
+      totalCost: usage.totalCost,
+      rawMaterials: usage.ingredients || []
+    })));
   const selectedPreparedFoodBatch = preparedFoodBatches.find(
-    (batch) => String(batch._id) === preparedFoodCountForm.batchId
+    (batch) => preparedFoodCountTargetType === 'batch'
+      && String(batch._id) === preparedFoodCountForm.batchId
   );
+  const selectedDirectMenuRecipe = recipes.find(
+    (recipe) => preparedFoodCountTargetType === 'menu_item'
+      && String(recipe._id) === preparedFoodCountForm.batchId
+      && recipe.isActive !== false
+      && recipe.productionMode === 'made_to_order'
+  );
+  const selectedDirectRawMaterial = items.find(
+    (item) => preparedFoodCountTargetType === 'raw_material'
+      && String(item._id) === preparedFoodCountForm.batchId
+      && item.inventoryType === 'raw_material'
+      && item.isActive !== false
+  );
+  const selectedDirectTarget = selectedDirectMenuRecipe || selectedDirectRawMaterial;
+  const selectedDirectUnitCost = selectedDirectRawMaterial
+    ? Number(selectedDirectRawMaterial.unitCost) || 0
+    : Number(selectedDirectMenuRecipe?.costPerServing ?? selectedDirectMenuRecipe?.estimatedRecipeCost) || 0;
+  const directUsageUnit = selectedDirectMenuRecipe
+    ? selectedDirectMenuRecipe.servingSize || 'portion'
+    : selectedDirectRawMaterial?.baseUnit || selectedDirectRawMaterial?.unit || 'unit';
   const preparedFoodRecordedUsed = selectedPreparedFoodBatch
     ? Number(selectedPreparedFoodBatch.soldQuantity || 0)
       + Number(selectedPreparedFoodBatch.wastedQuantity || 0)
@@ -2040,9 +2142,10 @@ export const InventoryPage = () => {
   const preparedFoodCountDifference = preparedFoodAdditionalUsed;
   const preparedFoodTotalUsed = preparedFoodRecordedUsed + preparedFoodAdditionalUsed;
   const preparedFoodCountExceedsAvailable = preparedFoodCountForm.actualQuantity !== ''
+    && preparedFoodCountTargetType === 'batch'
     && preparedFoodAdditionalUsed > Number(selectedPreparedFoodBatch?.availableQuantity || 0);
   const preparedFoodCountCost = preparedFoodCountDifference
-    * (Number(selectedPreparedFoodBatch?.costPerPortion) || 0);
+    * (Number(selectedPreparedFoodBatch?.costPerPortion) || selectedDirectUnitCost);
 
   return (
     <div className="inventory-page w-full min-w-0 space-y-6">
@@ -2056,24 +2159,30 @@ export const InventoryPage = () => {
         </div>
 
         <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:items-center lg:justify-end">
-          <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={ClipboardList} onClick={() => setIsDepartmentRequestOpen(true)}>
-            Request Stock
-          </Button>
-          {canManageInventory && (
+          {canWriteModule('raw_materials') && (
+            <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={ClipboardList} onClick={() => setIsDepartmentRequestOpen(true)}>
+              Request Stock
+            </Button>
+          )}
+          {canWriteModule('stock_verification') && (
             <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={AlertTriangle} onClick={() => setIsAdjustmentOpen(true)}>
               Report Wastage
             </Button>
           )}
-          {canManageInventory && (
+          {canWriteModule('stock_verification') && (
             <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={ClipboardList} onClick={() => openStockVerification()}>
               Verify Stock
             </Button>
           )}
-          {canManageInventory && (
+          {canWriteModule('stock_verification') && (
             <>
               <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={ArrowLeftRight} onClick={() => setIsTransferOpen(true)}>
                 Transfer
               </Button>
+            </>
+          )}
+          {canWriteModule('raw_materials') && (
+            <>
               <Button className="w-full sm:w-auto" variant="outline" size="sm" icon={PackageCheck} onClick={() => setIsPurchaseOrderOpen(true)}>
                 New Purchase
               </Button>
@@ -2309,20 +2418,57 @@ export const InventoryPage = () => {
               <ChevronDown className="h-5 w-5 shrink-0 text-slate-500 transition group-open:rotate-180" />
             </summary>
             <div className="space-y-5 border-t border-slate-100 p-4 sm:p-5">
-              <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
                 {[
-                  { label: 'Pending purchase orders', value: dashboard?.pendingPurchaseOrders ?? 0, icon: ClipboardList, tone: 'text-amber-700 bg-amber-50' },
-                  { label: 'Purchases this month', value: formatCurrency(dashboard?.purchasesThisMonth || 0), icon: Truck, tone: 'text-violet-700 bg-violet-50' },
-                  { label: 'Consumption cost this month', value: formatCurrency(dashboard?.consumptionCostThisMonth || 0), icon: Utensils, tone: 'text-indigo-700 bg-indigo-50' },
-                  { label: 'Unrecorded consumption logged', value: formatCurrency(dashboard?.unrecordedConsumptionCostThisMonth || 0), icon: ClipboardList, tone: 'text-sky-700 bg-sky-50' },
-                  { label: 'Wastage this month', value: formatCurrency(dashboard?.wastageCostThisMonth || 0), icon: AlertTriangle, tone: 'text-rose-700 bg-rose-50' }
-                ].map(({ label, value, icon: Icon, tone }) => (
-                  <Card key={label} className="!p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <div><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-2 text-lg font-black text-slate-900">{value}</p></div>
-                      <span className={`rounded-xl p-2 ${tone}`}><Icon className="h-4 w-4" /></span>
+                  {
+                    label: 'Pending purchase orders',
+                    value: dashboard?.pendingPurchaseOrders ?? 0,
+                    note: 'Awaiting action',
+                    icon: ClipboardList,
+                    tone: 'text-amber-700 bg-amber-50'
+                  },
+                  {
+                    label: 'Purchases this month',
+                    value: formatCurrency(dashboard?.purchasesThisMonth || 0),
+                    note: `${dashboard?.purchaseCountThisMonth || 0} stock receipts`,
+                    icon: Truck,
+                    tone: 'text-violet-700 bg-violet-50'
+                  },
+                  {
+                    label: 'Recorded consumption cost',
+                    value: formatCurrency(dashboard?.consumptionCostThisMonth || 0),
+                    note: 'Recorded stock usage this month',
+                    icon: Utensils,
+                    tone: 'text-indigo-700 bg-indigo-50'
+                  },
+                  {
+                    label: 'Unrecorded consumption',
+                    value: formatCurrency(dashboard?.unrecordedConsumptionCostThisMonth || 0),
+                    note: `Raw materials ${formatCurrency(dashboard?.unrecordedRawMaterialCostThisMonth || 0)} · Prepared food ${dashboard?.unrecordedPreparedFoodQuantityThisMonth || 0} ${(dashboard?.unrecordedPreparedFoodQuantityThisMonth || 0) === 1 ? 'portion' : 'portions'} (${formatCurrency(dashboard?.unrecordedPreparedFoodCostThisMonth || 0)})`,
+                    icon: ClipboardList,
+                    tone: 'text-sky-700 bg-sky-50'
+                  },
+                  {
+                    label: 'Wastage this month',
+                    value: formatCurrency(dashboard?.wastageCostThisMonth || 0),
+                    note: 'Wastage and expiry, shown separately',
+                    icon: AlertTriangle,
+                    tone: 'text-rose-700 bg-rose-50'
+                  }
+                ].map(({ label, value, note, icon: Icon, tone }) => (
+                  <div
+                    key={label}
+                    className="group min-w-0 rounded-2xl border border-[#eadfce] bg-gradient-to-br from-white to-[#fcfaf6] p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#d9bd87] hover:shadow-md sm:p-5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold leading-5 text-slate-500">{label}</p>
+                        <p className="mt-2 break-words text-xl font-black tracking-tight text-slate-900 sm:text-2xl">{value}</p>
+                      </div>
+                      <span className={`shrink-0 rounded-xl p-2.5 ${tone}`}><Icon className="h-4 w-4" /></span>
                     </div>
-                  </Card>
+                    <p className="mt-3 min-h-8 text-[11px] leading-4 text-slate-500">{note}</p>
+                  </div>
                 ))}
               </div>
 
@@ -2330,32 +2476,34 @@ export const InventoryPage = () => {
                 <Card
                   className="xl:col-span-2"
                   title="Inventory movement costs"
-                  subtitle="Daily estimated value of stock received, used, and wasted over the last 14 days"
+                  subtitle="Daily costs for the last 14 days. Unrecorded raw-material and prepared-food use are combined as losses, separate from wastage and expiry."
                 >
-                  <div className="h-72">
+                  <div className="h-64 min-w-0 sm:h-72">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={inventoryMovementTrend} margin={{ top: 8, right: 12, left: 8, bottom: 4 }}>
+                      <LineChart data={inventoryMovementTrend} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis
                           dataKey="date"
                           tickFormatter={(date) => dayjs(date).format('MMM D')}
                           minTickGap={24}
+                          tick={{ fontSize: 11 }}
                         />
-                        <YAxis tickFormatter={(value) => formatCurrency(value)} width={88} />
+                        <YAxis tickFormatter={(value) => formatCurrency(value)} width={76} tick={{ fontSize: 11 }} />
                         <Tooltip
                           labelFormatter={(date) => dayjs(date).format('MMM D, YYYY')}
                           formatter={(value) => formatCurrency(value)}
+                          contentStyle={{ borderRadius: 12, borderColor: '#eadfce', boxShadow: '0 12px 30px rgba(59, 36, 26, 0.12)' }}
                         />
-                        <Legend />
+                        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
                         <Line type="monotone" dataKey="incoming" name="Raw material incoming" stroke="#C58A32" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
                         <Line type="monotone" dataKey="recordedUsage" name="Recorded usage" stroke="#547CA5" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
-                        <Line type="monotone" dataKey="unrecordedUsage" name="Unrecorded usage" stroke="#8B5CF6" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
+                        <Line type="monotone" dataKey="unrecordedUsage" name="Unrecorded use (loss)" stroke="#8B5CF6" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
                         <Line type="monotone" dataKey="wastage" name="Wastage & expiry" stroke="#D75C5C" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
-                    Values are estimated material costs from recorded stock movements, not quantities.
+                    Unrecorded use includes raw-material stock discrepancies and unrecorded prepared-food portions; both are losses, separate from wastage and expiry.
                   </p>
                 </Card>
                 <Card title="Recent stock activity">
@@ -2383,7 +2531,7 @@ export const InventoryPage = () => {
                           <p className="font-semibold text-slate-800">{suggestion.name} <span className="font-normal text-slate-500">({suggestion.code})</span></p>
                           <p className="text-xs text-slate-500">Available {suggestion.availableStock} · On order {suggestion.pendingPurchaseQuantity} · Suggested {suggestion.suggestedQuantity} {suggestion.unit}</p>
                         </div>
-                        {canManageInventory && <Button size="sm" variant="outline" onClick={() => prepareSuggestedPurchase(suggestion)}>Prepare purchase</Button>}
+                        {canWriteModule('raw_materials') && <Button size="sm" variant="outline" onClick={() => prepareSuggestedPurchase(suggestion)}>Prepare purchase</Button>}
                       </div>
                     ))}
                   </div>
@@ -2471,7 +2619,7 @@ export const InventoryPage = () => {
             />
           </div>
           {loading ? (
-            <LoadingSpinner text="Loading inventory catalogue..." />
+            <DataSkeleton rows={6} columns={5} label="Loading inventory catalogue" />
           ) : visibleItems.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
               No inventory items defined yet.
@@ -2533,7 +2681,7 @@ export const InventoryPage = () => {
                               >
                                 {expandedBatchItemId === it._id ? 'Hide batches' : 'Batches'}
                               </Button>
-                              {canManageInventory && (
+                              {canWriteModule('raw_materials') && (
                                 <>
                                   <Button size="sm" variant="outline" className="h-9 w-full px-2" icon={Pencil} onClick={() => {
                                     setEditingItem(it);
@@ -2774,8 +2922,8 @@ export const InventoryPage = () => {
                 <p className="break-words">Terms: {v.paymentTerms || 'N/A'} · Balance: {formatCurrency(v.outstandingBalance || 0)}</p>
                 <p>Supplied items: {v.suppliedItems?.map((item) => item.name).join(', ') || 'Not specified'}</p>
               </div>
-              {canManageInventory && <Button className="mt-4 w-full" size="sm" variant="outline" onClick={() => handleViewVendorPurchases(v)}>Purchase history</Button>}
-              {canManageInventory && (
+              {canReadModule('raw_materials') && <Button className="mt-4 w-full" size="sm" variant="outline" onClick={() => handleViewVendorPurchases(v)}>Purchase history</Button>}
+              {canWriteModule('raw_materials') && (
                 <Button className="mt-2 w-full" size="sm" variant="secondary" onClick={() => {
                   setSelectedVendor(v);
                   setPaymentForm({ amount: '', paymentMethod: 'bank_transfer', referenceNumber: '', invoiceNumber: '', notes: '' });
@@ -2813,7 +2961,7 @@ export const InventoryPage = () => {
                         {suggestion.suggestedQuantity} {suggestion.suggestedUnit}
                       </p>
                     </div>
-                    {canManageInventory && (
+                    {canWriteModule('raw_materials') && (
                       <Button size="sm" variant="outline" onClick={() => prepareSuggestedPurchase(suggestion)}>
                         Create purchase order
                       </Button>
@@ -2860,18 +3008,18 @@ export const InventoryPage = () => {
                         <td className="py-3 text-slate-500">{dayjs(po.createdAt).format('YYYY-MM-DD')}</td>
                         <td className="py-3 text-right">
                           <div className="flex justify-end gap-2">
-                            {canManageInventory && po.autoGenerated && ['draft', 'pending_approval'].includes(po.status) && (
+                            {canWriteModule('raw_materials') && po.autoGenerated && ['draft', 'pending_approval'].includes(po.status) && (
                               <Button size="sm" variant="outline" onClick={() => openAutomaticPOReview(po)}>
                                 Review
                               </Button>
                             )}
-                            {canManageInventory && ['draft', 'pending_approval'].includes(po.status)
+                            {canWriteModule('raw_materials') && ['draft', 'pending_approval'].includes(po.status)
                               && (!po.autoGenerated || po.status === 'pending_approval') && (
                               <Button size="sm" variant="success" onClick={() => handleApprovePurchaseOrder(po._id)}>
                                 Approve
                               </Button>
                             )}
-                            {canManageInventory && ['ordered', 'partially_received'].includes(po.status) && (
+                            {canWriteModule('raw_materials') && ['ordered', 'partially_received'].includes(po.status) && (
                               <Button
                                 size="sm"
                                 variant="success"
@@ -2941,10 +3089,15 @@ export const InventoryPage = () => {
         <Card
           title="Prepared food usage & complimentary"
           subtitle="Reconcile finished portions and review complimentary servings with their allocated ingredient use."
-          action={canManageInventory && (
-            <Button size="sm" icon={ClipboardList} onClick={openPreparedFoodCount}>
-              Reconcile food usage
-            </Button>
+          action={canWriteModule('food_production') && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" icon={Utensils} onClick={() => openPreparedFoodCount('complimentary')}>
+                Record complimentary
+              </Button>
+              <Button size="sm" icon={ClipboardList} onClick={() => openPreparedFoodCount('unrecorded_consumption')}>
+                Reconcile food usage
+              </Button>
+            </div>
           )}
         >
           <div className="grid gap-3 sm:grid-cols-2">
@@ -3057,7 +3210,7 @@ export const InventoryPage = () => {
         <Card
           title="Physical Stock Verification"
           subtitle="Compare usable physical stock with expected stock and classify use, wastage, and discrepancies"
-          action={canManageInventory && <Button size="sm" icon={ClipboardList} onClick={() => openStockVerification()}>Record Verification</Button>}
+          action={canWriteModule('stock_verification') && <Button size="sm" icon={ClipboardList} onClick={() => openStockVerification()}>Record Verification</Button>}
         >
           <div className="overflow-x-auto">
             <PaginatedTable tableClassName="w-full min-w-0 table-fixed break-words whitespace-normal text-left text-xs">
@@ -3093,7 +3246,7 @@ export const InventoryPage = () => {
             <div className="mt-5 border-t border-slate-100 pt-4">
               <h3 className="mb-3 text-sm font-bold text-slate-800">Due for verification</h3>
               <div className="flex flex-wrap gap-2">
-                {canManageInventory && dashboard.pendingVerificationItems.map((item) => (
+                {canWriteModule('stock_verification') && dashboard.pendingVerificationItems.map((item) => (
                   <Button key={item._id} size="sm" variant="outline" onClick={() => openStockVerification(item)}>
                     Verify {item.name}
                   </Button>
@@ -3118,7 +3271,7 @@ export const InventoryPage = () => {
                     <td><Badge variant={request.status}>{request.status.replace(/_/g, ' ')}</Badge></td>
                     <td>{dayjs(request.createdAt).format('YYYY-MM-DD')}</td>
                     <td className="text-right">
-                      {canManageInventory && request.status === 'pending' && (
+                      {canWriteModule('raw_materials') && request.status === 'pending' && (
                         <div className="flex justify-end gap-2">
                           <Button size="sm" variant="success" onClick={() => handleReviewDepartmentRequest(request, 'approve')}>Approve & Issue</Button>
                           <Button size="sm" variant="danger" onClick={() => handleReviewDepartmentRequest(request, 'reject')}>Reject</Button>
@@ -3172,7 +3325,7 @@ export const InventoryPage = () => {
 
       {activeTab === 'recipes' && (
         <div className="space-y-4">
-          {canManageInventory && (
+          {canWriteModule('inventory') && (
             <Card title="Recipe Deduction Stage" subtitle="Choose when a kitchen order consumes its recipe ingredients">
               <div className="max-w-sm">
                 <Select
@@ -3190,7 +3343,7 @@ export const InventoryPage = () => {
           <Card
             title="Restaurant Recipes"
             subtitle="Recipe versions retain ingredient history and show yield-aware cost and profit estimates"
-            action={canManageInventory ? (
+            action={canWriteModule('restaurant_recipes') ? (
               <Button size="sm" icon={PlusCircle} onClick={() => {
                 setEditingRecipe(null);
                 setRecipeForm({
@@ -3305,7 +3458,7 @@ export const InventoryPage = () => {
                       </div>
                       <div className="col-span-2 min-w-0">
                         <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Actions</p>
-                        {canManageInventory && (
+                        {canWriteModule('restaurant_recipes') && (
                           <div className="mt-1 flex flex-wrap gap-1">
                             <Button size="sm" variant="outline" icon={Pencil} onClick={() => handleEditRecipe(recipe)}>Edit</Button>
                             <Button size="sm" variant="outline" onClick={() => handleRecipeStatusChange(recipe)}>{recipe.isActive ? 'Deactivate' : 'Activate'}</Button>
@@ -3407,7 +3560,7 @@ export const InventoryPage = () => {
                       ))}
                     </div>
                   </dl>
-                  {canManageInventory && (
+                  {canWriteModule('restaurant_recipes') && (
                     <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
                       <Button size="sm" variant="outline" icon={Pencil} onClick={() => handleEditRecipe(recipe)}>Edit</Button>
                       <Button size="sm" variant="outline" onClick={() => handleRecipeStatusChange(recipe)}>{recipe.isActive ? 'Deactivate' : 'Activate'}</Button>
@@ -3440,7 +3593,7 @@ export const InventoryPage = () => {
             {!minibarRoomId ? (
               <p className="py-8 text-center text-sm text-slate-400">Choose a room to view or reconcile minibar stock.</p>
             ) : !minibarData ? (
-              <LoadingSpinner text="Loading room minibar..." />
+              <DataSkeleton variant="cards" rows={4} label="Loading room minibar" />
             ) : (
               <form onSubmit={handleMinibarReconciliation} className="space-y-4">
                 <div className="overflow-x-auto">
@@ -3661,7 +3814,7 @@ export const InventoryPage = () => {
           )}
           {loadingReport && (
             <div className="mt-5 rounded-2xl border border-[#eadfce] bg-[#faf7f0]" role="status">
-              <LoadingSpinner size="sm" text="Preparing your report…" />
+              <DataSkeleton rows={4} columns={4} label="Preparing inventory report" />
             </div>
           )}
           {!loadingReport && !report.length && (
@@ -4187,7 +4340,7 @@ export const InventoryPage = () => {
                                 </div>
                                 {loadingBatchesByItem[row.key] ? (
                                   <div className="p-5">
-                                    <LoadingSpinner text="Loading batch details..." />
+                                    <DataSkeleton rows={3} columns={4} label="Loading batch details" />
                                   </div>
                                 ) : batchErrorsByItem[row.key] ? (
                                   <div className="m-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
@@ -4820,7 +4973,7 @@ export const InventoryPage = () => {
                   <h3 className="text-sm font-bold text-slate-800">Units for this raw material</h3>
                   <p className="mt-1 text-xs text-slate-500">Choose the stock unit and purchase packages here. Quantities are converted to the base unit.</p>
                 </div>
-                {canManageInventory && (
+                {canWriteModule('raw_materials') && (
                   <div className="flex flex-wrap gap-2">
                     {!units.some((unit) => unit.isActive) && (
                       <Button type="button" size="sm" variant="outline" onClick={handleCreateDefaultUnits}>Add standard units</Button>
@@ -4840,7 +4993,7 @@ export const InventoryPage = () => {
                 )}
               </div>
             </div>
-            {isUnitFormOpen && canManageInventory && (
+            {isUnitFormOpen && canWriteModule('raw_materials') && (
               <div className="mb-4 rounded-xl border border-[#eadfce] bg-white p-3">
                 <p className="mb-3 text-xs font-semibold text-slate-700">Add a reusable unit</p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -5666,8 +5819,10 @@ export const InventoryPage = () => {
       <Modal
         isOpen={preparedFoodCountOpen}
         onClose={() => !preparedFoodCountSaving && setPreparedFoodCountOpen(false)}
-        title="Reconcile prepared-food usage"
-        subtitle="Enter additional portions used but not recorded yet. New portions are added to the batch's existing recorded usage."
+        title={preparedFoodCountMode === 'complimentary' ? 'Record complimentary use' : 'Record unrecorded use'}
+        subtitle={preparedFoodCountMode === 'complimentary'
+          ? 'Record complimentary portions or raw-material use. Inventory is deducted at recorded cost and shown in complimentary reporting.'
+          : 'Record usage that was not entered earlier. Choose a prepared batch, made-to-order menu item, or raw material.'}
         maxWidth="max-w-2xl"
         footer={
           <>
@@ -5684,34 +5839,85 @@ export const InventoryPage = () => {
                 || preparedFoodCountExceedsAvailable
               }
             >
-              {preparedFoodCountSaving ? 'Recording…' : 'Record difference'}
+              {preparedFoodCountSaving ? 'Recording…' : 'Record usage'}
             </Button>
           </>
         }
       >
         <form id="prepared-food-count-form" className="space-y-4" onSubmit={submitPreparedFoodCount}>
           <Select
-            label="Prepared-food batch"
+          label="Usage source"
             required
-            searchable
-            placeholder={preparedFoodBatchesLoading ? 'Loading batches…' : 'Choose item and batch'}
-            value={preparedFoodCountForm.batchId}
-            onChange={(event) => {
-              const batchId = event.target.value;
-              setPreparedFoodCountForm((current) => ({
-                ...current,
-                batchId,
-                actualQuantity: ''
-              }));
-              setPreparedFoodCountError('');
-            }}
-            options={preparedFoodBatches
+          value={preparedFoodCountTargetType}
+          onChange={(event) => {
+            setPreparedFoodCountTargetType(event.target.value);
+            setPreparedFoodCountForm((current) => ({ ...current, batchId: '', actualQuantity: '' }));
+            setPreparedFoodCountError('');
+          }}
+          options={[
+            { label: 'Prepared food batch', value: 'batch' },
+            { label: 'Made-to-order menu item', value: 'menu_item' },
+            { label: 'Raw material', value: 'raw_material' }
+          ]}
+          />
+          <Select
+          label={preparedFoodCountTargetType === 'batch'
+            ? 'Prepared-food batch'
+            : preparedFoodCountTargetType === 'menu_item'
+              ? 'Made-to-order menu item'
+              : 'Raw material'}
+          required
+          searchable
+          placeholder={preparedFoodBatchesLoading ? 'Loading inventory…' : 'Choose an item'}
+          value={preparedFoodCountForm.batchId}
+          onChange={(event) => {
+            setPreparedFoodCountForm((current) => ({
+              ...current,
+              batchId: event.target.value,
+              actualQuantity: ''
+            }));
+            setPreparedFoodCountError('');
+          }}
+          options={preparedFoodCountTargetType === 'batch'
+            ? preparedFoodBatches
               .filter((batch) => Number(batch.availableQuantity) > 0)
               .map((batch) => ({
                 value: batch._id,
                 label: `${batch.menuItemName || 'Prepared food'} · ${batch.batchNumber} · ${Number(batch.availableQuantity).toLocaleString()} portions`
-              }))}
+              }))
+            : preparedFoodCountTargetType === 'menu_item'
+              ? recipes
+                .filter((recipe) => recipe.isActive !== false && recipe.productionMode === 'made_to_order')
+                .map((recipe) => ({
+                  value: recipe._id,
+                  label: `${recipe.menuItemId?.name || recipe.recipeName || 'Menu item'} · Made to order`
+                }))
+              : items
+                .filter((item) => item.inventoryType === 'raw_material' && item.isActive !== false)
+                .map((item) => ({
+                  value: item._id,
+                  label: `${item.name} · ${item.baseUnit || item.unit || 'unit'}`
+                }))}
           />
+          {preparedFoodCountTargetType === 'raw_material' && selectedDirectRawMaterial && (
+            <Select
+              label="Stock location"
+              required
+              value={preparedFoodCountForm.location}
+              onChange={(event) => setPreparedFoodCountForm((current) => ({
+                ...current,
+                location: event.target.value
+              }))}
+              options={storageLocations.filter((entry) => entry.isActive !== false).length
+                ? storageLocations
+                  .filter((entry) => entry.isActive !== false)
+                  .map((entry) => ({
+                    value: entry.locationName,
+                    label: entry.locationName
+                  }))
+                : [{ value: 'Main Store', label: 'Main Store' }]}
+            />
+          )}
           {selectedPreparedFoodBatch && (
             <div className="grid gap-3 rounded-xl border border-[#eee5d8] bg-[#fdfbf8] p-4 sm:grid-cols-2">
               <div>
@@ -5738,19 +5944,54 @@ export const InventoryPage = () => {
               </div>
             </div>
           )}
+          {selectedDirectTarget && (
+            <div className="grid gap-3 rounded-xl border border-[#eee5d8] bg-[#fdfbf8] p-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {preparedFoodCountTargetType === 'menu_item' ? 'Menu item' : 'Raw material'}
+                </p>
+                <p className="mt-1 text-lg font-bold text-slate-900">
+                  {preparedFoodCountTargetType === 'menu_item'
+                    ? selectedDirectMenuRecipe.menuItemId?.name || selectedDirectMenuRecipe.recipeName
+                    : selectedDirectRawMaterial.name}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {preparedFoodCountTargetType === 'menu_item' ? 'Recipe cost / serving' : `Current unit cost / ${directUsageUnit}`}
+                </p>
+                <p className="mt-1 text-lg font-bold text-slate-900">
+                  {canManageInventory && selectedDirectUnitCost > 0
+                    ? formatCurrency(selectedDirectUnitCost)
+                    : 'Cost calculated from stock'}
+                </p>
+              </div>
+              {preparedFoodCountTargetType === 'menu_item' && (
+                <p className="text-xs text-slate-500 sm:col-span-2">
+                  Ingredient usage will be deducted using the active made-to-order recipe. Batch-production recipes should be recorded against a prepared batch.
+                </p>
+              )}
+            </div>
+          )}
           <Input
-            label="Additional portions used"
+            label={preparedFoodCountTargetType === 'raw_material'
+              ? preparedFoodCountMode === 'complimentary' ? 'Complimentary raw-material quantity' : 'Additional raw-material quantity used'
+              : preparedFoodCountMode === 'complimentary' ? 'Complimentary portions' : 'Additional portions used'}
             type="number"
             min="0"
-            max={Number(selectedPreparedFoodBatch?.availableQuantity || 0)}
+            max={selectedPreparedFoodBatch ? Number(selectedPreparedFoodBatch.availableQuantity || 0) : undefined}
             step="0.001"
             required
-            disabled={!selectedPreparedFoodBatch}
+            disabled={!selectedPreparedFoodBatch && !selectedDirectTarget}
             value={preparedFoodCountForm.actualQuantity}
             onChange={(event) => setPreparedFoodCountForm((current) => ({ ...current, actualQuantity: event.target.value }))}
-            helperText={`Enter only the extra portions used that are not recorded yet. Entering 1 adds one portion to the ${preparedFoodRecordedUsed} already recorded. Up to ${Number(selectedPreparedFoodBatch?.availableQuantity || 0)} portions remain available.`}
+            helperText={preparedFoodCountTargetType === 'batch'
+              ? preparedFoodCountMode === 'complimentary'
+                ? `Enter complimentary portions to record. Up to ${Number(selectedPreparedFoodBatch?.availableQuantity || 0)} portions remain available.`
+                : `Enter only extra portions not recorded yet. Entering 1 adds one to the ${preparedFoodRecordedUsed} already recorded. Up to ${Number(selectedPreparedFoodBatch?.availableQuantity || 0)} remain.`
+              : `Enter the quantity to record in ${directUsageUnit}. Inventory will be deducted from the item's configured recipe or raw-material stock.`}
           />
-          {selectedPreparedFoodBatch && preparedFoodCountForm.actualQuantity !== '' && (
+          {(selectedPreparedFoodBatch || selectedDirectTarget) && preparedFoodCountForm.actualQuantity !== '' && (
             <div className={`rounded-xl border p-4 ${
               preparedFoodCountExceedsAvailable
                 ? 'border-rose-200 bg-rose-50'
@@ -5765,38 +6006,52 @@ export const InventoryPage = () => {
               ) : preparedFoodCountDifference > 0 ? (
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Additional unrecorded use</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                      {preparedFoodCountMode === 'complimentary' ? 'Complimentary portions to record' : 'Additional unrecorded use'}
+                    </p>
                     <p className="mt-1 text-2xl font-black text-amber-950 tabular-nums">
                       {preparedFoodCountDifference.toLocaleString(undefined, { maximumFractionDigits: 3 })}
                     </p>
                   </div>
-                  {canManageInventory && selectedPreparedFoodBatch.costPerPortion != null && (
+                  {canManageInventory && (selectedPreparedFoodBatch?.costPerPortion != null || selectedDirectUnitCost > 0) && (
                     <div className="text-left sm:text-right">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Estimated batch cost</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Estimated cost</p>
                       <p className="mt-1 text-lg font-bold text-amber-950">{formatCurrency(preparedFoodCountCost)}</p>
                     </div>
                   )}
-                  <p className="text-sm font-semibold text-amber-950">
-                    Total used after posting: {preparedFoodTotalUsed.toLocaleString(undefined, { maximumFractionDigits: 3 })} portions
-                  </p>
+                  {selectedPreparedFoodBatch && (
+                    <p className="text-sm font-semibold text-amber-950">
+                      Total used after posting: {preparedFoodTotalUsed.toLocaleString(undefined, { maximumFractionDigits: 3 })} portions
+                    </p>
+                  )}
                   <p className="w-full text-xs leading-relaxed text-amber-900">
-                    This difference will reduce available batch portions and appear as unrecorded prepared-food cost in Profit & Loss.
+                    {selectedPreparedFoodBatch
+                      ? preparedFoodCountMode === 'complimentary'
+                        ? 'These portions will be deducted from the batch and included in complimentary food cost.'
+                        : 'This difference will reduce available batch portions and appear as unrecorded prepared-food cost in Profit & Loss.'
+                      : preparedFoodCountMode === 'complimentary'
+                        ? 'Raw-material stock will be deducted and the cost will appear in complimentary reporting.'
+                        : 'Raw-material stock will be deducted and the cost will appear as unrecorded use, separate from wastage.'}
                   </p>
                 </div>
               ) : (
                 <p className="text-sm font-semibold text-emerald-900">
-                  Enter the additional portions used. This will be added to the {preparedFoodRecordedUsed} already recorded.
+                  {preparedFoodCountMode === 'complimentary'
+                    ? 'Enter the number of portions to provide as complimentary.'
+                    : `Enter the additional portions used. This will be added to the ${preparedFoodRecordedUsed} already recorded.`}
                 </p>
               )}
             </div>
           )}
           <Input
-            label="Reason for discrepancy"
+            label={preparedFoodCountMode === 'complimentary' ? 'Reason for complimentary serving' : 'Reason for discrepancy'}
             required
             maxLength={500}
             value={preparedFoodCountForm.reason}
             onChange={(event) => setPreparedFoodCountForm((current) => ({ ...current, reason: event.target.value }))}
-            placeholder="For example: unrecorded serving during shift"
+            placeholder={preparedFoodCountMode === 'complimentary'
+              ? 'For example: guest recovery or management approval'
+              : 'For example: unrecorded serving during shift'}
           />
           {preparedFoodCountError && (
             <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">

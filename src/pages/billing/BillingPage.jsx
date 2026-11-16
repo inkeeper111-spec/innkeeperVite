@@ -7,7 +7,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { useCurrency } from '../../hooks/useCurrency';
 import {
   Receipt,
@@ -245,7 +245,7 @@ export const BillingPage = () => {
 
           <Card>
             {loading ? (
-              <LoadingSpinner text="Loading invoices..." />
+              <DataSkeleton rows={6} columns={5} label="Loading invoices" />
             ) : filteredInvoices.length === 0 ? (
               <div className="py-12 text-center text-slate-400 text-xs">
                 No invoices found.
@@ -320,7 +320,7 @@ export const BillingPage = () => {
       {activeTab === 'payments' && (
         <Card>
           {loading ? (
-            <LoadingSpinner text="Loading payment transactions..." />
+            <DataSkeleton rows={6} columns={5} label="Loading payment transactions" />
           ) : payments.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
               No payments recorded yet.

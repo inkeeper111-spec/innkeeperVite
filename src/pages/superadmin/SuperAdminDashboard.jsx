@@ -7,7 +7,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Select } from '../../components/ui/Select';
 import { Input } from '../../components/ui/Input';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import {
   ShieldCheck, Building2, Users, CreditCard, CheckCircle, XCircle,
   FileText, Search, CheckCircle2, TrendingUp, Globe, AlertCircle,
@@ -204,7 +204,7 @@ export const SuperAdminDashboard = ({ initialTab = 'approvals' }) => {
     return true;
   });
 
-  if (loading) return <LoadingSpinner text="Connecting to Platform Control Layer..." />;
+  if (loading) return <DataSkeleton variant="page" rows={6} columns={5} label="Loading platform controls" />;
 
   return (
     <div className="space-y-6">

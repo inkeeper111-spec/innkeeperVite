@@ -17,7 +17,7 @@ import { useNotifications } from '../../contexts/NotificationContext';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { Select } from '../../components/ui/Select';
 
 dayjs.extend(relativeTime);
@@ -198,7 +198,7 @@ export const NotificationsPage = () => {
       {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">{error}</div>}
 
       <Card>
-        {loading ? <LoadingSpinner text="Loading notifications..." /> : notifications.length === 0 ? (
+        {loading ? <DataSkeleton variant="list" rows={6} label="Loading notifications" /> : notifications.length === 0 ? (
           <div className="py-16 text-center">
             <Bell className="mx-auto mb-3 h-10 w-10 text-slate-200" />
             <p className="text-sm font-semibold text-slate-400">No notifications found</p>

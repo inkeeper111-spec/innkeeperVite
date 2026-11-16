@@ -7,7 +7,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { DollarSign, PlusCircle, Filter, CheckCircle2, TrendingDown } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useCurrency } from '../../hooks/useCurrency';
@@ -149,7 +149,7 @@ export const ExpensesPage = () => {
       {/* Expenses Table */}
       <Card>
         {loading ? (
-          <LoadingSpinner text="Retrieving expense ledger..." />
+          <DataSkeleton rows={6} columns={5} label="Loading expense ledger" />
         ) : filteredExpenses.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-xs">
             No expenses recorded for this filter.

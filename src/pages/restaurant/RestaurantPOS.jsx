@@ -7,7 +7,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../hooks/useCurrency';
 import {
@@ -646,7 +646,7 @@ export const RestaurantPOS = () => {
             </Button>
           </div>
           {loading ? (
-            <LoadingSpinner text="Loading restaurant tables..." />
+            <DataSkeleton variant="cards" rows={4} label="Loading restaurant tables" />
           ) : tables.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">No tables configured for this restaurant.</p>
           ) : (
@@ -815,7 +815,7 @@ export const RestaurantPOS = () => {
                 </p>
               </div>
               {loading ? (
-                <LoadingSpinner text="Loading restaurant tables..." />
+                <DataSkeleton variant="cards" rows={3} label="Loading restaurant tables" />
               ) : activeTables.length === 0 ? (
                 <p className="py-8 text-center text-sm text-rose-600">No active restaurant tables are configured.</p>
               ) : (
@@ -952,7 +952,7 @@ export const RestaurantPOS = () => {
 
             {/* Menu Items Grid */}
             {loading ? (
-              <LoadingSpinner text="Loading culinary menu..." />
+              <DataSkeleton variant="cards" rows={6} label="Loading culinary menu" />
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {filteredItems.map((item) => {
@@ -1167,7 +1167,7 @@ export const RestaurantPOS = () => {
       {activeView === 'bills' && !showTableManagement && (
         <div className="space-y-4">
           {loading ? (
-            <LoadingSpinner text="Loading table bills..." />
+            <DataSkeleton rows={5} columns={4} label="Loading table bills" />
           ) : (
             <>
               <Card className="space-y-4">
@@ -1373,6 +1373,11 @@ export const RestaurantPOS = () => {
                                   <span>{item.quantity} × {formatCurrency(item.unitPrice)}</span>
                                   <span>{formatCurrency(item.amount)}</span>
                                 </div>
+                                {Number(item.menuDiscountAmount || 0) > 0 && (
+                                  <p className="mt-0.5 text-right text-[10px]">
+                                    Item discount −{formatCurrency(item.menuDiscountAmount)}
+                                  </p>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -1442,6 +1447,11 @@ export const RestaurantPOS = () => {
                             <div className="min-w-0">
                               <p className="truncate font-semibold text-slate-800">{item.name}</p>
                               <p className="text-slate-500">Qty {item.quantity}</p>
+                              {Number(item.menuDiscountAmount || 0) > 0 && (
+                                <p className="text-[10px] font-semibold text-emerald-700">
+                                  Item discount −{formatCurrency(item.menuDiscountAmount)}
+                                </p>
+                              )}
                             </div>
                             {editing ? (
                               <div className="flex w-28 items-center rounded border border-slate-200 bg-white px-2">
@@ -1495,6 +1505,11 @@ export const RestaurantPOS = () => {
                                   {item.name}
                                   {item.fulfillmentSource === 'batch_production' && (
                                     <span className="mt-1 block text-[10px] font-semibold text-amber-700">From bulk production</span>
+                                  )}
+                                  {Number(item.menuDiscountAmount || 0) > 0 && (
+                                    <span className="mt-1 block text-[10px] font-semibold text-emerald-700">
+                                      Menu discount −{formatCurrency(item.menuDiscountAmount)}
+                                    </span>
                                   )}
                                 </td>
                                 <td className="px-2 py-3 text-right text-slate-600">{item.quantity}</td>

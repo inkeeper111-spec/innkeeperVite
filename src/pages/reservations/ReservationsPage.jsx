@@ -8,7 +8,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Select } from '../../components/ui/Select';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { ReservationCheckoutModal } from '../../components/ui/ReservationCheckoutModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../hooks/useCurrency';
@@ -417,7 +417,7 @@ export const ReservationsPage = () => {
             )}
 
             {loadingRequests ? (
-              <LoadingSpinner text="Loading reservation requests..." />
+              <DataSkeleton rows={4} columns={4} label="Loading reservation requests" />
             ) : reservationRequests.length === 0 ? (
               <div className="py-6 text-center text-slate-400 text-xs">No pending reservation requests.</div>
             ) : (
@@ -541,7 +541,7 @@ export const ReservationsPage = () => {
       {/* Table */}
       <Card>
         {loading ? (
-          <LoadingSpinner text="Retrieving reservations..." />
+          <DataSkeleton rows={6} columns={5} label="Loading reservations" />
         ) : reservations.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-xs">
             No reservations found matching criteria.

@@ -7,7 +7,7 @@ import { useCurrency } from '../../hooks/useCurrency';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import {
   DoorOpen,
   DoorClosed,
@@ -63,7 +63,7 @@ export const Dashboard = () => {
   }, []);
 
   if (loading) {
-    return <LoadingSpinner text="Aggregating operational analytics..." />;
+    return <DataSkeleton variant="page" rows={6} columns={5} label="Loading operational analytics" />;
   }
 
   if (error || !data) {

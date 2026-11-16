@@ -4,7 +4,7 @@ import api from '../../api/axios';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { LogIn, LogOut, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import dayjs from 'dayjs';
@@ -117,7 +117,7 @@ export const MyAttendancePage = () => {
     }
   };
 
-  if (loading && !data) return <LoadingSpinner text="Loading your attendance..." />;
+  if (loading && !data) return <DataSkeleton variant="page" rows={4} columns={5} label="Loading your attendance" />;
 
   return (
     <div className="space-y-6">

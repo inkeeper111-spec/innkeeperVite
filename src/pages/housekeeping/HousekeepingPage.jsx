@@ -6,7 +6,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { DataSkeleton } from '../../components/ui/DataSkeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   Sparkles,
@@ -287,7 +287,7 @@ export const HousekeepingPage = () => {
 
       {/* Responsive Kanban Queue */}
       {loading ? (
-        <LoadingSpinner text="Retrieving housekeeping queue..." />
+        <DataSkeleton rows={6} columns={5} label="Loading housekeeping queue" />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           {STATUS_COLUMNS.map((column) => {

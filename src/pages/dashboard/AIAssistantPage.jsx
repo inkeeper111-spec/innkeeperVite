@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { NestnnLogo } from '../../components/ui/NestnnLogo';
 import { useCurrency } from '../../hooks/useCurrency';
 import {
   Bot,
@@ -198,7 +198,7 @@ export const AIAssistantPage = () => {
               )}
               {loading && (
                 <div className="flex items-center gap-2 text-slate-400 text-xs py-2">
-                  <Bot className="w-4 h-4 animate-spin text-brand-600" />
+                  <NestnnLogo variant="icon" size="xs" className="!h-5 !w-5 animate-pulse !rounded-full" />
                   <span>Aggregating database queries and computing metrics...</span>
                 </div>
               )}
