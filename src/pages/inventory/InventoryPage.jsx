@@ -49,6 +49,7 @@ import {
   Tooltip, XAxis, YAxis
 } from 'recharts';
 import { useStorageLocations } from './useStorageLocations';
+import { MenuItemModal } from '../restaurant/MenuItemModal';
 
 const getDateInTimeZone = (timeZone = 'UTC') => {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -66,6 +67,9 @@ export const InventoryPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const canManageInventory = ['hotel_admin', 'super_admin'].includes(user?.role);
+  const canWriteMenu = canManageInventory
+    || user?.permissions?.['menu_management.create'] === true
+    || user?.permissions?.['menu_management.update'] === true;
   const canWriteModule = (moduleKey) => canManageInventory
     || user?.permissions?.[`${moduleKey}.create`] === true
     || user?.permissions?.[`${moduleKey}.update`] === true;
@@ -149,6 +153,10 @@ export const InventoryPage = () => {
   const [departmentRequests, setDepartmentRequests] = useState([]);
   const [adjustments, setAdjustments] = useState([]);
   const [recipes, setRecipes] = useState([]);
+  const [expandedRecipeId, setExpandedRecipeId] = useState('');
+  const [recipeBatchDetails, setRecipeBatchDetails] = useState(null);
+  const [recipeBatchDetailsLoading, setRecipeBatchDetailsLoading] = useState(false);
+  const [recipeBatchDetailsError, setRecipeBatchDetailsError] = useState('');
   const [reorderSuggestions, setReorderSuggestions] = useState([]);
   const [expandedBatchItemId, setExpandedBatchItemId] = useState('');
   const [expandedReportBatchItemId, setExpandedReportBatchItemId] = useState('');
@@ -201,6 +209,7 @@ export const InventoryPage = () => {
   const [isPurchaseOrderOpen, setIsPurchaseOrderOpen] = useState(false);
   const [isDepartmentRequestOpen, setIsDepartmentRequestOpen] = useState(false);
   const [isRecipeOpen, setIsRecipeOpen] = useState(false);
+  const [isAddMenuItemOpen, setIsAddMenuItemOpen] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState(null);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isReceivingOpen, setIsReceivingOpen] = useState(false);
@@ -311,6 +320,7 @@ export const InventoryPage = () => {
   const [receivingLocation, setReceivingLocation] = useState('Main Store');
   const [receivingLocationId, setReceivingLocationId] = useState('');
   const [menuItems, setMenuItems] = useState([]);
+  const [menuCategories, setMenuCategories] = useState([]);
   const [minibarRooms, setMinibarRooms] = useState([]);
   const [minibarRoomId, setMinibarRoomId] = useState('');
   const [minibarData, setMinibarData] = useState(null);
@@ -558,9 +568,42 @@ export const InventoryPage = () => {
   useEffect(() => {
     if (activeTab !== 'recipes' || !canReadRecipes) return;
     api.get('/restaurant/menu')
-      .then(({ data }) => setMenuItems(data.data?.items || []))
+      .then(({ data }) => {
+        setMenuItems(data.data?.items || []);
+        setMenuCategories(data.data?.categories || []);
+      })
       .catch((err) => showApiErrorToast(err, 'Could not load restaurant menu items'));
   }, [activeTab, canReadRecipes]);
+
+  useEffect(() => {
+    if (!expandedRecipeId) {
+      setRecipeBatchDetails(null);
+      setRecipeBatchDetailsError('');
+      setRecipeBatchDetailsLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setRecipeBatchDetails(null);
+    setRecipeBatchDetailsError('');
+    setRecipeBatchDetailsLoading(true);
+    api.get(`/inventory/recipes/${expandedRecipeId}/ingredient-batches`)
+      .then(({ data }) => {
+        if (!cancelled) setRecipeBatchDetails(data.data);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setRecipeBatchDetailsError(error.response?.data?.message || 'Could not load ingredient batch details.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRecipeBatchDetailsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [expandedRecipeId]);
 
   useEffect(() => {
     if (activeTab !== 'minibar') return;
@@ -947,6 +990,7 @@ export const InventoryPage = () => {
         ...verificationForm,
         actualStock: Number(verificationForm.actualStock),
         consumptionQuantity: Number(verificationForm.consumptionQuantity || 0),
+        department: verificationForm.consumptionDepartment,
         wastageQuantity: Number(verificationForm.wastageQuantity || 0),
         consumptionUnit: verificationForm.consumptionUnit || verificationForm.unit,
         wastageUnit: verificationForm.wastageUnit || verificationForm.unit,
@@ -1026,8 +1070,25 @@ export const InventoryPage = () => {
     try {
       const res = await api.post('/inventory/vendors', vendorForm);
       if (res.data.success) {
+        const createdVendor = res.data.data;
+        if (createdVendor?._id) {
+          setVendors((current) => [
+            ...current.filter((vendor) => String(vendor._id) !== String(createdVendor._id)),
+            createdVendor
+          ].sort((left, right) => left.name.localeCompare(right.name)));
+          setItemForm((current) => ({ ...current, vendorId: String(createdVendor._id) }));
+        }
         setIsAddVendorOpen(false);
-        setMessage(`Vendor ${vendorForm.name} registered.`);
+        setVendorForm({
+          name: '',
+          contactPerson: '',
+          phone: '',
+          email: '',
+          address: '',
+          taxNumber: '',
+          paymentTerms: 'Net 30'
+        });
+        setMessage(`Vendor ${createdVendor?.name || vendorForm.name} registered.`);
         fetchInventory();
         setTimeout(() => setMessage(''), 3000);
       }
@@ -1421,6 +1482,19 @@ export const InventoryPage = () => {
       })
     });
     setIsRecipeOpen(true);
+  };
+
+  const handleMenuItemSaved = ({ item }) => {
+    if (!item?._id) {
+      showApiErrorToast(new Error('The saved menu item response did not include an item ID.'), 'Could not select the new menu item');
+      return;
+    }
+    setMenuItems((current) => [...current.filter((menuItem) => menuItem._id !== item._id), item]);
+    setRecipeForm((current) => ({
+      ...current,
+      menuItemId: item._id,
+      recipeName: current.recipeName || item.name
+    }));
   };
 
   const handleRecipeStatusChange = async (recipe) => {
@@ -1903,8 +1977,37 @@ export const InventoryPage = () => {
   const verificationActualStock = Math.max(0, Number(verificationForm.actualStock) || 0) * verificationUnitFactor;
   const verificationConsumption = Math.max(0, Number(verificationForm.consumptionQuantity) || 0)
     * conversionFactorForItem(selectedVerificationItem, verificationForm.consumptionUnit || verificationForm.unit);
+  const estimateVerificationCost = (quantity) => {
+    let remainingQuantity = quantity;
+    let totalCost = 0;
+    const hasExpiryBatches = verificationLocationBatches.some((batch) => batch.expiryDate);
+    const orderedBatches = verificationLocationBatches
+      .filter((batch) => Number(batch.remainingQuantity) > 0
+        && (!selectedVerificationItem?.trackExpiry && !hasExpiryBatches
+          || !batch.expiryDate || new Date(batch.expiryDate) > new Date()))
+      .sort((left, right) => {
+        if (selectedVerificationItem?.trackExpiry || hasExpiryBatches) {
+          const leftExpiry = left.expiryDate ? new Date(left.expiryDate).getTime() : Number.POSITIVE_INFINITY;
+          const rightExpiry = right.expiryDate ? new Date(right.expiryDate).getTime() : Number.POSITIVE_INFINITY;
+          if (leftExpiry !== rightExpiry) return leftExpiry - rightExpiry;
+        }
+        return new Date(left.receivedAt).getTime() - new Date(right.receivedAt).getTime()
+          || String(left._id).localeCompare(String(right._id));
+      });
+    orderedBatches.forEach((batch) => {
+      const usedQuantity = Math.min(remainingQuantity, Number(batch.remainingQuantity) || 0);
+      totalCost += usedQuantity * (Number(batch.unitCost) || 0);
+      remainingQuantity = Math.max(0, remainingQuantity - usedQuantity);
+    });
+    if (remainingQuantity > 0) {
+      totalCost += remainingQuantity * (Number(selectedVerificationItem?.unitCost) || 0);
+    }
+    return totalCost;
+  };
+  const verificationConsumptionCost = estimateVerificationCost(verificationConsumption);
   const verificationWastage = Math.max(0, Number(verificationForm.wastageQuantity) || 0)
     * conversionFactorForItem(selectedVerificationItem, verificationForm.wastageUnit || verificationForm.unit);
+  const verificationWastageCost = estimateVerificationCost(verificationWastage);
   const verificationReduction = Math.max(0, verificationExpectedStock - verificationActualStock);
   const verificationDiscrepancy = Math.max(
     0,
@@ -2146,6 +2249,142 @@ export const InventoryPage = () => {
     && preparedFoodAdditionalUsed > Number(selectedPreparedFoodBatch?.availableQuantity || 0);
   const preparedFoodCountCost = preparedFoodCountDifference
     * (Number(selectedPreparedFoodBatch?.costPerPortion) || selectedDirectUnitCost);
+
+  const renderRecipeIngredientBatchDetails = (recipe) => {
+    if (expandedRecipeId !== String(recipe._id)) return null;
+    const formatDetailQuantity = (quantity, unit) => (
+      `${Number(quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} ${unit || ''}`.trim()
+    );
+
+    return (
+      <section className="rounded-xl border border-orvelle-border bg-orvelle-ivory/30 p-3 sm:p-4">
+        <div className="mb-3">
+          <h4 className="text-sm font-semibold text-orvelle-primary">Ingredient batch breakdown</h4>
+          <p className="mt-1 text-xs text-orvelle-muted">
+            Estimated issue from {recipeBatchDetails?.location || recipe.location || 'the recipe location'} using current stock and batch order. Actual allocations may change before production.
+          </p>
+        </div>
+        {recipeBatchDetailsLoading ? (
+          <p className="py-4 text-center text-sm text-slate-500">Loading batch and purchase details...</p>
+        ) : recipeBatchDetailsError ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            <p role="alert">{recipeBatchDetailsError}</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setExpandedRecipeId('')}
+            >
+              Close
+            </Button>
+          </div>
+        ) : recipeBatchDetails?.ingredients?.length ? (
+          <div className="space-y-3">
+            {recipeBatchDetails.ingredients.map((ingredient) => (
+              <div key={ingredient.itemId} className="rounded-lg border border-slate-200 bg-white p-3">
+                <div className="mb-3">
+                  <p className="text-sm font-semibold text-slate-800">{ingredient.itemName}</p>
+                  <p className="text-xs text-slate-500">
+                    Full {recipe.productionMode === 'batch_production' ? 'batch' : 'recipe'}: {formatDetailQuantity(ingredient.recipeQuantity, ingredient.unit)}
+                    {!ingredient.optional && (
+                      <> · Estimated issue: {formatDetailQuantity(ingredient.requiredQuantity, ingredient.unit)}</>
+                    )}
+                    {ingredient.optional && <> · Optional ingredient (not included in estimated issue)</>}
+                  </p>
+                </div>
+                {(ingredient.allocations?.length > 0
+                  || ingredient.legacyAllocation
+                  || ingredient.shortageQuantity > 0) && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[1050px] text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wide text-slate-400">
+                          <th className="px-2 py-2">Source batch</th>
+                          <th className="px-2 py-2">Batch qty used</th>
+                          <th className="px-2 py-2">Available now</th>
+                          <th className="px-2 py-2">Cost / {ingredient.baseUnit}</th>
+                          <th className="px-2 py-2">Cost of used qty</th>
+                          <th className="px-2 py-2">Purchased qty</th>
+                          <th className="px-2 py-2">Purchase unit price</th>
+                          <th className="px-2 py-2">Purchase amount</th>
+                          <th className="px-2 py-2">Vendor / received</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {ingredient.allocations.map((allocation) => (
+                          <tr key={allocation.batchId}>
+                            <td className="px-2 py-2 font-medium text-slate-700">
+                              {allocation.batchNumber || 'Unnumbered batch'}
+                              <p className="font-normal text-slate-400">
+                                {allocation.expiryDate
+                                  ? `Expires ${dayjs(allocation.expiryDate).format('MMM D, YYYY')}`
+                                  : allocation.receivedAt
+                                    ? `Received ${dayjs(allocation.receivedAt).format('MMM D, YYYY')}`
+                                    : 'Expiry not recorded'}
+                              </p>
+                            </td>
+                            <td className="px-2 py-2">{formatDetailQuantity(allocation.quantityUsed, ingredient.baseUnit)}</td>
+                            <td className="px-2 py-2">{formatDetailQuantity(allocation.availableQuantity, ingredient.baseUnit)}</td>
+                            <td className="px-2 py-2">{formatCurrency(allocation.unitCost)}</td>
+                            <td className="px-2 py-2 font-semibold">{formatCurrency(allocation.totalCost)}</td>
+                            <td className="px-2 py-2">
+                              {allocation.purchaseQuantity == null
+                                ? formatDetailQuantity(allocation.purchasedBaseQuantity, ingredient.baseUnit)
+                                : formatDetailQuantity(allocation.purchaseQuantity, allocation.purchaseUnit || ingredient.baseUnit)}
+                            </td>
+                            <td className="px-2 py-2">
+                              {allocation.purchaseUnitCost == null
+                                ? 'Not recorded'
+                                : `${formatCurrency(allocation.purchaseUnitCost)} / ${allocation.purchaseUnit || ingredient.baseUnit}`}
+                            </td>
+                            <td className="px-2 py-2">
+                              {allocation.purchaseAmount == null ? 'Not recorded' : formatCurrency(allocation.purchaseAmount)}
+                            </td>
+                            <td className="px-2 py-2">
+                              {allocation.vendorName || 'Vendor not recorded'}
+                              <p className="text-slate-400">{allocation.receivedAt ? dayjs(allocation.receivedAt).format('MMM D, YYYY') : 'Date not recorded'}</p>
+                            </td>
+                          </tr>
+                        ))}
+                        {ingredient.legacyAllocation && (
+                          <tr>
+                            <td className="px-2 py-2 font-medium text-slate-700">Unbatched stock</td>
+                            <td className="px-2 py-2">{formatDetailQuantity(ingredient.legacyAllocation.quantityUsed, ingredient.baseUnit)}</td>
+                            <td className="px-2 py-2">Batch unavailable</td>
+                            <td className="px-2 py-2">{formatCurrency(ingredient.legacyAllocation.unitCost)}</td>
+                            <td className="px-2 py-2 font-semibold">{formatCurrency(ingredient.legacyAllocation.totalCost)}</td>
+                            <td className="px-2 py-2" colSpan="4">Purchase batch details not recorded</td>
+                          </tr>
+                        )}
+                        {ingredient.shortageQuantity > 0 && (
+                          <tr>
+                            <td className="px-2 py-2 font-medium text-rose-700" colSpan="9">
+                              Insufficient eligible batch stock: {formatDetailQuantity(ingredient.shortageQuantity, ingredient.baseUnit)} still required.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {ingredient.optional && (
+                  <p className="text-xs text-slate-500">Optional ingredients are not included in the planned quantity or batch allocation.</p>
+                )}
+                {!ingredient.optional
+                  && !ingredient.allocations?.length
+                  && !ingredient.legacyAllocation
+                  && ingredient.shortageQuantity === 0 && (
+                    <p className="text-xs text-slate-500">No current batch allocation is required.</p>
+                  )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="py-4 text-center text-sm text-slate-500">No ingredient batch details are available for this recipe.</p>
+        )}
+      </section>
+    );
+  };
 
   return (
     <div className="inventory-page w-full min-w-0 space-y-6">
@@ -3384,7 +3623,19 @@ export const InventoryPage = () => {
                       </div>
                       <div className="col-span-3 min-w-0">
                         <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Ingredients</p>
-                        <p className="mt-1 break-words">{recipe.ingredients.map((ingredient) => `${ingredient.itemId?.name || 'Item'} ${ingredient.quantity} ${ingredient.unit}${ingredient.optional ? ' (optional)' : ''}`).join(', ')}</p>
+                        <button
+                          type="button"
+                          aria-expanded={expandedRecipeId === String(recipe._id)}
+                          onClick={() => setExpandedRecipeId((current) => (
+                            current === String(recipe._id) ? '' : String(recipe._id)
+                          ))}
+                          className="mt-1 flex w-full items-start justify-between gap-2 break-words text-left hover:text-orvelle-champagne"
+                        >
+                          <span>{recipe.ingredients.map((ingredient) => `${ingredient.itemId?.name || 'Item'} ${ingredient.quantity} ${ingredient.unit}${ingredient.optional ? ' (optional)' : ''}`).join(', ')}</span>
+                          {expandedRecipeId === String(recipe._id)
+                            ? <ChevronUp className="mt-0.5 h-4 w-4 shrink-0" />
+                            : <ChevronDown className="mt-0.5 h-4 w-4 shrink-0" />}
+                        </button>
                       </div>
                       <div className="col-span-2 min-w-0 text-right">
                         <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Total recipe cost</p>
@@ -3397,6 +3648,7 @@ export const InventoryPage = () => {
                         <p className="text-slate-400">usable serving</p>
                       </div>
                     </div>
+                    {renderRecipeIngredientBatchDetails(recipe)}
                     <div className="grid grid-cols-12 items-start gap-3 border-t border-slate-100 pt-3">
                       <div className="col-span-2 min-w-0">
                         <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Selling price / serving</p>
@@ -3487,10 +3739,21 @@ export const InventoryPage = () => {
                   </div>
                   <div className="mt-3 border-t border-slate-100 pt-3">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Version {recipe.version} · Ingredients</p>
-                    <p className="mt-1 break-words text-xs">
-                      {recipe.ingredients.map((ingredient) => `${ingredient.itemId?.name || 'Item'} ${ingredient.quantity} ${ingredient.unit}${ingredient.optional ? ' (optional)' : ''}`).join(', ')}
-                    </p>
+                    <button
+                      type="button"
+                      aria-expanded={expandedRecipeId === String(recipe._id)}
+                      onClick={() => setExpandedRecipeId((current) => (
+                        current === String(recipe._id) ? '' : String(recipe._id)
+                      ))}
+                      className="mt-1 flex w-full items-start justify-between gap-2 break-words text-left text-xs hover:text-orvelle-champagne"
+                    >
+                      <span>{recipe.ingredients.map((ingredient) => `${ingredient.itemId?.name || 'Item'} ${ingredient.quantity} ${ingredient.unit}${ingredient.optional ? ' (optional)' : ''}`).join(', ')}</span>
+                      {expandedRecipeId === String(recipe._id)
+                        ? <ChevronUp className="mt-0.5 h-4 w-4 shrink-0" />
+                        : <ChevronDown className="mt-0.5 h-4 w-4 shrink-0" />}
+                    </button>
                   </div>
+                  {renderRecipeIngredientBatchDetails(recipe)}
                   <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-slate-100 pt-3 text-xs">
                     <div className="min-w-0">
                       <dt className="text-slate-400">Total recipe cost</dt>
@@ -4599,6 +4862,7 @@ export const InventoryPage = () => {
       <Modal
         isOpen={isAddItemOpen}
         onClose={() => setIsAddItemOpen(false)}
+        closeOnEscape={!isAddVendorOpen}
         title="Add Raw Material Stock"
         subtitle="Receive stock against an existing raw material"
         maxWidth="max-w-4xl"
@@ -4871,21 +5135,48 @@ export const InventoryPage = () => {
             </div>
           )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Select
-              label="Vendor (optional)"
-              info="Select the vendor for this receipt if known. Leaving this blank does not prevent receiving stock."
-              searchable
-              searchPlaceholder="Search vendors..."
-              value={itemForm.vendorId}
-              onChange={(event) => setItemForm({ ...itemForm, vendorId: event.target.value })}
-              options={[
-                { label: 'No vendor selected', value: '' },
-                ...vendors.filter((vendor) => vendor.status === 'active').map((vendor) => ({
-                  label: vendor.name,
-                  value: vendor._id
-                }))
-              ]}
-            />
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <Select
+                  label="Vendor (optional)"
+                  info="Select the vendor for this receipt if known. Leaving this blank does not prevent receiving stock."
+                  searchable
+                  searchPlaceholder="Search vendors..."
+                  value={itemForm.vendorId}
+                  onChange={(event) => setItemForm({ ...itemForm, vendorId: event.target.value })}
+                  options={[
+                    { label: 'No vendor selected', value: '' },
+                    ...vendors.filter((vendor) => vendor.status === 'active').map((vendor) => ({
+                      label: vendor.name,
+                      value: vendor._id
+                    }))
+                  ]}
+                />
+              </div>
+              {canWriteModule('raw_materials') && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  icon={PlusCircle}
+                  aria-label="Add vendor"
+                  title="Add vendor"
+                  className="!h-10 !w-10 !shrink-0 !p-0"
+                  onClick={() => {
+                    setVendorForm({
+                      name: '',
+                      contactPerson: '',
+                      phone: '',
+                      email: '',
+                      address: '',
+                      taxNumber: '',
+                      paymentTerms: 'Net 30'
+                    });
+                    setIsAddVendorOpen(true);
+                  }}
+                />
+              )}
+            </div>
             <Select
               label="Stock location"
               searchable
@@ -5495,6 +5786,7 @@ export const InventoryPage = () => {
       <Modal
         isOpen={isRecipeOpen}
         onClose={() => setIsRecipeOpen(false)}
+        closeOnEscape={!isAddMenuItemOpen}
         title={editingRecipe ? 'Edit Recipe' : 'Create Recipe'}
         subtitle="Saving creates a new version and keeps historical order costs unchanged"
         maxWidth="max-w-6xl"
@@ -5529,14 +5821,41 @@ export const InventoryPage = () => {
               <p className="mt-1 text-xs text-orvelle-muted">Choose the menu item, then define the serving and production workflow.</p>
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Select label="Menu item" searchable searchPlaceholder="Search menu items..." required value={recipeForm.menuItemId} onChange={(e) => {
-                const menuItem = menuItems.find((entry) => entry._id === e.target.value);
-                setRecipeForm({
-                  ...recipeForm,
-                  menuItemId: e.target.value,
-                  recipeName: recipeForm.recipeName || menuItem?.name || ''
-                });
-              }} options={[{ label: 'Choose menu item', value: '' }, ...menuItems.map((menuItem) => ({ label: menuItem.name, value: menuItem._id }))]} />
+              <div>
+                <div className="mb-1.5 flex min-h-8 items-start justify-between gap-2">
+                  <label id="recipe-menu-item-label" className="min-w-0 flex-1 text-xs font-semibold leading-4 uppercase tracking-wider text-orvelle-primary">
+                    Menu item <span className="text-orvelle-error">*</span>
+                  </label>
+                  {canWriteMenu && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      icon={PlusCircle}
+                      aria-label="Add menu item"
+                      title="Add menu item"
+                      className="!h-7 !w-7 !shrink-0 !p-0"
+                      onClick={() => setIsAddMenuItemOpen(true)}
+                    />
+                  )}
+                </div>
+                <Select
+                  aria-labelledby="recipe-menu-item-label"
+                  searchable
+                  searchPlaceholder="Search menu items..."
+                  required
+                  value={recipeForm.menuItemId}
+                  onChange={(e) => {
+                    const menuItem = menuItems.find((entry) => entry._id === e.target.value);
+                    setRecipeForm({
+                      ...recipeForm,
+                      menuItemId: e.target.value,
+                      recipeName: recipeForm.recipeName || menuItem?.name || ''
+                    });
+                  }}
+                  options={[{ label: 'Choose menu item', value: '' }, ...menuItems.map((menuItem) => ({ label: menuItem.name, value: menuItem._id }))]}
+                />
+              </div>
               <Input label="Recipe name" required value={recipeForm.recipeName} onChange={(event) => setRecipeForm({ ...recipeForm, recipeName: event.target.value })} />
               <label className="block text-sm font-medium text-slate-700 md:col-span-2">
                 Description
@@ -5597,7 +5916,12 @@ export const InventoryPage = () => {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h4 className="text-sm font-semibold text-orvelle-primary">Ingredients</h4>
-                <p className="mt-1 text-xs text-orvelle-muted">Set quantities per serving and any optional substitutes.</p>
+                <p className="mt-1 text-xs text-orvelle-muted">
+                  {recipeForm.productionMode === 'batch_production'
+                    ? `Enter ingredient quantities for the full production batch of ${recipeForm.expectedProductionYield || 1} servings.`
+                    : `Enter ingredient quantities for the full individual recipe yield of ${recipeForm.expectedProductionYield || 1} serving${Number(recipeForm.expectedProductionYield || 1) === 1 ? '' : 's'}.`}
+                  {' '}Add any optional substitutes as needed.
+                </p>
               </div>
               <Button
                 type="button"
@@ -5672,6 +5996,13 @@ export const InventoryPage = () => {
           </section>
         </form>
       </Modal>
+
+      <MenuItemModal
+        isOpen={isAddMenuItemOpen}
+        onClose={() => setIsAddMenuItemOpen(false)}
+        categories={menuCategories}
+        onSaved={handleMenuItemSaved}
+      />
 
       <Modal isOpen={isTransferOpen} onClose={() => setIsTransferOpen(false)} title="Transfer Stock" subtitle="The source and destination ledgers update together">
         <form onSubmit={handleTransferStock} className="space-y-4">
@@ -6060,7 +6391,13 @@ export const InventoryPage = () => {
           )}
         </form>
       </Modal>
-      <Modal isOpen={isVerificationOpen} onClose={() => setIsVerificationOpen(false)} title="Verify Physical Stock" subtitle="Enter usable stock, then classify reductions as consumed or wasted">
+      <Modal
+        isOpen={isVerificationOpen}
+        onClose={() => setIsVerificationOpen(false)}
+        title="Verify Physical Stock"
+        subtitle="Enter usable stock, then classify reductions as consumed or wasted"
+        maxWidth="max-w-4xl"
+      >
         <form onSubmit={handleStockVerification} className="space-y-4">
           <Select
             label="Raw material"
@@ -6213,16 +6550,23 @@ export const InventoryPage = () => {
               />
               {verificationForm.hasUnrecordedConsumption === 'yes' && (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Input
-                    label="Consumption quantity"
-                    info="Enter only stock used during this period that has not already been recorded as an issue or other inventory movement."
-                    type="number"
-                    min="0.00000001"
-                    step="any"
-                    required
-                    value={verificationForm.consumptionQuantity}
-                    onChange={(event) => setVerificationForm({ ...verificationForm, consumptionQuantity: event.target.value })}
-                  />
+                  <div className="flex items-end gap-2">
+                    <Input
+                      label="Consumption quantity"
+                      info="Enter only stock used during this period that has not already been recorded as an issue or other inventory movement."
+                      type="number"
+                      min="0.00000001"
+                      step="any"
+                      required
+                      className="min-w-0"
+                      value={verificationForm.consumptionQuantity}
+                      onChange={(event) => setVerificationForm({ ...verificationForm, consumptionQuantity: event.target.value })}
+                    />
+                    <div className="mb-0.5 shrink-0 rounded-lg bg-sky-50 px-3 py-2 text-right text-xs text-sky-900">
+                      <p className="text-[10px] uppercase tracking-wide text-sky-700">Est. cost</p>
+                      <p className="whitespace-nowrap font-semibold">{formatCurrency(verificationConsumptionCost)}</p>
+                    </div>
+                  </div>
                   <Select
                     label="Consumption unit"
                     required
@@ -6231,16 +6575,13 @@ export const InventoryPage = () => {
                     onChange={(event) => setVerificationForm({ ...verificationForm, consumptionUnit: event.target.value })}
                     options={unitChoicesForItem(selectedVerificationItem, units)}
                   />
-                  <Select
+                  <Input
                     label="Department"
                     required
+                    maxLength={120}
+                    placeholder="e.g. Events, Kitchen, Housekeeping"
                     value={verificationForm.consumptionDepartment}
                     onChange={(event) => setVerificationForm({ ...verificationForm, consumptionDepartment: event.target.value })}
-                    options={[
-                      { label: 'Choose department', value: '' },
-                      ...['Kitchen', 'Restaurant', 'Production', 'Housekeeping', 'Maintenance', 'Minibar']
-                        .map((department) => ({ label: department, value: department }))
-                    ]}
                   />
                   <div className="sm:col-span-2">
                     <Input
@@ -6272,16 +6613,23 @@ export const InventoryPage = () => {
               />
               {verificationForm.hasWastage === 'yes' && (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Input
-                    label="Wastage quantity"
-                    info="Enter stock discarded, spoiled, or damaged during this period only if it has not already been recorded in inventory."
-                    type="number"
-                    min="0.00000001"
-                    step="any"
-                    required
-                    value={verificationForm.wastageQuantity}
-                    onChange={(event) => setVerificationForm({ ...verificationForm, wastageQuantity: event.target.value })}
-                  />
+                  <div className="flex items-end gap-2">
+                    <Input
+                      label="Wastage quantity"
+                      info="Enter stock discarded, spoiled, or damaged during this period only if it has not already been recorded in inventory."
+                      type="number"
+                      min="0.00000001"
+                      step="any"
+                      required
+                      className="min-w-0"
+                      value={verificationForm.wastageQuantity}
+                      onChange={(event) => setVerificationForm({ ...verificationForm, wastageQuantity: event.target.value })}
+                    />
+                    <div className="mb-0.5 shrink-0 rounded-lg bg-rose-50 px-3 py-2 text-right text-xs text-rose-900">
+                      <p className="text-[10px] uppercase tracking-wide text-rose-700">Est. cost</p>
+                      <p className="whitespace-nowrap font-semibold">{formatCurrency(verificationWastageCost)}</p>
+                    </div>
+                  </div>
                   <Select
                     label="Wastage unit"
                     required

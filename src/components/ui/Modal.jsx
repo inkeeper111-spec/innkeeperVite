@@ -10,6 +10,7 @@ export const Modal = ({
   children,
   maxWidth = 'max-w-xl',
   maxHeight = 'max-h-[100dvh] sm:max-h-[calc(100dvh-3rem)]',
+  zIndex = 'z-50',
   footer,
   closeOnEscape = true
 }) => {
@@ -36,7 +37,7 @@ export const Modal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden overscroll-none p-0 sm:items-center sm:p-5">
+    <div className={`fixed inset-0 ${zIndex} flex items-end justify-center overflow-hidden overscroll-none p-0 sm:items-center sm:p-5`}>
       {/* Backdrop */}
       <div
         aria-hidden="true"

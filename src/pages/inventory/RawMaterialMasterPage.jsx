@@ -66,6 +66,14 @@ const normalizeMaterialForm = (material, units = []) => {
     isDefaultPurchaseUnit: Boolean(entry.isDefaultPurchaseUnit),
     isActive: entry.isActive !== false
   }));
+  if (baseUnitId && !supportedUnits.some((entry) => entry.unitId === baseUnitId)) {
+    supportedUnits.push({
+      unitId: baseUnitId,
+      conversionFactorToBase: 1,
+      isDefaultPurchaseUnit: supportedUnits.every((entry) => !entry.isDefaultPurchaseUnit),
+      isActive: true
+    });
+  }
   const defaultStockUnit = supportedUnits.find((entry) => (
     entry.isActive !== false && entry.isDefaultPurchaseUnit && entry.unitId !== baseUnitId
   )) || supportedUnits.find((entry) => (
@@ -322,7 +330,10 @@ export const RawMaterialMasterPage = () => {
       if (editingCategory) {
         await api.patch(`/inventory/raw-materials/categories/${editingCategory._id}`, categoryForm);
       } else {
-        await api.post('/inventory/raw-materials/categories', categoryForm);
+        const { data } = await api.post('/inventory/raw-materials/categories', categoryForm);
+        if (materialModalOpen && data?.data?._id) {
+          setMaterialCategory(String(data.data._id));
+        }
       }
       resetCategory();
       await loadMasterData();
@@ -350,7 +361,10 @@ export const RawMaterialMasterPage = () => {
       if (editingSubcategory) {
         await api.patch(`/inventory/raw-materials/subcategories/${editingSubcategory._id}`, payload);
       } else {
-        await api.post('/inventory/raw-materials/subcategories', payload);
+        const { data } = await api.post('/inventory/raw-materials/subcategories', payload);
+        if (materialModalOpen && payload.categoryId === materialForm.categoryId && data?.data?._id) {
+          setMaterialForm((current) => ({ ...current, subcategoryId: String(data.data._id) }));
+        }
       }
       resetSubcategory();
       await loadSubcategories(payload.categoryId);
@@ -378,6 +392,7 @@ export const RawMaterialMasterPage = () => {
   const togglePurchaseUnit = (selectedUnit) => {
     const selectedId = unitId(selectedUnit);
     setMaterialForm((current) => {
+      if (selectedId === current.baseUnitId) return current;
       const updateThresholdUnits = (supportedUnits) => {
         const preferredUnitId = supportedUnits.find((entry) => (
           entry.isActive !== false && entry.isDefaultPurchaseUnit && entry.unitId !== current.baseUnitId
@@ -818,7 +833,7 @@ export const RawMaterialMasterPage = () => {
         </Card>
       )}
 
-      <Modal isOpen={categoryModalOpen} onClose={resetCategory} title={editingCategory ? 'Edit category' : 'Add category'}>
+      <Modal isOpen={categoryModalOpen} onClose={resetCategory} title={editingCategory ? 'Edit category' : 'Add category'} zIndex="z-[60]">
         <form onSubmit={saveCategory} className="space-y-4">
           <Input label="Category name" required value={categoryForm.name} onChange={(event) => setCategoryForm({ ...categoryForm, name: event.target.value })} />
           <Input label="Category code" value={categoryForm.categoryCode} onChange={(event) => setCategoryForm({ ...categoryForm, categoryCode: event.target.value })} />
@@ -828,7 +843,7 @@ export const RawMaterialMasterPage = () => {
         </form>
       </Modal>
 
-      <Modal isOpen={subcategoryModalOpen} onClose={resetSubcategory} title={editingSubcategory ? 'Edit subcategory' : 'Add subcategory'}>
+      <Modal isOpen={subcategoryModalOpen} onClose={resetSubcategory} title={editingSubcategory ? 'Edit subcategory' : 'Add subcategory'} zIndex="z-[60]">
         <form onSubmit={saveSubcategory} className="space-y-4">
           <Select label="Category" required value={subcategoryForm.categoryId || selectedCategoryId} onChange={(event) => setSubcategoryForm({ ...subcategoryForm, categoryId: event.target.value })} options={[{ label: 'Choose category', value: '' }, ...categories.map((category) => ({ label: category.name, value: category._id }))]} />
           <Input label="Subcategory name" required value={subcategoryForm.name} onChange={(event) => setSubcategoryForm({ ...subcategoryForm, name: event.target.value })} />
@@ -837,12 +852,69 @@ export const RawMaterialMasterPage = () => {
         </form>
       </Modal>
 
-      <Modal isOpen={materialModalOpen} onClose={() => setMaterialModalOpen(false)} title={editingMaterial ? 'Edit raw material' : 'Add raw material'} subtitle="Set the stockkeeping unit and supported purchase packs." maxWidth="max-w-3xl">
+      <Modal
+        isOpen={materialModalOpen}
+        onClose={() => setMaterialModalOpen(false)}
+        closeOnEscape={!categoryModalOpen && !subcategoryModalOpen && !unitModalOpen}
+        title={editingMaterial ? 'Edit raw material' : 'Add raw material'}
+        subtitle="Set the stockkeeping unit and supported purchase packs."
+        maxWidth="max-w-3xl"
+      >
         <form onSubmit={saveMaterial} className="space-y-5">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label="Material name" required value={materialForm.name} onChange={(event) => setMaterialForm({ ...materialForm, name: event.target.value })} />
-            <Select label="Category" required value={materialForm.categoryId} onChange={(event) => setMaterialCategory(event.target.value)} options={[{ label: 'Choose category', value: '' }, ...categories.filter((entry) => entry.isActive || entry._id === materialForm.categoryId).map((entry) => ({ label: entry.name, value: entry._id }))]} />
-            <Select label="Subcategory" value={materialForm.subcategoryId} disabled={!materialForm.categoryId} onChange={(event) => setMaterialForm({ ...materialForm, subcategoryId: event.target.value })} options={[{ label: 'No subcategory', value: '' }, ...subcategories.filter((entry) => entry.isActive || entry._id === materialForm.subcategoryId).map((entry) => ({ label: entry.name, value: entry._id }))]} />
+            <div className="flex items-end gap-2">
+              <Select
+                label="Category"
+                required
+                className="min-w-0 flex-1"
+                value={materialForm.categoryId}
+                onChange={(event) => setMaterialCategory(event.target.value)}
+                options={[{ label: 'Choose category', value: '' }, ...categories.filter((entry) => entry.isActive || entry._id === materialForm.categoryId).map((entry) => ({ label: entry.name, value: entry._id }))]}
+              />
+              {canManage && (
+                <button
+                  type="button"
+                  aria-label="Add category"
+                  title="Add category"
+                  onClick={() => {
+                    setEditingCategory(null);
+                    setCategoryForm(EMPTY_CATEGORY);
+                    setCategoryModalOpen(true);
+                  }}
+                  className="mb-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-orvelle-border text-orvelle-primary transition hover:border-orvelle-champagne hover:bg-orvelle-ivory focus:outline-none focus:ring-2 focus:ring-orvelle-champagne/40"
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <div className="flex items-end gap-2">
+              <Select
+                label="Subcategory"
+                className="min-w-0 flex-1"
+                value={materialForm.subcategoryId}
+                disabled={!materialForm.categoryId}
+                onChange={(event) => setMaterialForm({ ...materialForm, subcategoryId: event.target.value })}
+                options={[{ label: 'No subcategory', value: '' }, ...subcategories.filter((entry) => entry.isActive || entry._id === materialForm.subcategoryId).map((entry) => ({ label: entry.name, value: entry._id }))]}
+              />
+              {canManage && (
+                <button
+                  type="button"
+                  aria-label="Add subcategory under selected category"
+                  title={materialForm.categoryId ? 'Add subcategory' : 'Choose a category first'}
+                  disabled={!materialForm.categoryId}
+                  onClick={() => {
+                    setSelectedCategoryId(materialForm.categoryId);
+                    setEditingSubcategory(null);
+                    setSubcategoryForm({ ...EMPTY_SUBCATEGORY, categoryId: materialForm.categoryId });
+                    setSubcategoryModalOpen(true);
+                  }}
+                  className="mb-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-orvelle-border text-orvelle-primary transition hover:border-orvelle-champagne hover:bg-orvelle-ivory focus:outline-none focus:ring-2 focus:ring-orvelle-champagne/40 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
+            </div>
             <Input label="Storage type" value={materialForm.storageType} onChange={(event) => setMaterialForm({ ...materialForm, storageType: event.target.value })} placeholder="Ambient, chilled, frozen..." />
             <Select
               label="Preferred supplier"
@@ -874,18 +946,37 @@ export const RawMaterialMasterPage = () => {
                 setMaterialForm((current) => ({
                   ...current,
                   baseUnitId: event.target.value,
-                  supportedUnits: current.supportedUnits.filter((entry) => {
+                  supportedUnits: (() => {
+                    if (!nextBase) return [];
+                    const compatibleUnits = current.supportedUnits.filter((entry) => {
                     const purchaseUnit = units.find((unit) => unitId(unit) === entry.unitId);
                     return !isPackageUnit(purchaseUnit)
                       && nextBase
                       && getUnitConversionFactor(purchaseUnit, nextBase, units) > 0;
-                  }).map((entry) => {
+                    }).map((entry) => {
                     const purchaseUnit = units.find((unit) => unitId(unit) === entry.unitId);
                     return {
                       ...entry,
                       conversionFactorToBase: getUnitConversionFactor(purchaseUnit, nextBase, units) ?? ''
                     };
-                  })
+                    });
+                    const baseUnitId = unitId(nextBase);
+                    const selectedBaseUnit = compatibleUnits.find((entry) => entry.unitId === baseUnitId);
+                    const hasDefault = compatibleUnits.some((entry) => (
+                      entry.isActive !== false && entry.isDefaultPurchaseUnit
+                    ));
+                    if (selectedBaseUnit) {
+                      return compatibleUnits.map((entry) => entry === selectedBaseUnit
+                        ? { ...entry, conversionFactorToBase: 1, isActive: true }
+                        : entry);
+                    }
+                    return [...compatibleUnits, {
+                      unitId: baseUnitId,
+                      conversionFactorToBase: 1,
+                      isDefaultPurchaseUnit: !hasDefault,
+                      isActive: true
+                    }];
+                  })()
                 }));
               }} options={[{ label: 'Select', value: '' }, ...validBaseUnits.map((entry) => ({ label: `${entry.name} (${entry.symbol})`, value: unitId(entry) }))]} />
               <Select
@@ -911,17 +1002,19 @@ export const RawMaterialMasterPage = () => {
                 <p className="mb-2 text-xs text-orvelle-muted">Select all compatible units you accept for this material.</p>
                 <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto rounded-lg border border-slate-300 p-3 sm:grid-cols-2">
                   {validPurchaseUnits.map((unit) => {
-                    const selected = materialForm.supportedUnits.some((entry) => (
+                    const isBaseUnit = unitId(unit) === materialForm.baseUnitId;
+                    const selected = isBaseUnit || materialForm.supportedUnits.some((entry) => (
                       entry.unitId === unitId(unit) && entry.isActive !== false
                     ));
                     return <label key={unitId(unit)} className="flex cursor-pointer items-center gap-2 text-sm text-orvelle-text">
                       <input
                         type="checkbox"
                         checked={selected}
+                        disabled={isBaseUnit}
                         onChange={() => togglePurchaseUnit(unit)}
-                        className="rounded border-slate-300 text-orvelle-champagne focus:ring-orvelle-champagne"
+                        className="rounded border-slate-300 text-orvelle-champagne focus:ring-orvelle-champagne disabled:cursor-not-allowed disabled:opacity-70"
                       />
-                      <span>{unit.name} ({unit.symbol})</span>
+                      <span>{unit.name} ({unit.symbol}){isBaseUnit ? ' · required' : ''}</span>
                     </label>;
                   })}
                   {!validPurchaseUnits.length && <span className="text-sm text-orvelle-muted">Select a base unit to see compatible purchase units.</span>}

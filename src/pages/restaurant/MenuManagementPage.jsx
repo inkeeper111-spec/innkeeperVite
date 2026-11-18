@@ -163,7 +163,7 @@ export const MenuManagementPage = () => {
       taxPercent: Number(itemForm.taxPercent),
       discountValue: itemForm.discountType === 'none' ? 0 : Number(itemForm.discountValue),
       preparationTime: Number(itemForm.preparationTime),
-      tags: itemForm.tags ? itemForm.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
+      tags: itemForm.tags ? itemForm.tags.split(',').map((tag) => tag.trim()).filter(Boolean) : []
     };
     try {
       if (editingItem) {
