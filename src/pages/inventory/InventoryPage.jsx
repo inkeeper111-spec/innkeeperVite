@@ -752,6 +752,9 @@ export const InventoryPage = () => {
     e.preventDefault();
     try {
       const selectedMaterial = items.find((item) => item._id === itemForm.itemId);
+      if (selectedMaterial && !isReceiptBaseUnitConfigured(selectedMaterial)) {
+        throw new Error('Base unit is not configured for this raw material. Please configure the base unit before adding stock.');
+      }
       const selectedPurchaseUnit = rawMaterialPurchaseUnits(selectedMaterial)
         .find((unit) => unit.symbol === itemForm.unit);
       if (!selectedMaterial || !selectedPurchaseUnit) {
@@ -1921,6 +1924,22 @@ export const InventoryPage = () => {
     }));
   const rawMaterialsForReceipt = items.filter((item) => item.inventoryType === 'raw_material' && item.isActive !== false);
   const selectedRawMaterialForReceipt = rawMaterialsForReceipt.find((item) => item._id === itemForm.itemId);
+  const isReceiptBaseUnitConfigured = (item) => {
+    const baseUnitId = String(item?.baseUnitId?._id || item?.baseUnitId || '');
+    const baseUnitRecord = typeof item?.baseUnitId === 'object'
+      ? item.baseUnitId
+      : units.find((unit) => String(unit._id) === baseUnitId);
+    const baseEntry = item?.supportedUnits?.find((entry) => (
+      String(entry.unitId?._id || entry.unitId || '') === baseUnitId
+      && entry.isActive !== false
+      && Math.abs(Number(entry.conversionFactorToBase) - 1) <= 1e-9
+    ));
+    return Boolean(baseUnitId && baseUnitRecord?.isActive !== false
+      && baseUnitRecord?.symbol
+      && (item.baseUnit || item.unit) === baseUnitRecord.symbol
+      && baseEntry);
+  };
+  const receiptBaseUnitConfigured = isReceiptBaseUnitConfigured(selectedRawMaterialForReceipt);
   const receiptPurchaseUnits = rawMaterialPurchaseUnits(selectedRawMaterialForReceipt);
   const selectedReceiptPurchaseUnit = receiptPurchaseUnits.find((unit) => unit.symbol === itemForm.unit);
   const receiptBaseUnit = selectedRawMaterialForReceipt?.baseUnit || selectedRawMaterialForReceipt?.unit || '';
@@ -2865,7 +2884,7 @@ export const InventoryPage = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <PaginatedTable tableClassName="w-full min-w-[900px] table-fixed break-words whitespace-normal text-left text-xs">
+              <PaginatedTable groupRows tableClassName="raw-material-master-table w-full min-w-[900px] table-fixed break-words whitespace-normal text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase font-semibold">
                     <th className="pb-3">Item Name</th>
@@ -2884,7 +2903,7 @@ export const InventoryPage = () => {
                     const openBatchCount = itemBatches.filter((batch) => batch.remainingQuantity > 0).length;
                     return (
                       <React.Fragment key={it._id}>
-                        <tr className="hover:bg-slate-50 transition-colors">
+                        <tr className={`raw-material-master-row hover:bg-slate-50 transition-colors ${expandedBatchItemId === it._id ? 'is-expanded' : ''}`}>
                           <td className="py-3.5 font-bold text-slate-900">
                             {it.name}
                             {!it.isActive && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Inactive</span>}
@@ -2970,8 +2989,8 @@ export const InventoryPage = () => {
                           </td>
                         </tr>
                         {expandedBatchItemId === it._id && (
-                          <tr>
-                            <td colSpan={6} className="bg-[#f8f5ef] p-3 sm:p-5">
+                          <tr className="raw-material-batch-detail">
+                            <td colSpan={6} className="bg-[#f8f5ef] p-2 sm:p-5">
                               <div className="overflow-hidden rounded-2xl border border-[#e8ddcc] bg-gradient-to-br from-[#fffdfa] via-white to-[#faf7f0] shadow-[0_8px_28px_rgba(59,36,26,0.06)]">
                                 <div className="flex flex-col gap-3 border-b border-[#eee5d8] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                                   <div className="flex items-center gap-3">
@@ -3035,21 +3054,32 @@ export const InventoryPage = () => {
                                               {batch.location || 'Main Store'}
                                               {batch.receivedAt && ` · ${dayjs(batch.receivedAt).format('MMM D, YYYY')}`}
                                             </p>
+                                            {batch.dataIntegrityStatus !== 'valid' && (
+                                              <p className="mt-1 text-[11px] font-semibold text-amber-800">
+                                                {batch.dataIntegrityMessage || 'Historical batch data is incomplete.'}
+                                              </p>
+                                            )}
                                           </div>
                                         </div>
                                         <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
-                                          batch.remainingQuantity > 0
+                                          batch.dataIntegrityStatus !== 'valid'
+                                            ? 'bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200'
+                                            : batch.remainingQuantity > 0
                                             ? 'bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200'
                                             : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
                                         }`}>
-                                          {batch.remainingQuantity > 0 ? 'Open' : 'Exhausted'}
+                                          {batch.dataIntegrityStatus !== 'valid'
+                                            ? 'Data issue'
+                                            : batch.remainingQuantity > 0 ? 'Open' : 'Exhausted'}
                                         </span>
                                       </div>
                                       <div className="grid grid-cols-2 gap-2.5 p-3.5">
                                         <div className="rounded-lg bg-[#faf7f1] p-3">
                                           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Actual usable</p>
                                           <p className="mt-1 text-sm font-bold text-[#3b241a]">
-                                            {formatInventoryQuantity(batch.actualUsableStock ?? batch.remainingQuantity, it)}
+                                            {batch.dataIntegrityStatus === 'configuration_required'
+                                              ? 'Unit configuration required'
+                                              : formatInventoryQuantity(batch.actualUsableStock ?? batch.remainingQuantity, it)}
                                           </p>
                                         </div>
                                         <div className="rounded-lg bg-[#faf7f1] p-3">
@@ -3060,7 +3090,9 @@ export const InventoryPage = () => {
                                       <div className="grid grid-cols-2 gap-2 px-3.5 pb-3.5 sm:grid-cols-3">
                                         {[
                                           ['Material', batch.materialName || it.name],
-                                          ['Expected', formatInventoryQuantity(batch.expectedStock ?? batch.uploadedQuantity ?? batch.quantity, it)],
+                                          ['Expected', batch.dataIntegrityStatus === 'configuration_required'
+                                            ? 'Unit configuration required'
+                                            : formatInventoryQuantity(batch.expectedStock ?? batch.uploadedQuantity ?? batch.quantity, it)],
                                           ['Unrecorded consumption', formatInventoryQuantity(batch.unrecordedConsumptionQuantity ?? batch.consumedQuantity ?? 0, it)],
                                           ['Wasted', formatInventoryQuantity(batch.wastageQuantity || 0, it)],
                                           ['Consumed profitably / gain', formatInventoryQuantity(batch.consumedProfitablyQuantity ?? batch.unrecordedQuantity ?? 0, it)],
@@ -3082,8 +3114,9 @@ export const InventoryPage = () => {
                                             {batch.purchaseQuantity != null
                                               && Number.isFinite(Number(batch.purchaseQuantity))
                                               && batch.purchaseUnit
+                                              && batch.dataIntegrityStatus === 'valid'
                                               ? `${batch.purchaseQuantity} ${batch.purchaseUnit}`
-                                              : `Base units (${it.baseUnit || it.unit})`}
+                                              : 'Historical data incomplete'}
                                               </p>
                                             </div>
                                             <div className="p-3">
@@ -3092,8 +3125,9 @@ export const InventoryPage = () => {
                                             {batch.purchaseUnitCost != null
                                               && Number.isFinite(Number(batch.purchaseUnitCost))
                                               && batch.purchaseUnit
+                                              && batch.dataIntegrityStatus === 'valid'
                                               ? `${formatCurrency(batch.purchaseUnitCost)} / ${batch.purchaseUnit}`
-                                              : 'Purchase price not recorded'}
+                                              : 'Historical data incomplete'}
                                               </p>
                                             </div>
                                           </div>
@@ -3102,8 +3136,9 @@ export const InventoryPage = () => {
                                               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Purchase total</p>
                                               <p className="mt-1 text-xs font-bold text-[#3b241a]">
                                             {batch.purchaseAmount != null
+                                              && batch.dataIntegrityStatus === 'valid'
                                               ? formatCurrency(batch.purchaseAmount)
-                                              : 'Purchase total not recorded'}
+                                              : 'Historical data incomplete'}
                                               </p>
                                             </div>
                                             <div className="p-3">
@@ -4630,20 +4665,38 @@ export const InventoryPage = () => {
                                               {batch.location || 'Main Store'}
                                               {batch.receivedAt && ` · Received ${dayjs(batch.receivedAt).format('MMM D, YYYY')}`}
                                             </p>
+                                            {batch.dataIntegrityStatus !== 'valid' && (
+                                              <p className="mt-1 text-[11px] font-semibold text-amber-800">
+                                                {batch.dataIntegrityMessage || 'Historical batch data is incomplete.'}
+                                              </p>
+                                            )}
                                           </div>
                                           <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
-                                            batch.remainingQuantity > 0
+                                            batch.dataIntegrityStatus !== 'valid'
+                                              ? 'bg-amber-50 text-amber-800'
+                                              : batch.remainingQuantity > 0
                                               ? 'bg-emerald-50 text-emerald-800'
                                               : 'bg-slate-100 text-slate-600'
                                           }`}>
-                                            {batch.remainingQuantity > 0 ? 'Open' : 'Exhausted'}
+                                            {batch.dataIntegrityStatus !== 'valid'
+                                              ? 'Data issue'
+                                              : batch.remainingQuantity > 0 ? 'Open' : 'Exhausted'}
                                           </span>
                                         </div>
                                         <div className="grid grid-cols-2 gap-2 p-3">
                                           {[
-                                            ['Remaining', `${formatInventoryQuantity(batch.actualUsableStock ?? batch.remainingQuantity, row.item)} ${row.item.baseUnit || row.item.unit || ''}`],
-                                            ['Received', `${formatInventoryQuantity(batch.quantity, row.item)} ${row.item.baseUnit || row.item.unit || ''}`],
-                                            [`Cost / ${row.item.baseUnit || row.item.unit || 'unit'}`, formatInventoryUnitCost(batch.unitCost)],
+                                            ['Remaining', batch.dataIntegrityStatus === 'configuration_required'
+                                              ? 'Unit configuration required'
+                                              : `${formatInventoryQuantity(batch.actualUsableStock ?? batch.remainingQuantity, row.item)} ${row.item.baseUnit || row.item.unit || ''}`],
+                                            ['Received', batch.dataIntegrityStatus === 'configuration_required'
+                                              ? 'Unit configuration required'
+                                              : `${formatInventoryQuantity(batch.quantity, row.item)} ${row.item.baseUnit || row.item.unit || ''}`],
+                                            [batch.dataIntegrityStatus === 'configuration_required'
+                                              ? 'Base unit configuration'
+                                              : `Cost / ${row.item.baseUnit || row.item.unit || 'unit'}`,
+                                            batch.dataIntegrityStatus === 'configuration_required'
+                                              ? 'Required'
+                                              : formatInventoryUnitCost(batch.unitCost)],
                                             ['Batch value remaining', formatCurrency((Number(batch.remainingQuantity) || 0) * (Number(batch.unitCost) || 0))],
                                             ['Wasted', `${formatInventoryQuantity(batch.wastageQuantity || 0, row.item)} ${row.item.baseUnit || row.item.unit || ''}`],
                                             ['Unrecorded use', `${formatInventoryQuantity(batch.unrecordedConsumptionQuantity || 0, row.item)} ${row.item.baseUnit || row.item.unit || ''}`]
@@ -4660,16 +4713,18 @@ export const InventoryPage = () => {
                                               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Purchased as</p>
                                               <p className="mt-1 text-xs font-semibold text-slate-800">
                                                 {batch.purchaseQuantity != null && batch.purchaseUnit
+                                                  && batch.dataIntegrityStatus === 'valid'
                                                   ? `${batch.purchaseQuantity} ${batch.purchaseUnit}`
-                                                  : 'Base units'}
+                                                  : 'Historical data incomplete'}
                                               </p>
                                             </div>
                                             <div className="p-3">
                                               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Purchase price</p>
                                               <p className="mt-1 text-xs font-semibold text-slate-800">
                                                 {batch.purchaseUnitCost != null && batch.purchaseUnit
+                                                  && batch.dataIntegrityStatus === 'valid'
                                                   ? `${formatCurrency(batch.purchaseUnitCost)} / ${batch.purchaseUnit}`
-                                                  : 'Not recorded'}
+                                                  : 'Historical data incomplete'}
                                               </p>
                                             </div>
                                           </div>
@@ -4929,7 +4984,12 @@ export const InventoryPage = () => {
               ]}
             />
           </div>
-          {selectedRawMaterialForReceipt && (
+          {selectedRawMaterialForReceipt && !receiptBaseUnitConfigured && (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-900">
+              Base unit is not configured for this raw material. Please configure the base unit before adding stock.
+            </p>
+          )}
+          {selectedRawMaterialForReceipt && receiptBaseUnitConfigured && (
             <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
               Stock is stored in <strong>{receiptBaseUnit}</strong>
               {selectedReceiptPurchaseUnit && (
@@ -5064,7 +5124,7 @@ export const InventoryPage = () => {
               )}
             </div>
           )}
-          {selectedRawMaterialForReceipt && !receiptPurchaseUnits.length && (
+          {selectedRawMaterialForReceipt && receiptBaseUnitConfigured && !receiptPurchaseUnits.length && (
             <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
               This raw material has no configured purchase units. Select compatible purchase units in its raw material settings first.
             </p>
@@ -5118,7 +5178,7 @@ export const InventoryPage = () => {
               {itemForm.quantity && ` · Stock added: ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 8 }).format(Number(itemForm.quantity) * selectedReceiptPurchaseUnit.factor)} ${receiptBaseUnit}`}
             </p>
           )}
-          {selectedRawMaterialForReceipt && (
+          {selectedRawMaterialForReceipt && receiptBaseUnitConfigured && (
             <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
               <p className="font-semibold">Stock calculation preview ({receiptBaseUnit})</p>
               <p>Previous available: {formatReceiptQuantity(receiptPreviousAvailable)}</p>
@@ -5207,7 +5267,7 @@ export const InventoryPage = () => {
               className="w-full sm:w-auto"
               variant="primary"
               type="submit"
-              disabled={!rawMaterialsForReceipt.length || !receiptPurchaseUnits.length || receiptBatchesLoading}
+              disabled={!rawMaterialsForReceipt.length || !receiptBaseUnitConfigured || !receiptPurchaseUnits.length || receiptBatchesLoading}
             >
               {receiptBatchesLoading ? 'Checking previous stock…' : 'Receive Stock'}
             </Button>
