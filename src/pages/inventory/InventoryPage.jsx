@@ -284,6 +284,7 @@ export const InventoryPage = () => {
     menuItemId: '',
     recipeName: '',
     description: '',
+    preparationInstructions: '',
     servingSize: '1 serving',
     locationId: storageLocationIdForName('Restaurant Store')
       || storageLocationIdForName('Kitchen Store'),
@@ -1444,6 +1445,7 @@ export const InventoryPage = () => {
         menuItemId: '',
         recipeName: '',
         description: '',
+        preparationInstructions: '',
         servingSize: '1 serving',
         locationId: storageLocationIdForName('Restaurant Store')
           || storageLocationIdForName('Kitchen Store'),
@@ -1466,6 +1468,7 @@ export const InventoryPage = () => {
       menuItemId: String(recipe.menuItemId?._id || recipe.menuItemId || ''),
       recipeName: recipe.recipeName || '',
       description: recipe.description || '',
+      preparationInstructions: recipe.preparationInstructions || '',
       servingSize: recipe.servingSize || '1 serving',
       preparationTimeMinutes: recipe.preparationTimeMinutes || 0,
       productionMode: recipe.productionMode || 'made_to_order',
@@ -3624,6 +3627,7 @@ export const InventoryPage = () => {
                   menuItemId: '',
                   recipeName: '',
                   description: '',
+                  preparationInstructions: '',
                   servingSize: '1 serving',
                   locationId: storageLocationIdForName('Restaurant Store')
                     || storageLocationIdForName('Kitchen Store'),
@@ -3651,6 +3655,9 @@ export const InventoryPage = () => {
                           {' · '}{recipe.productionMode === 'batch_production' ? 'Bulk production' : 'Made to order'}
                         </p>
                         {recipe.preparationTimeMinutes > 0 && <p className="text-slate-400">{recipe.preparationTimeMinutes} min prep</p>}
+                        {recipe.preparationInstructions && (
+                          <p className="mt-1 whitespace-pre-wrap break-words text-slate-500">{recipe.preparationInstructions}</p>
+                        )}
                       </div>
                       <div className="col-span-1 min-w-0">
                         <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Version</p>
@@ -3769,6 +3776,9 @@ export const InventoryPage = () => {
                         {' · '}{recipe.productionMode === 'batch_production' ? 'Bulk production' : 'Made to order'}
                       </p>
                       {recipe.preparationTimeMinutes > 0 && <p className="text-xs text-slate-400">{recipe.preparationTimeMinutes} min prep</p>}
+                      {recipe.preparationInstructions && (
+                        <p className="mt-1 whitespace-pre-wrap break-words text-xs text-slate-500">{recipe.preparationInstructions}</p>
+                      )}
                     </div>
                     <Badge variant={recipe.isActive ? 'active' : 'inactive'}>{recipe.isActive ? 'Active' : 'Inactive'}</Badge>
                   </div>
@@ -5923,6 +5933,16 @@ export const InventoryPage = () => {
                   value={recipeForm.description}
                   onChange={(event) => setRecipeForm({ ...recipeForm, description: event.target.value })}
                   rows={3}
+                  className="mt-1 w-full rounded-xl border border-orvelle-border bg-white px-3 py-2.5 text-sm shadow-sm transition focus:border-orvelle-champagne focus:outline-none focus:ring-2 focus:ring-orvelle-champagne/20"
+                />
+              </label>
+              <label className="block text-sm font-medium text-slate-700 md:col-span-2">
+                Preparation instructions
+                <textarea
+                  value={recipeForm.preparationInstructions}
+                  onChange={(event) => setRecipeForm({ ...recipeForm, preparationInstructions: event.target.value })}
+                  rows={3}
+                  placeholder="Step-by-step preparation instructions"
                   className="mt-1 w-full rounded-xl border border-orvelle-border bg-white px-3 py-2.5 text-sm shadow-sm transition focus:border-orvelle-champagne focus:outline-none focus:ring-2 focus:ring-orvelle-champagne/20"
                 />
               </label>

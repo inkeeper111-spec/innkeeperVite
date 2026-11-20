@@ -21,13 +21,15 @@ export const ExpensesPage = () => {
   const [categorySummary, setCategorySummary] = useState([]);
   const [monthlyTotal, setMonthlyTotal] = useState(0);
   const [monthlySummary, setMonthlySummary] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [allCategories, setAllCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState('all');
 
   // Modal
   const [isRecordOpen, setIsRecordOpen] = useState(false);
   const [expenseForm, setExpenseForm] = useState({
-    category: 'supplies',
+    category: '',
     amount: '',
     description: '',
     paymentMethod: 'bank_transfer',
@@ -35,6 +37,39 @@ export const ExpensesPage = () => {
   });
 
   const [message, setMessage] = useState('');
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [categoryForm, setCategoryForm] = useState({ name: '' });
+  const [rejectingId, setRejectingId] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const categoryOptions = categories.map((cat) => ({
+    label: cat.name,
+    value: cat.code
+  }));
+
+  const filterCategoryOptions = [
+    { label: 'All Categories', value: 'all' },
+    ...allCategories.map((cat) => ({
+      label: cat.isActive === false ? `${cat.name} (inactive)` : cat.name,
+      value: cat.code
+    }))
+  ];
+
+  const defaultCategory = categoryOptions[0]?.value || 'supplies';
+
+  const fetchCategories = async () => {
+    if (isPlatformAdmin) return;
+    try {
+      const [activeRes, allRes] = await Promise.all([
+        api.get('/expenses/categories'),
+        api.get('/expenses/categories', { params: { includeInactive: true } })
+      ]);
+      if (activeRes.data.success) setCategories(activeRes.data.data || []);
+      if (allRes.data.success) setAllCategories(allRes.data.data || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const fetchExpenses = async () => {
     try {
@@ -55,20 +90,28 @@ export const ExpensesPage = () => {
 
   useEffect(() => {
     fetchExpenses();
+    fetchCategories();
   }, []);
+
+  useEffect(() => {
+    if (!expenseForm.category && defaultCategory) {
+      setExpenseForm((prev) => ({ ...prev, category: defaultCategory }));
+    }
+  }, [defaultCategory, expenseForm.category]);
 
   const handleCreateExpense = async (e) => {
     e.preventDefault();
     try {
       const res = await api.post('/expenses', {
         ...expenseForm,
+        category: expenseForm.category || defaultCategory,
         amount: Number(expenseForm.amount)
       });
       if (res.data.success) {
         setIsRecordOpen(false);
-        setMessage('Expense recorded successfully.');
+        setMessage('Expense submitted for approval (pending).');
         setExpenseForm({
-          category: 'supplies',
+          category: defaultCategory,
           amount: '',
           description: '',
           paymentMethod: 'bank_transfer',
@@ -79,6 +122,52 @@ export const ExpensesPage = () => {
       }
     } catch (err) {
       showApiErrorToast(err, 'Failed to record expense');
+    }
+  };
+
+  const handleCreateCategory = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.post('/expenses/categories', { name: categoryForm.name.trim() });
+      if (res.data.success) {
+        setIsCategoryOpen(false);
+        setCategoryForm({ name: '' });
+        setMessage('Expense category created.');
+        await fetchCategories();
+        setTimeout(() => setMessage(''), 3000);
+      }
+    } catch (err) {
+      showApiErrorToast(err, 'Failed to create category');
+    }
+  };
+
+  const handleStatusUpdate = async (expenseId, status, reason = '') => {
+    try {
+      const payload = { status };
+      if (status === 'rejected') payload.reason = reason;
+      const res = await api.patch(`/expenses/${expenseId}/status`, payload);
+      if (res.data.success) {
+        setRejectingId(null);
+        setRejectReason('');
+        setMessage(`Expense marked as ${status}.`);
+        fetchExpenses();
+        setTimeout(() => setMessage(''), 3000);
+      }
+    } catch (err) {
+      showApiErrorToast(err, 'Failed to update expense status');
+    }
+  };
+
+  const handleVoidExpense = async (expenseId) => {
+    try {
+      const res = await api.patch(`/expenses/${expenseId}/void`);
+      if (res.data.success) {
+        setMessage('Expense cancelled.');
+        fetchExpenses();
+        setTimeout(() => setMessage(''), 3000);
+      }
+    } catch (err) {
+      showApiErrorToast(err, 'Failed to cancel expense');
     }
   };
 
@@ -104,9 +193,14 @@ export const ExpensesPage = () => {
         </div>
 
         {!isPlatformAdmin && (
-          <Button variant="primary" icon={PlusCircle} onClick={() => setIsRecordOpen(true)}>
-            Record Expense
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setIsCategoryOpen(true)}>
+              Add Category
+            </Button>
+            <Button variant="primary" icon={PlusCircle} onClick={() => setIsRecordOpen(true)}>
+              Record Expense
+            </Button>
+          </div>
         )}
       </div>
 
@@ -148,6 +242,19 @@ export const ExpensesPage = () => {
 
       {/* Expenses Table */}
       <Card>
+        {!isPlatformAdmin && filterCategoryOptions.length > 1 && (
+          <div className="mb-4 flex items-center gap-3">
+            <Filter className="w-4 h-4 text-slate-400" />
+            <div className="w-full max-w-xs">
+              <Select
+                label="Filter by category"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                options={filterCategoryOptions}
+              />
+            </div>
+          </div>
+        )}
         {loading ? (
           <DataSkeleton rows={6} columns={5} label="Loading expense ledger" />
         ) : filteredExpenses.length === 0 ? (
@@ -184,7 +291,68 @@ export const ExpensesPage = () => {
                     <td className="py-3 uppercase text-slate-500 text-[11px]">{exp.paymentMethod.replace(/_/g, ' ')}</td>
                     <td className="py-3 text-slate-500">{dayjs(exp.date).format('YYYY-MM-DD')}</td>
                     <td className="py-3 text-right">
-                      <Badge variant={exp.status}>{exp.status}</Badge>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <Badge variant={exp.status}>{exp.status}</Badge>
+                        {!isPlatformAdmin && exp.status === 'pending' && (
+                          <div className="flex flex-wrap justify-end gap-1">
+                            <Button
+                              variant="primary"
+                              type="button"
+                              className="!px-2 !py-1 !text-[10px]"
+                              onClick={() => handleStatusUpdate(exp._id, 'approved')}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              type="button"
+                              className="!px-2 !py-1 !text-[10px]"
+                              onClick={() => {
+                                setRejectingId(exp._id);
+                                setRejectReason('');
+                              }}
+                            >
+                              Reject
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              type="button"
+                              className="!px-2 !py-1 !text-[10px]"
+                              onClick={() => handleVoidExpense(exp._id)}
+                            >
+                              Void
+                            </Button>
+                          </div>
+                        )}
+                        {rejectingId === exp._id && (
+                          <div className="mt-1 flex w-full max-w-[220px] flex-col gap-1">
+                            <Input
+                              label="Rejection reason"
+                              value={rejectReason}
+                              onChange={(e) => setRejectReason(e.target.value)}
+                              placeholder="Required"
+                            />
+                            <div className="flex justify-end gap-1">
+                              <Button
+                                variant="secondary"
+                                type="button"
+                                className="!px-2 !py-1 !text-[10px]"
+                                onClick={() => setRejectingId(null)}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                variant="primary"
+                                type="button"
+                                className="!px-2 !py-1 !text-[10px]"
+                                onClick={() => handleStatusUpdate(exp._id, 'rejected', rejectReason)}
+                              >
+                                Confirm
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -193,6 +361,32 @@ export const ExpensesPage = () => {
           </div>
         )}
       </Card>
+
+      {!isPlatformAdmin && (
+        <Modal
+          isOpen={isCategoryOpen}
+          onClose={() => setIsCategoryOpen(false)}
+          title="Add Expense Category"
+        >
+          <form onSubmit={handleCreateCategory} className="space-y-4">
+            <Input
+              label="Category name"
+              required
+              value={categoryForm.name}
+              onChange={(e) => setCategoryForm({ name: e.target.value })}
+              placeholder="e.g. Electricity, Staff Salary"
+            />
+            <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end sm:gap-3">
+              <Button variant="secondary" type="button" onClick={() => setIsCategoryOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" type="submit">
+                Save Category
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* Record Expense Modal */}
       {!isPlatformAdmin && <Modal
@@ -204,19 +398,10 @@ export const ExpensesPage = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Expense Category"
-              value={expenseForm.category}
+              value={expenseForm.category || defaultCategory}
               onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}
-              options={[
-                { label: 'Salaries & Wages', value: 'salaries' },
-                { label: 'Electricity Utility', value: 'electricity' },
-                { label: 'Water & Sewage', value: 'water' },
-                { label: 'High-Speed Internet & IT', value: 'internet' },
-                { label: 'Repairs & Facility Maintenance', value: 'repairs' },
-                { label: 'Hotel Supplies & Consumables', value: 'supplies' },
-                { label: 'Food & Beverage Procurement', value: 'food_beverage' },
-                { label: 'Vendor Payments', value: 'vendor_payment' },
-                { label: 'Marketing & Advertising', value: 'marketing' },
-                { label: 'Miscellaneous Operating', value: 'miscellaneous' }
+              options={categoryOptions.length > 0 ? categoryOptions : [
+                { label: 'Supplies', value: 'supplies' }
               ]}
             />
             <Input
@@ -247,6 +432,7 @@ export const ExpensesPage = () => {
                 { label: 'Bank Wire / ACH', value: 'bank_transfer' },
                 { label: 'Credit Card', value: 'credit_card' },
                 { label: 'Cash Disbursement', value: 'cash' },
+                { label: 'UPI', value: 'upi' },
                 { label: 'Commercial Cheque', value: 'cheque' }
               ]}
             />
